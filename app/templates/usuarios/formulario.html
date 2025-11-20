@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} - Contaduría{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-dark">
+    <h1><i class="fas fa-user-edit"></i> {{ titulo }}</h1>
+    <div class="user-info">Gestión de Usuarios</div>
+</div>
+
+<!-- Formulario -->
+<div class="form-section">
+    <form method="POST" novalidate>
+        {{ form.hidden_tag() }}
+
+        <div class="row">
+            <!-- Username -->
+            <div class="col-md-6 mb-3">
+                <label class="form-label">{{ form.username.label }}</label>
+                {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else "")) }}
+                {% if form.username.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.username.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Email -->
+            <div class="col-md-6 mb-3">
+                <label class="form-label">{{ form.email.label }}</label>
+                {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else "")) }}
+                {% if form.email.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.email.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Nombre Completo -->
+        <div class="mb-3">
+            <label class="form-label">{{ form.nombre_completo.label }}</label>
+            {{ form.nombre_completo(class="form-control" + (" is-invalid" if form.nombre_completo.errors else "")) }}
+            {% if form.nombre_completo.errors %}
+                <div class="invalid-feedback d-block">
+                    {% for error in form.nombre_completo.errors %}{{ error }}{% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="row">
+            <!-- Rol -->
+            <div class="col-md-6 mb-3">
+                <label class="form-label">{{ form.rol.label }}</label>
+                {{ form.rol(class="form-select" + (" is-invalid" if form.rol.errors else ""), id="rol-select") }}
+                {% if form.rol.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.rol.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Clínica -->
+            <div class="col-md-6 mb-3">
+                <label class="form-label">{{ form.clinica_id.label }}</label>
+                {{ form.clinica_id(class="form-select" + (" is-invalid" if form.clinica_id.errors else ""), id="clinica-select") }}
+                {% if form.clinica_id.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.clinica_id.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Contraseña -->
+            <div class="col-md-6 mb-3">
+                <label class="form-label">{{ form.password.label }}</label>
+                {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""), placeholder="••••••••") }}
+                {% if form.password.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.password.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+                {% if usuario %}
+                <small class="text-muted">Dejar en blanco para mantener la contraseña actual</small>
+                {% endif %}
+            </div>
+
+            <!-- Confirmar Contraseña -->
+            <div class="col-md-6 mb-3">
+                <label class="form-label">{{ form.password_confirm.label }}</label>
+                {{ form.password_confirm(class="form-control" + (" is-invalid" if form.password_confirm.errors else ""), placeholder="••••••••") }}
+                {% if form.password_confirm.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.password_confirm.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Permisos para usuarios secundarios (POS) -->
+        <div id="permisos-section" style="display:none;">
+            <hr class="my-4">
+            <h5 class="mb-3"><i class="fas fa-key"></i> Permisos del Usuario</h5>
+            <div class="row">
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        {{ form.puede_registrar_ingresos(class="form-check-input") }}
+                        <label class="form-check-label" for="{{ form.puede_registrar_ingresos.id }}">
+                            {{ form.puede_registrar_ingresos.label.text }}
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        {{ form.puede_registrar_egresos(class="form-check-input") }}
+                        <label class="form-check-label" for="{{ form.puede_registrar_egresos.id }}">
+                            {{ form.puede_registrar_egresos.label.text }}
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        {{ form.puede_editar_movimientos(class="form-check-input") }}
+                        <label class="form-check-label" for="{{ form.puede_editar_movimientos.id }}">
+                            {{ form.puede_editar_movimientos.label.text }}
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        {{ form.puede_eliminar_movimientos(class="form-check-input") }}
+                        <label class="form-check-label" for="{{ form.puede_eliminar_movimientos.id }}">
+                            {{ form.puede_eliminar_movimientos.label.text }}
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <div class="form-check">
+                        {{ form.puede_ver_reportes(class="form-check-input") }}
+                        <label class="form-check-label" for="{{ form.puede_ver_reportes.id }}">
+                            {{ form.puede_ver_reportes.label.text }}
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-4">
+
+        <!-- Estado Activo -->
+        <div class="mb-4">
+            <div class="form-check">
+                {{ form.activo(class="form-check-input") }}
+                <label class="form-check-label" for="{{ form.activo.id }}">
+                    <strong>{{ form.activo.label.text }}</strong>
+                </label>
+            </div>
+        </div>
+
+        <!-- Botones -->
+        <div class="d-flex justify-content-center gap-3 mt-4">
+            <a href="{{ url_for('usuarios.index') }}" class="btn btn-secondary btn-lg">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-check-circle"></i> {{ form.submit.label.text }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Mostrar/ocultar sección de permisos según el rol seleccionado
+document.getElementById('rol-select').addEventListener('change', function() {
+    const permisosSection = document.getElementById('permisos-section');
+    if (this.value === 'secundario_pos') {
+        permisosSection.style.display = 'block';
+    } else {
+        permisosSection.style.display = 'none';
+    }
+});
+
+// Verificar al cargar la página
+window.addEventListener('DOMContentLoaded', function() {
+    const rolSelect = document.getElementById('rol-select');
+    const permisosSection = document.getElementById('permisos-section');
+    if (rolSelect.value === 'secundario_pos') {
+        permisosSection.style.display = 'block';
+    }
+});
+</script>
+{% endblock %}

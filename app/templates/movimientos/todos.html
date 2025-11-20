@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Todos los Movimientos - Contaduría{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-dark">
+    <h1><i class="fas fa-list-alt"></i> Todos los Movimientos</h1>
+    <div class="user-info">Vista Global del Sistema</div>
+</div>
+
+<!-- Filtros -->
+<div class="chart-container mb-4">
+    <h5><i class="fas fa-filter"></i> Filtros</h5>
+    <form method="GET" class="row g-3">
+        <div class="col-md-3">
+            <label class="form-label">Clínica:</label>
+            <select name="clinica_id" class="form-select">
+                <option value="">Todas las clínicas</option>
+                {% for clinica in clinicas %}
+                <option value="{{ clinica.id }}" {% if filtros.clinica_id == clinica.id %}selected{% endif %}>
+                    {{ clinica.nombre }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Tipo:</label>
+            <select name="tipo" class="form-select">
+                <option value="" {% if filtros.tipo == '' %}selected{% endif %}>Todos</option>
+                <option value="ingreso" {% if filtros.tipo == 'ingreso' %}selected{% endif %}>Ingresos</option>
+                <option value="egreso" {% if filtros.tipo == 'egreso' %}selected{% endif %}>Egresos</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Fecha Inicio:</label>
+            <input type="date" name="fecha_inicio" class="form-control" value="{{ filtros.fecha_inicio }}">
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Fecha Fin:</label>
+            <input type="date" name="fecha_fin" class="form-control" value="{{ filtros.fecha_fin }}">
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Buscar en notas:</label>
+            <input type="text" name="buscar" class="form-control" value="{{ filtros.buscar }}" placeholder="Buscar...">
+        </div>
+
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-search"></i> Buscar
+            </button>
+            <a href="{{ url_for('movimientos.todos_los_movimientos') }}" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Limpiar
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Resumen -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="metric-card metric-card-success">
+            <div class="card-title">Total Ingresos</div>
+            <div class="card-value text-money">{{ format_currency(total_ingresos) }}</div>
+            <small class="text-muted">{{ ingresos|length }} movimientos</small>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="metric-card metric-card-danger">
+            <div class="card-title">Total Egresos</div>
+            <div class="card-value text-money">{{ format_currency(total_egresos) }}</div>
+            <small class="text-muted">{{ egresos|length }} movimientos</small>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="metric-card metric-card-info">
+            <div class="card-title">Balance</div>
+            <div class="card-value text-money">{{ format_currency(balance) }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Movimientos -->
+<div class="row">
+    <!-- Ingresos -->
+    {% if filtros.tipo == '' or filtros.tipo == 'ingreso' %}
+    <div class="{% if filtros.tipo == '' %}col-md-6{% else %}col-md-12{% endif %}">
+        <div class="chart-container">
+            <h5><i class="fas fa-arrow-up text-success"></i> Ingresos (Últimos 100)</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Clínica</th>
+                            <th>Usuario</th>
+                            <th>Método</th>
+                            <th class="text-end">Monto</th>
+                            <th>Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for categoria, ingreso in ingresos %}
+                        <tr>
+                            <td><small>{{ ingreso.fecha.strftime('%d/%m/%Y') }}</small></td>
+                            <td>{{ ingreso.clinica_nombre }}</td>
+                            <td><small>{{ ingreso.usuario_nombre }}</small></td>
+                            <td>
+                                <small>
+                                    {% if ingreso.metodo_pago == 'efectivo' %}
+                                    <i class="fas fa-money-bill"></i> Efectivo
+                                    {% elif ingreso.metodo_pago == 'transferencia' %}
+                                    <i class="fas fa-exchange-alt"></i> Transferencia
+                                    {% else %}
+                                    <i class="fas fa-credit-card"></i> Tarjeta
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td class="text-end text-success text-money">
+                                {{ format_currency(ingreso.monto) }}
+                            </td>
+                            <td><small>{{ ingreso.notas[:50] if ingreso.notas else '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                <i class="fas fa-info-circle"></i> No hay ingresos con los filtros seleccionados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Egresos -->
+    {% if filtros.tipo == '' or filtros.tipo == 'egreso' %}
+    <div class="{% if filtros.tipo == '' %}col-md-6{% else %}col-md-12{% endif %}">
+        <div class="chart-container">
+            <h5><i class="fas fa-arrow-down text-danger"></i> Egresos (Últimos 100)</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Clínica</th>
+                            <th>Usuario</th>
+                            <th>Método</th>
+                            <th class="text-end">Monto</th>
+                            <th>Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for categoria, egreso in egresos %}
+                        <tr>
+                            <td><small>{{ egreso.fecha.strftime('%d/%m/%Y') }}</small></td>
+                            <td>{{ egreso.clinica_nombre }}</td>
+                            <td><small>{{ egreso.usuario_nombre }}</small></td>
+                            <td>
+                                <small>
+                                    {% if egreso.metodo_pago == 'efectivo' %}
+                                    <i class="fas fa-money-bill"></i> Efectivo
+                                    {% elif egreso.metodo_pago == 'transferencia' %}
+                                    <i class="fas fa-exchange-alt"></i> Transferencia
+                                    {% else %}
+                                    <i class="fas fa-credit-card"></i> Tarjeta
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td class="text-end text-danger text-money">
+                                {{ format_currency(egreso.monto) }}
+                            </td>
+                            <td><small>{{ egreso.notas[:50] if egreso.notas else '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                <i class="fas fa-info-circle"></i> No hay egresos con los filtros seleccionados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

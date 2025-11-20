@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Subir CFDI - Sistema de Contaduría{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-upload"></i> Subir Factura Electrónica (XML CFDI)</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('cfdi.index') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Volver al Listado
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-file-upload"></i> Cargar Archivo XML</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                    {{ form.hidden_tag() }}
+
+                    {% if es_admin %}
+                    <div class="mb-3">
+                        {{ form.clinica_id.label(class="form-label") }}
+                        <span class="text-danger">*</span>
+                        {{ form.clinica_id(class="form-select", id="clinicaSelector") }}
+                        <div class="form-text">
+                            <i class="fas fa-building"></i> Selecciona la clínica para registrar este CFDI y ver sus egresos disponibles
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        {{ form.xml_file.label(class="form-label") }}
+                        {{ form.xml_file(class="form-control") }}
+                        {% if form.xml_file.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.xml_file.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> Selecciona un archivo XML CFDI válido (versión 3.3 o 4.0)
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.movimiento_id.label(class="form-label") }}
+                        {{ form.movimiento_id(class="form-select") }}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> Opcional: Puedes asociar este CFDI con un movimiento existente
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.notas.label(class="form-label") }}
+                        {{ form.notas(class="form-control", rows=3) }}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> Notas adicionales sobre esta factura
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-cloud-upload-alt"></i> Procesar CFDI
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-question-circle"></i> ¿Qué es un CFDI?</h5>
+            </div>
+            <div class="card-body">
+                <p class="small">
+                    El <strong>CFDI (Comprobante Fiscal Digital por Internet)</strong> es la factura electrónica
+                    oficial en México que valida las operaciones fiscales.
+                </p>
+                <h6 class="mt-3">¿Qué hace este módulo?</h6>
+                <ul class="small">
+                    <li><i class="fas fa-check text-success"></i> Extrae datos automáticamente del XML</li>
+                    <li><i class="fas fa-check text-success"></i> Valida el UUID y timbre fiscal</li>
+                    <li><i class="fas fa-check text-success"></i> Identifica impuestos (IVA, IEPS, retenciones)</li>
+                    <li><i class="fas fa-check text-success"></i> Registra proveedores automáticamente</li>
+                    <li><i class="fas fa-check text-success"></i> Asocia con movimientos contables</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Importante</h5>
+            </div>
+            <div class="card-body">
+                <ul class="small mb-0">
+                    <li>El UUID debe ser único (no duplicados)</li>
+                    <li>El XML debe ser válido y estar timbrado</li>
+                    <li>Los proveedores se crean automáticamente si no existen</li>
+                    <li>Puedes asociar el CFDI con un movimiento después</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% if es_admin %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const clinicaSelector = document.getElementById('clinicaSelector');
+
+    if (clinicaSelector) {
+        clinicaSelector.addEventListener('change', function() {
+            const clinicaId = this.value;
+            // Recargar la página con la clínica seleccionada para actualizar los egresos
+            if (clinicaId && clinicaId !== '0') {
+                window.location.href = '{{ url_for("cfdi.upload") }}?clinica_id=' + clinicaId;
+            }
+        });
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

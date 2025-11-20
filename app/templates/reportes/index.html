@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Centro de Reportes - Contaduría{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-file-chart-line"></i> Centro de Reportes
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <span class="badge bg-info">Reportes por Organización</span>
+    </div>
+</div>
+
+<p class="text-muted mb-4">
+    <i class="fas fa-info-circle"></i>
+    Genera reportes consolidados mensuales para cada organización. Los reportes incluyen todas las sucursales de la organización seleccionada.
+</p>
+
+<!-- Visualización Rápida de Organizaciones -->
+{% if organizaciones and organizaciones|length > 0 %}
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-hospital"></i> Organizaciones Disponibles</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for org in organizaciones %}
+            <div class="col-md-4 mb-3">
+                <div class="card border-primary h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-primary">
+                            <i class="fas fa-building"></i> {{ org.nombre }}
+                        </h6>
+                        {% if org.razon_social %}
+                        <p class="card-text text-muted small mb-2">{{ org.razon_social }}</p>
+                        {% endif %}
+                        <p class="card-text small">
+                            <span class="badge bg-info">
+                                {{ org.sucursales.filter_by(activa=True).count() }} sucursales
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Formularios de Generación -->
+<div class="row">
+    <!-- Generar Reporte PDF -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-pdf"></i> Generar Reporte PDF Consolidado
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">
+                    Genera un reporte mensual consolidado en formato PDF. Incluye todas las sucursales de la organización seleccionada con comparativos y análisis detallado.
+                </p>
+
+                <form method="GET" action="{{ url_for('reportes.generar_pdf_organizacion') }}" id="form-pdf">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-building"></i> Organización <span class="text-danger">*</span>
+                        </label>
+                        <select name="organizacion_id" class="form-select form-select-lg" required>
+                            <option value="">-- Selecciona una organización --</option>
+                            {% for org in organizaciones %}
+                            <option value="{{ org.id }}">
+                                {{ org.nombre }}
+                                {% if org.razon_social %}({{ org.razon_social }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">
+                            El reporte incluirá todas las sucursales de la organización
+                        </small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-calendar"></i> Mes <span class="text-danger">*</span>
+                            </label>
+                            <select name="mes" class="form-select" required>
+                                <option value="">Seleccionar mes...</option>
+                                <option value="1">Enero</option>
+                                <option value="2">Febrero</option>
+                                <option value="3">Marzo</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Mayo</option>
+                                <option value="6">Junio</option>
+                                <option value="7">Julio</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Septiembre</option>
+                                <option value="10">Octubre</option>
+                                <option value="11" {% if 11 == fecha_actual.month %}selected{% endif %}>Noviembre</option>
+                                <option value="12">Diciembre</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-calendar-alt"></i> Año <span class="text-danger">*</span>
+                            </label>
+                            <input type="number"
+                                   name="año"
+                                   class="form-control"
+                                   value="{{ fecha_actual.year }}"
+                                   min="2020"
+                                   max="2099"
+                                   required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-danger btn-lg">
+                            <i class="fas fa-file-pdf"></i> Generar Reporte PDF
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light">
+                <small class="text-muted">
+                    <i class="fas fa-lightbulb"></i>
+                    El PDF incluye: totales consolidados, comparativo por sucursal, desglose por categorías y tendencias mensuales
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Exportar a Excel -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-excel"></i> Exportar Movimientos a Excel
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">
+                    Descarga un archivo Excel con todos los movimientos detallados de la organización. Ideal para análisis personalizado y contabilidad.
+                </p>
+
+                <form method="GET" action="{{ url_for('movimientos.exportar_excel') }}" id="form-excel">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-building"></i> Organización <span class="text-danger">*</span>
+                        </label>
+                        <select name="organizacion_id" class="form-select form-select-lg" required id="orgExcelSelect">
+                            <option value="">-- Selecciona una organización --</option>
+                            {% for org in organizaciones %}
+                            <option value="{{ org.id }}">
+                                {{ org.nombre }}
+                                {% if org.razon_social %}({{ org.razon_social }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">
+                            Exportará movimientos de todas las sucursales de la organización
+                        </small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-calendar"></i> Mes <span class="text-danger">*</span>
+                            </label>
+                            <select name="mes" class="form-select" required>
+                                <option value="">Seleccionar mes...</option>
+                                <option value="1">Enero</option>
+                                <option value="2">Febrero</option>
+                                <option value="3">Marzo</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Mayo</option>
+                                <option value="6">Junio</option>
+                                <option value="7">Julio</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Septiembre</option>
+                                <option value="10">Octubre</option>
+                                <option value="11" {% if 11 == fecha_actual.month %}selected{% endif %}>Noviembre</option>
+                                <option value="12">Diciembre</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-calendar-alt"></i> Año <span class="text-danger">*</span>
+                            </label>
+                            <input type="number"
+                                   name="año"
+                                   class="form-control"
+                                   value="{{ fecha_actual.year }}"
+                                   min="2020"
+                                   max="2099"
+                                   required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-filter"></i> Tipo de Movimiento
+                        </label>
+                        <select name="tipo" class="form-select">
+                            <option value="">Ingresos y Egresos (Todos)</option>
+                            <option value="ingreso">Solo Ingresos</option>
+                            <option value="egreso">Solo Egresos</option>
+                        </select>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="fas fa-file-excel"></i> Exportar a Excel
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light">
+                <small class="text-muted">
+                    <i class="fas fa-lightbulb"></i>
+                    El Excel incluye: fecha, sucursal, categoría, método de pago, monto, descripción y usuario
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Información adicional -->
+<div class="card mt-4">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Información sobre los Reportes</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-file-pdf text-danger"></i> Reporte PDF Consolidado</h6>
+                <ul class="small">
+                    <li>Incluye <strong>todas las sucursales</strong> de la organización</li>
+                    <li>Totales consolidados de ingresos y egresos</li>
+                    <li>Comparativo entre sucursales</li>
+                    <li>Desglose detallado por categorías</li>
+                    <li>Análisis de tendencias y cambios vs mes anterior</li>
+                    <li>Gráficas y visualizaciones profesionales</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-file-excel text-success"></i> Exportación a Excel</h6>
+                <ul class="small">
+                    <li>Datos crudos listos para análisis personalizado</li>
+                    <li>Todos los movimientos del mes seleccionado</li>
+                    <li>Información detallada de cada transacción</li>
+                    <li>Identificación de sucursal por cada movimiento</li>
+                    <li>Compatible con Excel, Google Sheets y LibreOffice</li>
+                    <li>Ideal para importar a sistemas contables</li>
+                </ul>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="alert alert-warning mb-0">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>Nota:</strong> Los reportes solo incluyen datos de las sucursales <strong>activas</strong> de cada organización.
+            Si una sucursal está inactiva, sus datos históricos no se incluirán en los reportes consolidados.
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Pre-seleccionar mes y año actual si solo hay una organización
+document.addEventListener('DOMContentLoaded', function() {
+    const orgSelects = document.querySelectorAll('select[name="organizacion_id"]');
+    const organizaciones = {{ organizaciones|length }};
+
+    // Si solo hay una organización, pre-seleccionarla
+    if (organizaciones === 1) {
+        orgSelects.forEach(select => {
+            select.selectedIndex = 1; // Seleccionar la primera organización
+        });
+    }
+});
+</script>
+{% endblock %}

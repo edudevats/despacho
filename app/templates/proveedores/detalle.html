@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}{{ proveedor.razon_social }} - Proveedor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-building"></i> Detalle del Proveedor</h1>
+    <div class="btn-toolbar mb-2 mb-md-0 gap-2">
+        <a href="{{ url_for('proveedores.index') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+        {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+        <a href="{{ url_for('proveedores.editar', id=proveedor.id) }}" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Editar
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <!-- Columna principal -->
+    <div class="col-md-8">
+        <!-- Datos Fiscales -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-file-invoice"></i> Datos Fiscales</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h4>{{ proveedor.razon_social }}</h4>
+                        {% if proveedor.nombre_comercial %}
+                        <p class="text-muted mb-0">Nombre Comercial: {{ proveedor.nombre_comercial }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>RFC:</strong><br>
+                        <span class="font-monospace">{{ proveedor.rfc }}</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Régimen Fiscal:</strong><br>
+                        {{ proveedor.regimen_fiscal or '-' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contacto y Dirección -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-address-book"></i> Contacto y Dirección</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Teléfono:</strong><br>
+                        {% if proveedor.telefono %}
+                        <i class="fas fa-phone"></i> {{ proveedor.telefono }}
+                        {% else %}
+                        <span class="text-muted">No registrado</span>
+                        {% endif %}
+                        </p>
+
+                        <p><strong>Email:</strong><br>
+                        {% if proveedor.email %}
+                        <i class="fas fa-envelope"></i> {{ proveedor.email }}
+                        {% else %}
+                        <span class="text-muted">No registrado</span>
+                        {% endif %}
+                        </p>
+                    </div>
+
+                    <div class="col-md-6">
+                        <p><strong>Dirección:</strong><br>
+                        {% if proveedor.calle %}
+                        {{ proveedor.calle }}
+                        {% if proveedor.numero_exterior %} #{{ proveedor.numero_exterior }}{% endif %}
+                        {% if proveedor.numero_interior %} Int. {{ proveedor.numero_interior }}{% endif %}<br>
+                        {% if proveedor.colonia %}{{ proveedor.colonia }}<br>{% endif %}
+                        {% if proveedor.codigo_postal %}CP {{ proveedor.codigo_postal }}, {% endif %}
+                        {% if proveedor.ciudad %}{{ proveedor.ciudad }}, {% endif %}
+                        {% if proveedor.estado %}{{ proveedor.estado }}<br>{% endif %}
+                        {% if proveedor.pais %}{{ proveedor.pais }}{% endif %}
+                        {% else %}
+                        <span class="text-muted">No registrada</span>
+                        {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Datos Bancarios -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-university"></i> Datos Bancarios</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        {% if proveedor.banco or proveedor.cuenta_bancaria or proveedor.clabe %}
+                        <p><strong>Banco:</strong> {{ proveedor.banco or '-' }}</p>
+                        <p><strong>Cuenta:</strong> {{ proveedor.cuenta_bancaria or '-' }}</p>
+                        <p><strong>CLABE:</strong> <span class="font-monospace">{{ proveedor.clabe or '-' }}</span></p>
+                        {% else %}
+                        <p class="text-muted">No hay datos bancarios registrados</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Facturas Recientes -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-invoice-dollar"></i> Facturas Recientes
+                    <span class="badge bg-primary">{{ cfdis|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if cfdis %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>UUID</th>
+                                <th>Serie-Folio</th>
+                                <th class="text-end">Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cfdi in cfdis %}
+                            <tr>
+                                <td>{{ cfdi.fecha_emision.strftime('%Y-%m-%d') if cfdi.fecha_emision else '-' }}</td>
+                                <td><small class="font-monospace">{{ cfdi.uuid[:8] }}...</small></td>
+                                <td>{{ cfdi.serie }}-{{ cfdi.folio }}</td>
+                                <td class="text-end">${{ '{:,.2f}'.format(cfdi.total) }}</td>
+                                <td>
+                                    <a href="{{ url_for('cfdi.detalle', id=cfdi.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mb-0">
+                    <strong>Total facturado:</strong> ${{ '{:,.2f}'.format(total_facturado) }}
+                </p>
+                {% else %}
+                <p class="text-muted">No hay facturas registradas para este proveedor.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if proveedor.notas %}
+        <!-- Notas -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-sticky-note"></i> Notas</h5>
+            </div>
+            <div class="card-body">
+                <p>{{ proveedor.notas }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Columna lateral -->
+    <div class="col-md-4">
+        <!-- Estado -->
+        <div class="card mb-3">
+            <div class="card-header {% if proveedor.activo %}bg-success{% else %}bg-secondary{% endif %} text-white">
+                <h5 class="mb-0"><i class="fas fa-circle"></i> Estado</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-2">
+                    <strong>Estatus:</strong>
+                    {% if proveedor.activo %}
+                    <span class="badge bg-success">Activo</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactivo</span>
+                    {% endif %}
+                </p>
+
+                {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+                <form method="POST" action="{{ url_for('proveedores.toggle_activo', id=proveedor.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-sm {% if proveedor.activo %}btn-outline-secondary{% else %}btn-outline-success{% endif %} w-100 mb-2">
+                        <i class="fas fa-power-off"></i> {% if proveedor.activo %}Desactivar{% else %}Activar{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Lista Negra EFOS/EDOS -->
+        <div class="card mb-3">
+            <div class="card-header {% if proveedor.en_lista_negra %}bg-danger{% else %}bg-light{% endif %} {% if proveedor.en_lista_negra %}text-white{% endif %}">
+                <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Lista Negra SAT</h5>
+            </div>
+            <div class="card-body">
+                {% if proveedor.en_lista_negra %}
+                <div class="alert alert-danger mb-2">
+                    <strong><i class="fas fa-exclamation-triangle"></i> ADVERTENCIA</strong><br>
+                    Este proveedor está marcado en lista negra EFOS/EDOS del SAT.
+                </div>
+                {% else %}
+                <p class="text-muted mb-2">
+                    <i class="fas fa-check-circle text-success"></i> No está en lista negra
+                </p>
+                {% endif %}
+
+                {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+                <form method="POST" action="{{ url_for('proveedores.toggle_lista_negra', id=proveedor.id) }}">
+                    <button type="submit" class="btn btn-sm {% if proveedor.en_lista_negra %}btn-outline-success{% else %}btn-outline-danger{% endif %} w-100"
+                            onclick="return confirm('¿Estás seguro de cambiar el estado de lista negra?');">
+                        <i class="fas fa-flag"></i> {% if proveedor.en_lista_negra %}Quitar de lista negra{% else %}Marcar en lista negra{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Categoría -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-tags"></i> Categorización</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Categoría:</strong><br>
+                {% if proveedor.categoria_gasto %}
+                <span class="badge bg-secondary">{{ proveedor.categoria_gasto|title }}</span>
+                {% else %}
+                <span class="text-muted">No categorizado</span>
+                {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- Información del Sistema -->
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Información</h5>
+            </div>
+            <div class="card-body">
+                <p class="small mb-1">
+                    <strong>Registrado:</strong><br>
+                    {{ proveedor.fecha_registro.strftime('%Y-%m-%d') if proveedor.fecha_registro else '-' }}
+                </p>
+                {% if proveedor.organizacion %}
+                <p class="small mb-0">
+                    <strong>Organización:</strong><br>
+                    {{ proveedor.organizacion.nombre }}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+        <!-- Acciones peligrosas -->
+        <div class="card mt-3 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="fas fa-trash"></i> Zona Peligrosa</h5>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">
+                    Eliminar proveedor solo si no tiene facturas asociadas.
+                </p>
+                <form method="POST" action="{{ url_for('proveedores.eliminar', id=proveedor.id) }}"
+                      onsubmit="return confirm('¿Estás seguro de eliminar este proveedor? Esta acción no se puede deshacer.');">
+                    <button type="submit" class="btn btn-danger btn-sm w-100">
+                        <i class="fas fa-trash"></i> Eliminar Proveedor
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

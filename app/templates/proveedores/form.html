@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} - Sistema de Contaduría{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-building"></i> {{ titulo }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('proveedores.index') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Volver al Listado
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <!-- Datos Fiscales -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-file-invoice"></i> Datos Fiscales</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                {{ form.rfc.label(class="form-label required") }}
+                                {{ form.rfc(class="form-control", placeholder="XAXX010101000") }}
+                                {% if form.rfc.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.rfc.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                                <small class="form-text text-muted">12 o 13 caracteres</small>
+                            </div>
+                        </div>
+
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                {{ form.razon_social.label(class="form-label required") }}
+                                {{ form.razon_social(class="form-control") }}
+                                {% if form.razon_social.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.razon_social.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                {{ form.nombre_comercial.label(class="form-label") }}
+                                {{ form.nombre_comercial(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                {{ form.regimen_fiscal.label(class="form-label") }}
+                                {{ form.regimen_fiscal(class="form-select") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contacto -->
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-address-book"></i> Información de Contacto</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                {{ form.telefono.label(class="form-label") }}
+                                {{ form.telefono(class="form-control", placeholder="55 1234 5678") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                {{ form.email.label(class="form-label") }}
+                                {{ form.email(class="form-control", placeholder="contacto@proveedor.com") }}
+                                {% if form.email.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.email.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dirección -->
+            <div class="card mb-3">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-map-marker-alt"></i> Dirección</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                {{ form.calle.label(class="form-label") }}
+                                {{ form.calle(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                {{ form.numero_exterior.label(class="form-label") }}
+                                {{ form.numero_exterior(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                {{ form.numero_interior.label(class="form-label") }}
+                                {{ form.numero_interior(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                {{ form.colonia.label(class="form-label") }}
+                                {{ form.colonia(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                {{ form.codigo_postal.label(class="form-label") }}
+                                {{ form.codigo_postal(class="form-control", placeholder="12345") }}
+                                {% if form.codigo_postal.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.codigo_postal.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                {{ form.ciudad.label(class="form-label") }}
+                                {{ form.ciudad(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                {{ form.estado.label(class="form-label") }}
+                                {{ form.estado(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                {{ form.pais.label(class="form-label") }}
+                                {{ form.pais(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Datos Bancarios -->
+            <div class="card mb-3">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-university"></i> Datos Bancarios</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                {{ form.banco.label(class="form-label") }}
+                                {{ form.banco(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                {{ form.cuenta_bancaria.label(class="form-label") }}
+                                {{ form.cuenta_bancaria(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                {{ form.clabe.label(class="form-label") }}
+                                {{ form.clabe(class="form-control", placeholder="012345678901234567") }}
+                                {% if form.clabe.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.clabe.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                                <small class="form-text text-muted">18 dígitos</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Categorización y Control -->
+            <div class="card mb-3">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-tags"></i> Categorización y Control</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                {{ form.categoria_gasto.label(class="form-label") }}
+                                {{ form.categoria_gasto(class="form-select") }}
+                                <small class="form-text text-muted">Clasificación principal del proveedor</small>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Estado y Alertas</label>
+                                <div class="form-check">
+                                    {{ form.activo(class="form-check-input") }}
+                                    {{ form.activo.label(class="form-check-label") }}
+                                </div>
+                                <div class="form-check">
+                                    {{ form.en_lista_negra(class="form-check-input") }}
+                                    <label class="form-check-label text-danger" for="{{ form.en_lista_negra.id }}">
+                                        <strong>{{ form.en_lista_negra.label.text }}</strong>
+                                    </label>
+                                    <small class="d-block text-muted">Marcar si está en lista negra del SAT (EFOS/EDOS)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="mb-3">
+                                {{ form.notas.label(class="form-label") }}
+                                {{ form.notas(class="form-control", rows=3, placeholder="Notas adicionales...") }}
+                                {% if form.notas.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.notas.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="d-flex justify-content-center gap-3 mb-4">
+                <a href="{{ url_for('proveedores.index') }}" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+                {{ form.submit(class="btn btn-primary btn-lg") }}
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.required:after {
+    content: " *";
+    color: red;
+}
+</style>
+
+{% endblock %}

@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle CFDI - Sistema de Contaduría{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-file-invoice"></i> Detalle de Factura CFDI</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('cfdi.index') }}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-arrow-left"></i> Volver al Listado
+        </a>
+        {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+        <form method="POST" action="{{ url_for('cfdi.eliminar', id=factura.id) }}" class="d-inline"
+              onsubmit="return confirm('¿Estás seguro de eliminar este CFDI?');">
+            <button type="submit" class="btn btn-danger">
+                <i class="fas fa-trash"></i> Eliminar
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <!-- Columna principal -->
+    <div class="col-md-8">
+        <!-- Estado y validación -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-certificate"></i> Estado y Validación</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p>
+                            <strong>UUID:</strong><br>
+                            <span class="font-monospace text-muted small">{{ factura.uuid }}</span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p>
+                            <strong>Validado SAT:</strong>
+                            {% if factura.validado_sat %}
+                            <span class="badge bg-success ms-2">
+                                <i class="fas fa-check-circle"></i> Sí
+                            </span>
+                            {% else %}
+                            <span class="badge bg-warning ms-2">
+                                <i class="fas fa-clock"></i> Pendiente
+                            </span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p>
+                            <strong>Versión CFDI:</strong> {{ factura.version_cfdi }}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p>
+                            <strong>Tipo de Comprobante:</strong>
+                            {% if factura.tipo_comprobante == 'I' %}
+                            <span class="badge bg-success">Ingreso</span>
+                            {% elif factura.tipo_comprobante == 'E' %}
+                            <span class="badge bg-danger">Egreso</span>
+                            {% elif factura.tipo_comprobante == 'P' %}
+                            <span class="badge bg-info">Pago</span>
+                            {% elif factura.tipo_comprobante == 'N' %}
+                            <span class="badge bg-warning">Nómina</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ factura.tipo_comprobante }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Datos generales -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Datos Generales</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <p>
+                            <strong>Serie-Folio:</strong><br>
+                            {{ factura.serie }}-{{ factura.folio }}
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <p>
+                            <strong>Fecha Emisión:</strong><br>
+                            {{ factura.fecha_emision.strftime('%Y-%m-%d %H:%M') if factura.fecha_emision else '-' }}
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <p>
+                            <strong>Fecha Timbrado:</strong><br>
+                            {{ factura.fecha_timbrado.strftime('%Y-%m-%d %H:%M') if factura.fecha_timbrado else '-' }}
+                        </p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4">
+                        <p>
+                            <strong>Moneda:</strong> {{ factura.moneda }}
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <p>
+                            <strong>Tipo de Cambio:</strong> {{ factura.tipo_cambio }}
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <p>
+                            <strong>Método/Forma Pago:</strong><br>
+                            {{ factura.metodo_pago }} / {{ factura.forma_pago }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emisor (Proveedor) -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-building"></i> Emisor (Proveedor)</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    <strong>Razón Social:</strong> {{ factura.emisor_nombre }}
+                    {% if factura.proveedor and factura.proveedor.en_lista_negra %}
+                    <span class="badge bg-danger ms-2" title="Proveedor en lista negra EFOS/EDOS">
+                        <i class="fas fa-exclamation-triangle"></i> LISTA NEGRA
+                    </span>
+                    {% endif %}
+                </p>
+                <p>
+                    <strong>RFC:</strong> {{ factura.emisor_rfc }}
+                </p>
+                <p>
+                    <strong>Régimen Fiscal:</strong> {{ factura.emisor_regimen }}
+                </p>
+            </div>
+        </div>
+
+        <!-- Receptor -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-user-tie"></i> Receptor</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    <strong>Nombre:</strong> {{ factura.receptor_nombre }}
+                </p>
+                <p>
+                    <strong>RFC:</strong> {{ factura.receptor_rfc }}
+                </p>
+                <p>
+                    <strong>Uso CFDI:</strong> {{ factura.receptor_uso_cfdi }}
+                </p>
+            </div>
+        </div>
+
+        <!-- Importes e Impuestos -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-calculator"></i> Importes e Impuestos</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td><strong>Subtotal:</strong></td>
+                            <td class="text-end">${{ '{:,.2f}'.format(factura.subtotal) }}</td>
+                        </tr>
+                        {% if factura.descuento > 0 %}
+                        <tr>
+                            <td><strong>Descuento:</strong></td>
+                            <td class="text-end text-success">-${{ '{:,.2f}'.format(factura.descuento) }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="table-light">
+                            <td colspan="2"><strong>Impuestos Trasladados</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="ps-4">IVA:</td>
+                            <td class="text-end">${{ '{:,.2f}'.format(factura.iva) }}</td>
+                        </tr>
+                        {% if factura.ieps > 0 %}
+                        <tr>
+                            <td class="ps-4">IEPS:</td>
+                            <td class="text-end">${{ '{:,.2f}'.format(factura.ieps) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if factura.isr_retenido > 0 or factura.iva_retenido > 0 %}
+                        <tr class="table-light">
+                            <td colspan="2"><strong>Retenciones</strong></td>
+                        </tr>
+                        {% endif %}
+                        {% if factura.isr_retenido > 0 %}
+                        <tr>
+                            <td class="ps-4">ISR Retenido:</td>
+                            <td class="text-end text-danger">-${{ '{:,.2f}'.format(factura.isr_retenido) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if factura.iva_retenido > 0 %}
+                        <tr>
+                            <td class="ps-4">IVA Retenido:</td>
+                            <td class="text-end text-danger">-${{ '{:,.2f}'.format(factura.iva_retenido) }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="table-primary fw-bold">
+                            <td><strong>TOTAL:</strong></td>
+                            <td class="text-end">${{ '{:,.2f}'.format(factura.total) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if factura.notas %}
+        <!-- Notas -->
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-sticky-note"></i> Notas</h5>
+            </div>
+            <div class="card-body">
+                <p>{{ factura.notas }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Columna lateral -->
+    <div class="col-md-4">
+        <!-- Asociación con movimiento -->
+        <div class="card mb-3">
+            <div class="card-header {% if factura.egreso_id %}bg-success text-white{% else %}bg-warning text-dark{% endif %}">
+                <h5 class="mb-0">
+                    <i class="fas fa-link"></i>
+                    {% if factura.egreso_id %}Egreso Asociado{% else %}Sin Asociar{% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if factura.egreso_id and factura.egreso %}
+                <p>
+                    <strong>Tipo:</strong>
+                    <span class="badge bg-danger">EGRESO</span>
+                </p>
+                <p><strong>Fecha:</strong> {{ factura.egreso.fecha.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Monto:</strong> ${{ '{:,.2f}'.format(factura.egreso.monto) }}</p>
+                <p><strong>Descripción:</strong><br>{{ factura.egreso.notas[:100] if factura.egreso.notas else '-' }}</p>
+
+                {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+                <div class="d-grid gap-2 mt-3">
+                    <form method="POST" action="{{ url_for('cfdi.desasociar_movimiento', id=factura.id) }}"
+                          onsubmit="return confirm('¿Deseas desasociar este CFDI del egreso?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                            <i class="fas fa-unlink"></i> Desasociar
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+                {% else %}
+                <p class="text-muted">
+                    <i class="fas fa-info-circle"></i> Este CFDI no está asociado con ningún egreso contable.
+                </p>
+
+                {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+                <form method="POST" action="{{ url_for('cfdi.asociar_movimiento', id=factura.id) }}">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.movimiento_id.label(class="form-label") }}
+                        {{ form.movimiento_id(class="form-select form-select-sm") }}
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="fas fa-link"></i> Asociar
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Información adicional -->
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-info"></i> Información Adicional</h5>
+            </div>
+            <div class="card-body">
+                <p class="small">
+                    <strong>Archivo XML:</strong><br>
+                    <span class="font-monospace">{{ factura.xml_filename }}</span>
+                </p>
+                {% if factura.sucursal %}
+                <p class="small">
+                    <strong>Sucursal:</strong><br>
+                    {{ factura.sucursal.nombre }}
+                </p>
+                {% endif %}
+                <p class="small">
+                    <strong>Fecha de carga:</strong><br>
+                    {{ factura.fecha_carga.strftime('%Y-%m-%d %H:%M') if factura.fecha_carga else '-' }}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

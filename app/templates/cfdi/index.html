@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Facturas CFDI - Sistema de Contaduría{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-file-invoice"></i> Facturas Electrónicas (CFDI)</h1>
+    {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('cfdi.upload') }}" class="btn btn-primary">
+            <i class="fas fa-upload"></i> Subir XML CFDI
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Filtros de búsqueda -->
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-filter"></i> Filtros de Búsqueda</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('cfdi.index') }}" id="filtrosForm">
+            <div class="row g-3">
+                {% if current_user.es_admin_despacho() %}
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-building"></i> Organización
+                    </label>
+                    <select name="organizacion_id" class="form-select" id="organizacionSelect">
+                        <option value="">Todas las organizaciones</option>
+                        {% for org in organizaciones %}
+                        <option value="{{ org.id }}" {% if request.args.get('organizacion_id')|int == org.id %}selected{% endif %}>
+                            {{ org.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Sucursal</label>
+                    <select name="sucursal_id" class="form-select" id="sucursalSelect">
+                        <option value="">Todas las sucursales</option>
+                        {% for sucursal in sucursales %}
+                        <option value="{{ sucursal.id }}" {% if request.args.get('sucursal_id')|int == sucursal.id %}selected{% endif %}>
+                            {{ sucursal.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <div class="col-md-3">
+                    <label class="form-label">Proveedor</label>
+                    <select name="proveedor_id" class="form-select" id="proveedorSelect">
+                        <option value="">Todos los proveedores</option>
+                        {% for proveedor in proveedores %}
+                        <option value="{{ proveedor.id }}" {% if request.args.get('proveedor_id')|int == proveedor.id %}selected{% endif %}>
+                            {{ proveedor.razon_social }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Tipo</label>
+                    <select name="tipo" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="I" {% if request.args.get('tipo') == 'I' %}selected{% endif %}>Ingreso</option>
+                        <option value="E" {% if request.args.get('tipo') == 'E' %}selected{% endif %}>Egreso</option>
+                        <option value="P" {% if request.args.get('tipo') == 'P' %}selected{% endif %}>Pago</option>
+                        <option value="N" {% if request.args.get('tipo') == 'N' %}selected{% endif %}>Nómina</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Fecha Inicio</label>
+                    <input type="date" name="fecha_inicio" class="form-control" value="{{ request.args.get('fecha_inicio', '') }}">
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Fecha Fin</label>
+                    <input type="date" name="fecha_fin" class="form-control" value="{{ request.args.get('fecha_fin', '') }}">
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Validado SAT</label>
+                    <select name="validado" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="si" {% if request.args.get('validado') == 'si' %}selected{% endif %}>Sí</option>
+                        <option value="no" {% if request.args.get('validado') == 'no' %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Buscar
+                    </button>
+                    <a href="{{ url_for('cfdi.index') }}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Limpiar
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de CFDIs -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">
+            <i class="fas fa-list"></i> Facturas Registradas
+            <span class="badge bg-secondary">{{ facturas|length }}</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if facturas %}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>UUID</th>
+                        <th>Proveedor</th>
+                        <th>RFC</th>
+                        <th>Serie-Folio</th>
+                        <th>Tipo</th>
+                        <th class="text-end">Subtotal</th>
+                        <th class="text-end">IVA</th>
+                        <th class="text-end">Total</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for factura in facturas %}
+                    <tr>
+                        <td>
+                            <small>{{ factura.fecha_emision.strftime('%Y-%m-%d') if factura.fecha_emision else '-' }}</small>
+                        </td>
+                        <td>
+                            <small class="font-monospace">{{ factura.uuid[:8] }}...</small>
+                        </td>
+                        <td>
+                            {{ factura.proveedor.razon_social if factura.proveedor else factura.emisor_nombre }}
+                            {% if factura.proveedor and factura.proveedor.en_lista_negra %}
+                            <span class="badge bg-danger" title="Proveedor en lista negra EFOS/EDOS">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td><small>{{ factura.emisor_rfc }}</small></td>
+                        <td><small>{{ factura.serie }}-{{ factura.folio }}</small></td>
+                        <td>
+                            {% if factura.tipo_comprobante == 'I' %}
+                            <span class="badge bg-success">Ingreso</span>
+                            {% elif factura.tipo_comprobante == 'E' %}
+                            <span class="badge bg-danger">Egreso</span>
+                            {% elif factura.tipo_comprobante == 'P' %}
+                            <span class="badge bg-info">Pago</span>
+                            {% elif factura.tipo_comprobante == 'N' %}
+                            <span class="badge bg-warning">Nómina</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ factura.tipo_comprobante }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">${{ '{:,.2f}'.format(factura.subtotal) }}</td>
+                        <td class="text-end">${{ '{:,.2f}'.format(factura.iva) }}</td>
+                        <td class="text-end"><strong>${{ '{:,.2f}'.format(factura.total) }}</strong></td>
+                        <td>
+                            {% if factura.validado_sat %}
+                            <span class="badge bg-success"><i class="fas fa-check"></i> Validado</span>
+                            {% else %}
+                            <span class="badge bg-warning"><i class="fas fa-clock"></i> Pendiente</span>
+                            {% endif %}
+                            {% if factura.egreso_id %}
+                            <br><span class="badge bg-info mt-1"><i class="fas fa-link"></i> Asociado</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('cfdi.detalle', id=factura.id) }}" class="btn btn-sm btn-outline-primary" title="Ver detalles">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No hay facturas CFDI registradas.
+            {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+            <a href="{{ url_for('cfdi.upload') }}">Sube tu primer XML</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Cuando se cambia la organización, recargar la página con ese filtro
+document.addEventListener('DOMContentLoaded', function() {
+    const organizacionSelect = document.getElementById('organizacionSelect');
+
+    if (organizacionSelect) {
+        organizacionSelect.addEventListener('change', function() {
+            const form = document.getElementById('filtrosForm');
+            // Limpiar filtros de sucursal y proveedor al cambiar organización
+            const sucursalSelect = document.getElementById('sucursalSelect');
+            const proveedorSelect = document.getElementById('proveedorSelect');
+
+            if (sucursalSelect) sucursalSelect.value = '';
+            if (proveedorSelect) proveedorSelect.value = '';
+
+            // Enviar el formulario
+            form.submit();
+        });
+    }
+});
+</script>
+{% endblock %}

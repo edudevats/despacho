@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Usuarios - Contaduría{% endblock %}
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-dark">
+    <h1><i class="fas fa-users"></i> Gestión de Usuarios</h1>
+    <div class="user-info">Administración del Sistema</div>
+</div>
+
+<!-- Botón de nuevo usuario -->
+<div class="mb-3">
+    <a href="{{ url_for('usuarios.nuevo') }}" class="btn btn-success">
+        <i class="fas fa-user-plus"></i> Nuevo Usuario
+    </a>
+</div>
+
+<!-- Tabla de usuarios -->
+<div class="chart-container">
+    <h5><i class="fas fa-list"></i> Listado de Usuarios</h5>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Nombre Completo</th>
+                    <th>Email</th>
+                    <th>Rol</th>
+                    <th>Clínica</th>
+                    <th>Estado</th>
+                    <th class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for usuario in usuarios %}
+                <tr>
+                    <td><strong>{{ usuario.username }}</strong></td>
+                    <td>{{ usuario.nombre_completo }}</td>
+                    <td>{{ usuario.email }}</td>
+                    <td>
+                        {% if usuario.rol == 'admin_despacho' %}
+                        <span class="badge bg-danger">Admin Despacho</span>
+                        {% elif usuario.rol == 'principal_clinica' %}
+                        <span class="badge bg-primary">Principal Clínica</span>
+                        {% else %}
+                        <span class="badge bg-info">Secundario POS</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if usuario.clinica %}
+                        {{ usuario.clinica.nombre }}
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if usuario.activo %}
+                        <span class="badge bg-success">Activo</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a href="{{ url_for('usuarios.editar', id=usuario.id) }}"
+                           class="btn btn-sm btn-primary" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        {% if usuario.id != current_user.id %}
+                        <form method="POST" action="{{ url_for('usuarios.eliminar', id=usuario.id) }}"
+                              style="display:inline;"
+                              onsubmit="return confirm('¿Está seguro de desactivar este usuario?');">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Desactivar">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">
+                        <i class="fas fa-info-circle"></i> No hay usuarios registrados
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

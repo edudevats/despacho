@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Movimientos {{ usuario.nombre_completo }} - Contaduría{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-green">
+    <h1><i class="fas fa-user-circle"></i> {{ usuario.nombre_completo }}</h1>
+    <div class="user-info">{{ usuario.username }} - {{ usuario.clinica.nombre if usuario.clinica else 'Sin clínica' }}</div>
+</div>
+
+<!-- Filtro de fechas -->
+<div class="mb-3">
+    <form method="GET" class="row g-3">
+        <div class="col-auto">
+            <label class="form-label">Fecha Inicio:</label>
+            <input type="date" name="fecha_inicio" class="form-control"
+                   value="{{ fecha_inicio if fecha_inicio else '' }}">
+        </div>
+        <div class="col-auto">
+            <label class="form-label">Fecha Fin:</label>
+            <input type="date" name="fecha_fin" class="form-control"
+                   value="{{ fecha_fin if fecha_fin else '' }}">
+        </div>
+        <div class="col-auto">
+            <label class="form-label">&nbsp;</label>
+            <button type="submit" class="btn btn-primary d-block">
+                <i class="fas fa-filter"></i> Filtrar
+            </button>
+        </div>
+        {% if fecha_inicio or fecha_fin %}
+        <div class="col-auto">
+            <label class="form-label">&nbsp;</label>
+            <a href="{{ url_for('reportes.ver_movimientos_usuario', usuario_id=usuario.id) }}"
+               class="btn btn-secondary d-block">
+                <i class="fas fa-times"></i> Limpiar Filtro
+            </a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Cards de Resumen -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="metric-card metric-card-success">
+            <div class="card-title">Total Ingresos</div>
+            <div class="card-value text-money">{{ format_currency(total_ingresos) }}</div>
+            <small class="text-muted">{{ num_ingresos }} movimientos</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="metric-card metric-card-danger">
+            <div class="card-title">Total Egresos</div>
+            <div class="card-value text-money">{{ format_currency(total_egresos) }}</div>
+            <small class="text-muted">{{ num_egresos }} movimientos</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="metric-card metric-card-info">
+            <div class="card-title">Balance</div>
+            <div class="card-value text-money">{{ format_currency(balance) }}</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="metric-card metric-card-warning">
+            <div class="card-title">Total Movimientos</div>
+            <div class="card-value">{{ num_ingresos + num_egresos }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Permisos del Usuario -->
+{% if usuario.rol == 'secundario_pos' %}
+<div class="chart-container mb-4">
+    <h5><i class="fas fa-key"></i> Permisos del Usuario</h5>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" disabled
+                       {% if usuario.puede_registrar_ingresos %}checked{% endif %}>
+                <label class="form-check-label">Registrar Ingresos</label>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" disabled
+                       {% if usuario.puede_registrar_egresos %}checked{% endif %}>
+                <label class="form-check-label">Registrar Egresos</label>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" disabled
+                       {% if usuario.puede_editar_movimientos %}checked{% endif %}>
+                <label class="form-check-label">Editar Movimientos</label>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" disabled
+                       {% if usuario.puede_eliminar_movimientos %}checked{% endif %}>
+                <label class="form-check-label">Eliminar Movimientos</label>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" disabled
+                       {% if usuario.puede_ver_reportes %}checked{% endif %}>
+                <label class="form-check-label">Ver Reportes</label>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Listado de Movimientos -->
+<div class="row">
+    <!-- Ingresos -->
+    <div class="col-md-6">
+        <div class="chart-container">
+            <h5><i class="fas fa-arrow-up text-success"></i> Ingresos Registrados (Últimos 100)</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Categoría</th>
+                            <th>Método</th>
+                            <th class="text-end">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ingreso in ingresos %}
+                        <tr>
+                            <td>
+                                <small>{{ ingreso.fecha.strftime('%d/%m/%Y') }}</small>
+                            </td>
+                            <td>{{ ingreso.categoria.nombre }}</td>
+                            <td>
+                                <small class="text-muted">
+                                    {% if ingreso.metodo_pago == 'efectivo' %}
+                                    <i class="fas fa-money-bill"></i> Efectivo
+                                    {% elif ingreso.metodo_pago == 'transferencia' %}
+                                    <i class="fas fa-exchange-alt"></i> Transferencia
+                                    {% else %}
+                                    <i class="fas fa-credit-card"></i> Tarjeta
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td class="text-end text-success text-money">
+                                {{ format_currency(ingreso.monto) }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">
+                                <i class="fas fa-info-circle"></i> No hay ingresos registrados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if ingresos|length > 0 %}
+                    <tfoot>
+                        <tr class="table-light">
+                            <td colspan="3"><strong>Subtotal:</strong></td>
+                            <td class="text-end text-success text-money">
+                                <strong>{{ format_currency(total_ingresos) }}</strong>
+                            </td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Egresos -->
+    <div class="col-md-6">
+        <div class="chart-container">
+            <h5><i class="fas fa-arrow-down text-danger"></i> Egresos Registrados (Últimos 100)</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Categoría</th>
+                            <th>Método</th>
+                            <th class="text-end">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for egreso in egresos %}
+                        <tr>
+                            <td>
+                                <small>{{ egreso.fecha.strftime('%d/%m/%Y') }}</small>
+                            </td>
+                            <td>{{ egreso.categoria.nombre }}</td>
+                            <td>
+                                <small class="text-muted">
+                                    {% if egreso.metodo_pago == 'efectivo' %}
+                                    <i class="fas fa-money-bill"></i> Efectivo
+                                    {% elif egreso.metodo_pago == 'transferencia' %}
+                                    <i class="fas fa-exchange-alt"></i> Transferencia
+                                    {% else %}
+                                    <i class="fas fa-credit-card"></i> Tarjeta
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td class="text-end text-danger text-money">
+                                {{ format_currency(egreso.monto) }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">
+                                <i class="fas fa-info-circle"></i> No hay egresos registrados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if egresos|length > 0 %}
+                    <tfoot>
+                        <tr class="table-light">
+                            <td colspan="3"><strong>Subtotal:</strong></td>
+                            <td class="text-end text-danger text-money">
+                                <strong>{{ format_currency(total_egresos) }}</strong>
+                            </td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Balance Final -->
+<div class="chart-container">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <h5 class="text-center"><i class="fas fa-balance-scale"></i> Balance Final</h5>
+            <div class="text-center">
+                <h2 class="{% if balance >= 0 %}text-success{% else %}text-danger{% endif %} text-money">
+                    {{ format_currency(balance) }}
+                </h2>
+                <p class="text-muted">
+                    Total: {{ num_ingresos + num_egresos }} movimientos
+                    {% if fecha_inicio or fecha_fin %}
+                    <br>
+                    <small>
+                        Filtrado:
+                        {% if fecha_inicio %}desde {{ fecha_inicio }}{% endif %}
+                        {% if fecha_fin %}hasta {{ fecha_fin }}{% endif %}
+                    </small>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

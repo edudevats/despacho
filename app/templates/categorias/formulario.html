@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if accion == 'nueva' %}
+        Nueva Categoría de {{ 'Ingresos' if tipo == 'ingreso' else 'Egresos' }}
+    {% else %}
+        Editar Categoría: {{ categoria.nombre }}
+    {% endif %}
+    - Sistema de Contaduría
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="fas fa-{% if tipo == 'ingreso' %}arrow-up{% else %}arrow-down{% endif %}"></i>
+        {% if accion == 'nueva' %}
+            Nueva Categoría de {{ 'Ingresos' if tipo == 'ingreso' else 'Egresos' }}
+        {% else %}
+            Editar Categoría
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('categorias.index') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Volver al Listado
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header {% if tipo == 'ingreso' %}bg-success{% else %}bg-danger{% endif %} text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-{% if accion == 'nueva' %}plus{% else %}edit{% endif %}"></i>
+                    {{ 'Datos de la Nueva Categoría' if accion == 'nueva' else 'Editar Información' }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.nombre.label(class="form-label") }}
+                        <span class="text-danger">*</span>
+                        {{ form.nombre(class="form-control" + (" is-invalid" if form.nombre.errors else ""), placeholder="Ej: Consultas, Medicamentos, Servicios") }}
+                        {% if form.nombre.errors %}
+                        <div class="invalid-feedback">
+                            {% for error in form.nombre.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> El nombre debe ser único dentro de tu clínica
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.descripcion.label(class="form-label") }}
+                        {{ form.descripcion(class="form-control", rows=3, placeholder="Descripción opcional de esta categoría") }}
+                        {% if form.descripcion.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.descripcion.errors %}
+                            {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        {{ form.activa(class="form-check-input") }}
+                        {{ form.activa.label(class="form-check-label") }}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> Las categorías inactivas no aparecerán al registrar movimientos
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('categorias.index') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn {% if tipo == 'ingreso' %}btn-success{% else %}btn-danger{% endif %}">
+                            <i class="fas fa-{% if accion == 'nueva' %}plus{% else %}save{% endif %}"></i>
+                            {{ 'Crear Categoría' if accion == 'nueva' else 'Guardar Cambios' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-question-circle"></i> Ayuda</h5>
+            </div>
+            <div class="card-body">
+                <h6>¿Qué son las categorías?</h6>
+                <p class="small">
+                    Las categorías te permiten clasificar y organizar tus {{ 'ingresos' if tipo == 'ingreso' else 'egresos' }}
+                    para un mejor control y generación de reportes.
+                </p>
+
+                <h6 class="mt-3">Ejemplos de categorías:</h6>
+                <ul class="small">
+                    {% if tipo == 'ingreso' %}
+                    <li>Consultas médicas</li>
+                    <li>Procedimientos</li>
+                    <li>Medicamentos</li>
+                    <li>Estudios de laboratorio</li>
+                    <li>Otros servicios</li>
+                    {% else %}
+                    <li>Servicios profesionales</li>
+                    <li>Insumos médicos</li>
+                    <li>Mantenimiento</li>
+                    <li>Servicios públicos</li>
+                    <li>Nómina</li>
+                    <li>Arrendamiento</li>
+                    {% endif %}
+                </ul>
+
+                <hr>
+
+                <h6>Consejo:</h6>
+                <p class="small text-muted">
+                    <i class="fas fa-lightbulb"></i> Crea categorías específicas pero no demasiado detalladas.
+                    Esto facilita el registro y análisis de tus movimientos.
+                </p>
+            </div>
+        </div>
+
+        {% if accion == 'editar' and categoria %}
+        <div class="card mt-3">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Información</h5>
+            </div>
+            <div class="card-body">
+                <p class="small mb-2">
+                    <strong>Fecha de creación:</strong><br>
+                    {{ categoria.fecha_creacion.strftime('%d/%m/%Y %H:%M') if categoria.fecha_creacion else 'N/A' }}
+                </p>
+                <p class="small mb-0">
+                    <strong>Estado:</strong>
+                    <span class="badge {% if categoria.activa %}bg-success{% else %}bg-secondary{% endif %}">
+                        {{ 'Activa' if categoria.activa else 'Inactiva' }}
+                    </span>
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

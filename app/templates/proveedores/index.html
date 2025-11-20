@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Proveedores - Sistema de Contaduría{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-building"></i> Gestión de Proveedores</h1>
+    {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('proveedores.nuevo') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Nuevo Proveedor
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Filtros de búsqueda -->
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-filter"></i> Filtros de Búsqueda</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('proveedores.index') }}">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">RFC</label>
+                    {{ form.rfc(class="form-control", placeholder="Buscar por RFC") }}
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Razón Social</label>
+                    {{ form.razon_social(class="form-control", placeholder="Buscar por nombre") }}
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Categoría</label>
+                    {{ form.categoria(class="form-select") }}
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Estado</label>
+                    {{ form.estado_activo(class="form-select") }}
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Lista Negra</label>
+                    {{ form.lista_negra(class="form-select") }}
+                </div>
+
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Buscar
+                    </button>
+                    <a href="{{ url_for('proveedores.index') }}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Limpiar Filtros
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resumen -->
+<div class="row mb-3">
+    <div class="col-md-12">
+        <div class="alert alert-info">
+            <strong>Total de proveedores:</strong> {{ proveedores|length }}
+            <span class="ms-3">
+                <i class="fas fa-check-circle text-success"></i> Activos: {{ proveedores|selectattr('activo')|list|length }}
+            </span>
+            <span class="ms-3">
+                <i class="fas fa-times-circle text-danger"></i> Inactivos: {{ proveedores|rejectattr('activo')|list|length }}
+            </span>
+            <span class="ms-3">
+                <i class="fas fa-exclamation-triangle text-warning"></i> Lista Negra: {{ proveedores|selectattr('en_lista_negra')|list|length }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de proveedores -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-list"></i> Proveedores Registrados</h5>
+    </div>
+    <div class="card-body">
+        {% if proveedores %}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead>
+                    <tr>
+                        <th>RFC</th>
+                        <th>Razón Social</th>
+                        <th>Categoría</th>
+                        <th>Contacto</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for proveedor in proveedores %}
+                    <tr class="{% if not proveedor.activo %}table-secondary{% endif %}">
+                        <td>
+                            <span class="font-monospace">{{ proveedor.rfc }}</span>
+                            {% if proveedor.en_lista_negra %}
+                            <br><span class="badge bg-danger" title="Proveedor en lista negra EFOS/EDOS">
+                                <i class="fas fa-exclamation-triangle"></i> EFOS/EDOS
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ proveedor.razon_social }}</strong>
+                            {% if proveedor.nombre_comercial %}
+                            <br><small class="text-muted">{{ proveedor.nombre_comercial }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if proveedor.categoria_gasto %}
+                            <span class="badge bg-secondary">{{ proveedor.categoria_gasto|title }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if proveedor.telefono %}
+                            <i class="fas fa-phone"></i> {{ proveedor.telefono }}<br>
+                            {% endif %}
+                            {% if proveedor.email %}
+                            <i class="fas fa-envelope"></i> {{ proveedor.email }}
+                            {% endif %}
+                            {% if not proveedor.telefono and not proveedor.email %}
+                            <span class="text-muted">Sin contacto</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if proveedor.activo %}
+                            <span class="badge bg-success">Activo</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('proveedores.detalle', id=proveedor.id) }}" class="btn btn-outline-primary" title="Ver detalles">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+                                <a href="{{ url_for('proveedores.editar', id=proveedor.id) }}" class="btn btn-outline-secondary" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="fas fa-info-circle"></i> No hay proveedores registrados.
+            {% if current_user.es_admin_despacho() or current_user.es_principal_sucursal() %}
+            <a href="{{ url_for('proveedores.nuevo') }}">Crea el primero</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
