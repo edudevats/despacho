@@ -7,6 +7,7 @@
     </div>
     <div class="border-t border-gray-200 px-4 py-5 sm:p-6">
         <form action="/companies/edit/{{ company.id }}" method="POST" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
                 <div class="sm:col-span-3">
                     <label for="rfc" class="block text-sm font-medium text-gray-700">RFC</label>

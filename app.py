@@ -1,24 +1,22 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 import os
 from config import Config
-from models import db, Company, Movement, Invoice, User, Category, Supplier, TaxPayment
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_migrate import Migrate
+from extensions import db, login_manager, migrate, mail, cache, csrf, init_extensions
+from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment
+from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.sat_service import SATService
+from services.qr_service import QRService
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta
+
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    db.init_app(app)
-    migrate = Migrate(app, db)
-    
-    login_manager = LoginManager()
-    login_manager.login_view = 'login'
-    login_manager.init_app(app)
+    # Initialize all extensions
+    init_extensions(app)
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -408,6 +406,13 @@ def create_app(config_class=Config):
         companies_list = Company.query.all()
         return render_template('search_list.html', companies=companies_list)
     
+    @app.route('/taxes')
+    @login_required
+    def taxes_list():
+        """Show list of companies for tax calculations"""
+        companies_list = Company.query.all()
+        return render_template('taxes_list.html', companies=companies_list)
+    
     # ==================== DASHBOARD ROUTES ====================
     
     @app.route('/companies/<int:company_id>/dashboard')
@@ -676,7 +681,7 @@ def create_app(config_class=Config):
     @app.route('/companies/<int:company_id>/taxes')
     @login_required
     def taxes_dashboard(company_id):
-        """Dashboard de Impuestos"""
+        """Dashboard de Impuestos con IVA, ISR y resumen anual"""
         company = Company.query.get_or_404(company_id)
         
         today = datetime.now()
@@ -687,11 +692,25 @@ def create_app(config_class=Config):
         month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
         
+        # Annual totals
+        annual_iva_to_pay = 0
+        annual_iva_paid = 0
+        annual_isr_estimated = 0
+        annual_isr_paid = 0
+        annual_income = 0
+        annual_expense = 0
+        
+        # Chart data arrays
+        chart_months = []
+        chart_iva_collected = []
+        chart_iva_deductible = []
+        chart_isr_estimated = []
+        
         for month_num in range(1, 13):
             # IVA Trasladado (Cobrado en Ventas)
             iva_collected = db.session.query(func.sum(Invoice.tax)).filter(
                 Invoice.company_id == company_id,
-                Invoice.type == 'I', # Ingreso
+                Invoice.type == 'I',  # Ingreso
                 extract('month', Invoice.date) == month_num,
                 extract('year', Invoice.date) == current_year
             ).scalar() or 0
@@ -699,7 +718,23 @@ def create_app(config_class=Config):
             # IVA Acreditable (Pagado en Gastos)
             iva_deductible = db.session.query(func.sum(Invoice.tax)).filter(
                 Invoice.company_id == company_id,
-                Invoice.type == 'E', # Egreso
+                Invoice.type == 'E',  # Egreso
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # Ingresos del mes (para ISR)
+            month_income = db.session.query(func.sum(Invoice.subtotal)).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'I',
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # Egresos del mes (para ISR)
+            month_expense = db.session.query(func.sum(Invoice.subtotal)).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'E',
                 extract('month', Invoice.date) == month_num,
                 extract('year', Invoice.date) == current_year
             ).scalar() or 0
@@ -707,15 +742,42 @@ def create_app(config_class=Config):
             # Net IVA Position (+ a pagar, - a favor)
             net_iva = iva_collected - iva_deductible
             
-            # Payments made
-            payments = TaxPayment.query.filter_by(
+            # ISR Estimado (30% de utilidad bruta, solo si es positiva)
+            profit = month_income - month_expense
+            isr_estimated = max(0, profit * 0.30)
+            
+            # IVA Payments made
+            iva_payments = TaxPayment.query.filter_by(
                 company_id=company_id,
                 period_month=month_num,
                 period_year=current_year,
                 tax_type='IVA'
             ).all()
+            iva_paid_amount = sum(p.amount for p in iva_payments)
             
-            paid_amount = sum(p.amount for p in payments)
+            # ISR Payments made
+            isr_payments = TaxPayment.query.filter_by(
+                company_id=company_id,
+                period_month=month_num,
+                period_year=current_year,
+                tax_type='ISR'
+            ).all()
+            isr_paid_amount = sum(p.amount for p in isr_payments)
+            
+            # Accumulate annual totals
+            if net_iva > 0:
+                annual_iva_to_pay += net_iva
+            annual_iva_paid += iva_paid_amount
+            annual_isr_estimated += isr_estimated
+            annual_isr_paid += isr_paid_amount
+            annual_income += month_income
+            annual_expense += month_expense
+            
+            # Chart data
+            chart_months.append(month_names[month_num - 1][:3])  # Abbreviated
+            chart_iva_collected.append(float(iva_collected))
+            chart_iva_deductible.append(float(iva_deductible))
+            chart_isr_estimated.append(float(isr_estimated))
             
             monthly_tax_data.append({
                 'month_num': month_num,
@@ -723,14 +785,43 @@ def create_app(config_class=Config):
                 'iva_collected': float(iva_collected),
                 'iva_deductible': float(iva_deductible),
                 'net_iva': float(net_iva),
-                'paid_amount': float(paid_amount),
-                'difference': float(net_iva - paid_amount)
+                'iva_paid_amount': float(iva_paid_amount),
+                'iva_difference': float(net_iva - iva_paid_amount),
+                'income': float(month_income),
+                'expense': float(month_expense),
+                'profit': float(profit),
+                'isr_estimated': float(isr_estimated),
+                'isr_paid_amount': float(isr_paid_amount),
+                'isr_difference': float(isr_estimated - isr_paid_amount)
             })
+        
+        # Annual summary
+        annual_summary = {
+            'iva_to_pay': float(annual_iva_to_pay),
+            'iva_paid': float(annual_iva_paid),
+            'iva_pending': float(annual_iva_to_pay - annual_iva_paid),
+            'isr_estimated': float(annual_isr_estimated),
+            'isr_paid': float(annual_isr_paid),
+            'isr_pending': float(annual_isr_estimated - annual_isr_paid),
+            'total_income': float(annual_income),
+            'total_expense': float(annual_expense),
+            'total_profit': float(annual_income - annual_expense)
+        }
+        
+        # Chart data for JavaScript
+        chart_data = {
+            'months': chart_months,
+            'iva_collected': chart_iva_collected,
+            'iva_deductible': chart_iva_deductible,
+            'isr_estimated': chart_isr_estimated
+        }
             
         return render_template('taxes/dashboard.html', 
                              company=company, 
                              current_year=current_year,
-                             monthly_tax_data=monthly_tax_data)
+                             monthly_tax_data=monthly_tax_data,
+                             annual_summary=annual_summary,
+                             chart_data=chart_data)
 
     @app.route('/companies/<int:company_id>/taxes/payment', methods=['POST'])
     @login_required
@@ -846,12 +937,73 @@ def create_app(config_class=Config):
             
         return render_template('invoices/detail.html', company=company, invoice=invoice)
 
+    # ==================== QR CODE ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/qr')
+    @login_required
+    def company_qr(company_id):
+        """Generate QR code for company"""
+        company = Company.query.get_or_404(company_id)
+        qr_base64 = QRService.generate_company_qr(company)
+        return render_template('qr_display.html', 
+            company=company, 
+            qr_image=qr_base64,
+            title=f'QR - {company.name}'
+        )
+    
+    @app.route('/companies/<int:company_id>/qr/download')
+    @login_required
+    def company_qr_download(company_id):
+        """Download QR code as PNG"""
+        company = Company.query.get_or_404(company_id)
+        data = f"RFC: {company.rfc}\nNombre: {company.name}"
+        qr_bytes = QRService.generate_qr_bytes(data)
+        
+        return Response(
+            qr_bytes,
+            mimetype='image/png',
+            headers={'Content-Disposition': f'attachment; filename=qr_{company.rfc}.png'}
+        )
+    
+    @app.route('/companies/<int:company_id>/invoices/<int:invoice_id>/qr')
+    @login_required
+    def invoice_qr(company_id, invoice_id):
+        """Generate SAT verification QR for invoice"""
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('search_invoices', company_id=company_id))
+        
+        # Get seal last 8 chars from XML if available
+        seal_last_8 = "00000000"
+        if invoice.xml_content:
+            import re
+            match = re.search(r'Sello="([^"]+)"', invoice.xml_content)
+            if match:
+                seal_last_8 = match.group(1)[-8:]
+        
+        qr_base64 = QRService.generate_cfdi_qr(
+            uuid=invoice.uuid,
+            issuer_rfc=invoice.issuer_rfc,
+            receiver_rfc=invoice.receiver_rfc,
+            total=invoice.total,
+            seal_last_8=seal_last_8
+        )
+        
+        return render_template('qr_display.html',
+            invoice=invoice,
+            qr_image=qr_base64,
+            title=f'QR CFDI - {invoice.uuid}'
+        )
+
     # ==================== API ROUTES ====================
     
     @app.route('/api/companies/<int:company_id>/stats')
     @login_required
+    @cache.cached(timeout=60, query_string=True)
     def api_company_stats(company_id):
-        """API endpoint para estadísticas en tiempo real"""
+        """API endpoint para estadísticas en tiempo real (cached 60s)"""
         month = request.args.get('month', type=int)
         year = request.args.get('year', type=int)
         
@@ -882,13 +1034,18 @@ def create_app(config_class=Config):
             'year': year
         })
 
-    with app.app_context():
-        # db.create_all() - Now handled by Flask-Migrate
-        # Create default user if not exists
-        if not User.query.filter_by(username='admin').first():
-            user = User(username='admin', password_hash=generate_password_hash('admin'))
-            db.session.add(user)
-            db.session.commit()
+    # Only create default user in non-testing mode
+    if not app.config.get('TESTING', False):
+        with app.app_context():
+            # Create default user if not exists
+            try:
+                if not User.query.filter_by(username='admin').first():
+                    user = User(username='admin', password_hash=generate_password_hash('admin'))
+                    db.session.add(user)
+                    db.session.commit()
+            except Exception:
+                # Table might not exist yet (before migrations)
+                pass
 
     return app
 

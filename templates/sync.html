@@ -20,6 +20,7 @@
         sincronizar.</p>
 
     <form action="/companies/sync/{{ company.id }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <!-- Auth Method -->
         <div class="mb-4">
             <fieldset>

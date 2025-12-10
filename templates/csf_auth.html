@@ -11,7 +11,7 @@
     </div>
     <div class="border-t border-gray-200 px-4 py-5 sm:p-0">
         <form action="{{ url_for('download_csf_route', company_id=company.id) }}" method="POST" class="p-4 space-y-4">
-
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label for="ciec_password" class="block text-sm font-medium text-gray-700">Contraseña CIEC</label>
                 <input type="password" name="ciec_password" id="ciec_password" required

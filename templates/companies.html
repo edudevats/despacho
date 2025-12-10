@@ -17,6 +17,7 @@
 <div class="form-section mb-4">
     <h3>Agregar Nueva Empresa</h3>
     <form action="/companies/add" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
             <div class="col-md-6 mb-3">
                 <label for="rfc" class="form-label">RFC</label>
@@ -116,6 +117,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <form id="deleteForm" method="POST" action="">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger">Eliminar Definitivamente</button>
                 </form>
             </div>

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    {% if company %}
+                    <li class="breadcrumb-item"><a href="{{ url_for('companies') }}">Empresas</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">QR {{ company.name }}</li>
+                    {% elif invoice %}
+                    <li class="breadcrumb-item"><a href="{{ url_for('companies') }}">Empresas</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">QR Factura</li>
+                    {% endif %}
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-qr-code"></i>
+                        {{ title }}
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <!-- QR Code Image -->
+                    <div class="qr-container mb-4">
+                        <img src="{{ qr_image }}" alt="QR Code" class="img-fluid" style="max-width: 300px;">
+                    </div>
+
+                    <!-- Information -->
+                    {% if company %}
+                    <div class="info-section">
+                        <p><strong>RFC:</strong> {{ company.rfc }}</p>
+                        <p><strong>Empresa:</strong> {{ company.name }}</p>
+                    </div>
+                    
+                    <!-- Download Button -->
+                    <a href="{{ url_for('company_qr_download', company_id=company.id) }}" 
+                       class="btn btn-success btn-lg">
+                        <i class="bi bi-download"></i> Descargar PNG
+                    </a>
+                    {% endif %}
+
+                    {% if invoice %}
+                    <div class="info-section">
+                        <p><strong>UUID:</strong><br>
+                            <small class="text-muted">{{ invoice.uuid }}</small>
+                        </p>
+                        <p><strong>Emisor:</strong> {{ invoice.issuer_rfc }}</p>
+                        <p><strong>Receptor:</strong> {{ invoice.receiver_rfc }}</p>
+                        <p><strong>Total:</strong> ${{ "%.2f"|format(invoice.total) }}</p>
+                        <p><strong>Fecha:</strong> {{ invoice.date.strftime('%d/%m/%Y') }}</p>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-info-circle"></i>
+                        Escanea este código para verificar la factura en el portal del SAT.
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer text-center">
+                    <a href="javascript:history.back()" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Volver
+                    </a>
+                    <button onclick="window.print()" class="btn btn-outline-primary">
+                        <i class="bi bi-printer"></i> Imprimir
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .qr-container {
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        display: inline-block;
+    }
+    
+    .info-section {
+        text-align: left;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .info-section p {
+        margin-bottom: 8px;
+    }
+    
+    @media print {
+        .breadcrumb, .card-footer, .btn {
+            display: none !important;
+        }
+        .card {
+            box-shadow: none !important;
+            border: none !important;
+        }
+    }
+</style>
+{% endblock %}
