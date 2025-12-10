@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Búsqueda Avanzada - SAT Contabilidad{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-blue">
+    <h1>
+        <i class="fas fa-search"></i> Búsqueda Avanzada
+    </h1>
+    <div class="user-info">
+        Busca facturas en tus empresas
+    </div>
+</div>
+
+<!-- Companies List -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-building"></i> Selecciona una Empresa</h5>
+    </div>
+    <div class="card-body">
+        {% if companies %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>RFC</th>
+                        <th class="text-center">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for company in companies %}
+                    <tr>
+                        <td><strong>{{ company.name }}</strong></td>
+                        <td><span class="badge bg-primary">{{ company.rfc }}</span></td>
+                        <td class="text-center">
+                            <a href="/companies/{{ company.id }}/search" class="btn btn-primary btn-sm">
+                                <i class="fas fa-search"></i> Buscar Facturas
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center" role="alert">
+            <i class="fas fa-info-circle"></i> No hay empresas registradas.
+            <a href="/companies" class="alert-link">Agrega una empresa</a> primero.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Information -->
+<div class="card mt-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Búsqueda Avanzada de Facturas</h5>
+    </div>
+    <div class="card-body">
+        <p>Utiliza filtros avanzados para encontrar facturas específicas:</p>
+        <ul class="mb-0">
+            <li><strong>Por proveedor:</strong> Filtra facturas de un proveedor específico</li>
+            <li><strong>Por categoría:</strong> Encuentra gastos de una categoría</li>
+            <li><strong>Por rango de fechas:</strong> Busca facturas en un período específico</li>
+            <li><strong>Por monto:</strong> Filtra por rangos de montos</li>
+            <li><strong>Por texto:</strong> Busca en descripciones y nombres</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

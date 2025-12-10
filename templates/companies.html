@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Empresas - SAT Contabilidad{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-purple">
+    <h1>
+        <i class="fas fa-building"></i> Gestión de Empresas
+    </h1>
+    <div class="user-info">
+        Administra las empresas del sistema
+    </div>
+</div>
+
+<!-- Add Company Form -->
+<div class="form-section mb-4">
+    <h3>Agregar Nueva Empresa</h3>
+    <form action="/companies/add" method="POST">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="rfc" class="form-label">RFC</label>
+                <input type="text" class="form-control" name="rfc" id="rfc" required placeholder="Ej: ABC123456ABC">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="name" class="form-label">Nombre / Razón Social</label>
+                <input type="text" class="form-control" name="name" id="name" required
+                    placeholder="Nombre de la empresa">
+            </div>
+        </div>
+        <div class="text-center">
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-save"></i> Guardar Empresa
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Companies List -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-list"></i> Empresas Registradas</h5>
+    </div>
+    <div class="card-body">
+        {% if companies %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Nombre / Razón Social</th>
+                        <th>RFC</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for company in companies %}
+                    <tr>
+                        <td>
+                            <strong>{{ company.name }}</strong>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary">{{ company.rfc }}</span>
+                        </td>
+                        <td class="text-end">
+                            <a href="/companies/edit/{{ company.id }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-edit"></i> Editar
+                            </a>
+                            <a href="/companies/sync/{{ company.id }}" class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-sync"></i> Sincronizar SAT
+                            </a>
+                            <a href="/companies/csf/{{ company.id }}" class="btn btn-sm btn-outline-info">
+                                <i class="fas fa-download"></i> CSF
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                onclick="confirmDelete('{{ company.id }}', '{{ company.name }}')">
+                                <i class="fas fa-trash"></i> Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center" role="alert">
+            <i class="fas fa-info-circle"></i> No hay empresas registradas. Agrega una nueva empresa usando el
+            formulario anterior.
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro que deseas eliminar la empresa <strong id="deleteCompanyName"></strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-circle"></i> <strong>¡ADVERTENCIA!</strong>
+                    Esta acción es irreversible. Se eliminarán permanentemente:
+                    <ul>
+                        <li>Todas las facturas asociadas</li>
+                        <li>Todos los movimientos (ingresos y egresos)</li>
+                        <li>El catálogo de proveedores</li>
+                        <li>El catálogo de categorías</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="POST" action="">
+                    <button type="submit" class="btn btn-danger">Eliminar Definitivamente</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function confirmDelete(id, name) {
+        document.getElementById('deleteCompanyName').textContent = name;
+        document.getElementById('deleteForm').action = '/companies/delete/' + id;
+        var deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        deleteModal.show();
+    }
+</script>
+{% endblock %}

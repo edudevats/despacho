@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle de Factura - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header page-header-blue">
+    <h1>
+        <i class="fas fa-file-invoice-dollar"></i> Detalle de Factura
+        <span class="badge bg-light text-primary">{{ invoice.uuid[:8] }}...</span>
+    </h1>
+    <div class="user-info">
+        Vista completa de la información fiscal
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Info & Status -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Información General</h5>
+                <span
+                    class="badge {% if invoice.type == 'I' %}bg-success{% elif invoice.type == 'E' %}bg-danger{% else %}bg-secondary{% endif %}">
+                    {% if invoice.type == 'I' %}Ingreso{% elif invoice.type == 'E' %}Egreso{% elif invoice.type == 'P'
+                    %}Pago{% else %}{{ invoice.type }}{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Fecha de Emisión:</strong><br>
+                        {{ invoice.date.strftime('%Y-%m-%d %H:%M:%S') }}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>UUID (Folio Fiscal):</strong><br>
+                        <span class="font-monospace text-muted">{{ invoice.uuid }}</span>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Versión CFDI:</strong><br>
+                        {{ invoice.version or '---' }}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Uso CFDI:</strong><br>
+                        {% if invoice.usage_info %}
+                        <span class="badge bg-light text-dark" title="{{ invoice.usage_info.description }}">
+                            {{ invoice.uso_cfdi }} - {{ invoice.usage_info.description }}
+                        </span>
+                        <div class="small text-muted mt-1">
+                            <i class="fas fa-info-circle"></i> {{ invoice.usage_info.category }}
+                            <br>
+                            <i class="fas fa-file-invoice"></i> {{ invoice.usage_info.tax_implication }}
+                        </div>
+                        {% else %}
+                        {{ invoice.uso_cfdi or '---' }}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Participants -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="fas fa-building"></i> Emisor</h6>
+                    </div>
+                    <div class="card-body">
+                        <h5>{{ invoice.issuer_name or '---' }}</h5>
+                        <p class="text-muted mb-0">RFC: {{ invoice.issuer_rfc }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="fas fa-user"></i> Receptor</h6>
+                    </div>
+                    <div class="card-body">
+                        <h5>{{ invoice.receiver_name or '---' }}</h5>
+                        <p class="text-muted mb-0">RFC: {{ invoice.receiver_rfc }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Information (CFDI 4.0) -->
+        {% if invoice.months or invoice.periodicity or invoice.fiscal_year %}
+        <div class="card mb-4 border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-globe"></i> Información Global (Público en General)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <h6>Periodicidad</h6>
+                        <p class="lead mb-0">
+                            {% if invoice.periodicity == '01' %}Diario
+                            {% elif invoice.periodicity == '02' %}Semanal
+                            {% elif invoice.periodicity == '03' %}Quincenal
+                            {% elif invoice.periodicity == '04' %}Mensual
+                            {% elif invoice.periodicity == '05' %}Bimestral
+                            {% else %}{{ invoice.periodicity }}{% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Mes(es)</h6>
+                        <p class="lead mb-0">{{ invoice.months }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Año</h6>
+                        <p class="lead mb-0">{{ invoice.fiscal_year }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Concept Description -->
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Conceptos / Descripción</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ invoice.descripcion }}</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Financials -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Totales</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Subtotal:</span>
+                    <strong>${{ "%.2f"|format(invoice.subtotal) }}</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Impuestos (Trasladados/Retenidos):</span>
+                    <strong>${{ "%.2f"|format(invoice.tax) }}</strong>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between mb-0">
+                    <span class="h5">Total:</span>
+                    <span class="h4 text-primary">${{ "%.2f"|format(invoice.total) }}</span>
+                </div>
+
+                <div class="mt-4 pt-3 border-top">
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Moneda</small>
+                        {{ invoice.currency or 'MXN' }}
+                        {% if invoice.exchange_rate %} (TC: {{ invoice.exchange_rate }}){% endif %}
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Forma de Pago</small>
+                        {{ invoice.forma_pago }}
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Método de Pago</small>
+                        {{ invoice.metodo_pago }}
+                    </div>
+                    {% if invoice.payment_terms %}
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Condiciones de Pago</small>
+                        {{ invoice.payment_terms }}
+                    </div>
+                    {% endif %}
+                    {% if invoice.exportation %}
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Exportación</small>
+                        {{ invoice.exportation }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="d-grid gap-2">
+            <a href="#" class="btn btn-outline-primary"
+                onclick="alert('Funcionalidad de descarga de PDF/XML a implementar')">
+                <i class="fas fa-download"></i> Descargar XML
+            </a>
+            <a href="/companies/{{ company.id }}/search" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Volver a Búsqueda
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Impuestos - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2><i class="fas fa-calculator me-2"></i>Cálculo de Impuestos - {{ current_year }}</h2>
+        <p class="text-muted">{{ company.name }} ({{ company.rfc }})</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('company_dashboard', company_id=company.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Volver al Dashboard
+        </a>
+    </div>
+</div>
+
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Cálculo Mensual de IVA</h6>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th>Mes</th>
+                        <th class="text-success">IVA Trasladado<br><small>(Ventas)</small></th>
+                        <th class="text-danger">IVA Acreditable<br><small>(Gastos)</small></th>
+                        <th>IVA a Pagar / (Favor)</th>
+                        <th>Pagado</th>
+                        <th>Diferencia</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in monthly_tax_data %}
+                    <tr>
+                        <td class="fw-bold">{{ data.month_name }}</td>
+                        <td class="text-end text-success">${{ "%.2f"|format(data.iva_collected) }}</td>
+                        <td class="text-end text-danger">${{ "%.2f"|format(data.iva_deductible) }}</td>
+
+                        {% set net_iva = data.net_iva %}
+                        <td class="text-end fw-bold {% if net_iva > 0 %}text-danger{% else %}text-success{% endif %}">
+                            ${{ "%.2f"|format(net_iva) }}
+                        </td>
+
+                        <td class="text-end text-primary">${{ "%.2f"|format(data.paid_amount) }}</td>
+
+                        {% set diff = data.difference %}
+                        <td
+                            class="text-end fw-bold {% if diff > 0.1 %}text-danger{% elif diff < -0.1 %}text-info{% else %}text-secondary{% endif %}">
+                            ${{ "%.2f"|format(diff) }}
+                        </td>
+
+                        <td class="text-center">
+                            {% if net_iva > 0 %}
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                data-bs-target="#paymentModal{{ data.month_num }}" data-month="{{ data.month_num }}"
+                                data-month-name="{{ data.month_name }}" data-amount="{{ " %.2f"|format(diff if diff> 0
+                                else 0) }}">
+                                <i class="fas fa-money-bill-wave"></i> Pagar
+                            </button>
+
+                            <!-- Modal -->
+                            <div class="modal fade text-start" id="paymentModal{{ data.month_num }}" tabindex="-1"
+                                aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Registrar Pago de IVA - {{ data.month_name }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                                aria-label="Close"></button>
+                                        </div>
+                                        <form action="{{ url_for('record_tax_payment', company_id=company.id) }}"
+                                            method="POST">
+                                            <div class="modal-body">
+                                                <input type="hidden" name="month" value="{{ data.month_num }}">
+                                                <input type="hidden" name="year" value="{{ current_year }}">
+                                                <input type="hidden" name="tax_type" value="IVA">
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Monto a Pagar</label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">$</span>
+                                                        <input type="number" step="0.01" class="form-control"
+                                                            name="amount" value="{{ " %.2f"|format(diff if diff> 0 else
+                                                        0) }}" required>
+                                                    </div>
+                                                    <div class="form-text">IVA Calculado: ${{ "%.2f"|format(net_iva) }}
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Notas / Referencia</label>
+                                                    <textarea class="form-control" name="notes" rows="2"
+                                                        placeholder="Referencia bancaria, fecha real, etc."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary"
+                                                    data-bs-dismiss="modal">Cancelar</button>
+                                                <button type="submit" class="btn btn-primary">Registrar Pago</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Nota:</strong> Los cálculos se basan en: <em>(IVA Trasladado de Facturas de Ingreso) - (IVA Acreditable de
+        Facturas de Egreso)</em>.
+    Este es un cálculo aproximado y no sustituye la contabilidad oficial.
+</div>
+{% endblock %}

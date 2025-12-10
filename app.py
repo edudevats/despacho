@@ -1,0 +1,897 @@
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+import os
+from config import Config
+from models import db, Company, Movement, Invoice, User, Category, Supplier, TaxPayment
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate
+from werkzeug.security import generate_password_hash, check_password_hash
+from services.sat_service import SATService
+from sqlalchemy import func, extract
+from datetime import datetime, timedelta
+
+def create_app(config_class=Config):
+    app = Flask(__name__)
+    app.config.from_object(config_class)
+
+    db.init_app(app)
+    migrate = Migrate(app, db)
+    
+    login_manager = LoginManager()
+    login_manager.login_view = 'login'
+    login_manager.init_app(app)
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return db.session.get(User, int(user_id))
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if request.method == 'POST':
+            username = request.form['username']
+            password = request.form['password']
+            user = User.query.filter_by(username=username).first()
+            
+            if user and check_password_hash(user.password_hash, password):
+                login_user(user)
+                return redirect(url_for('index'))
+            else:
+                flash('Usuario o contraseña incorrectos')
+        return render_template('login.html')
+
+    @app.route('/logout')
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for('login'))
+
+    @app.route('/')
+    @login_required
+    def index():
+        # Get all companies for selector
+        companies = Company.query.all()
+        
+        # Get selected company from query parameter
+        company_id = request.args.get('company_id', type=int)
+        selected_company = None
+        if company_id:
+            selected_company = Company.query.get(company_id)
+        
+        # Base queries
+        income_query = db.session.query(db.func.sum(Movement.amount)).filter(Movement.type == 'INCOME')
+        expenses_query = db.session.query(db.func.sum(Movement.amount)).filter(Movement.type == 'EXPENSE')
+        
+        # Apply company filter if selected
+        if company_id:
+            income_query = income_query.filter(Movement.company_id == company_id)
+            expenses_query = expenses_query.filter(Movement.company_id == company_id)
+        
+        # Calculate totals
+        income = income_query.scalar() or 0
+        expenses = expenses_query.scalar() or 0
+        
+        # Calculate monthly statistics (all 12 months of current year)
+        today = datetime.now()
+        current_year = today.year
+        current_month = today.month
+        monthly_data = []
+        month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        
+        # Calculate all 12 months for the current year
+        for month_num in range(1, 13):
+            # Only include months up to current month
+            if month_num > current_month:
+                continue
+                
+            # Income for this month
+            month_income_query = db.session.query(func.sum(Movement.amount)).filter(
+                Movement.type == 'INCOME',
+                extract('month', Movement.date) == month_num,
+                extract('year', Movement.date) == current_year
+            )
+            
+            # Expenses for this month
+            month_expense_query = db.session.query(func.sum(Movement.amount)).filter(
+                Movement.type == 'EXPENSE',
+                extract('month', Movement.date) == month_num,
+                extract('year', Movement.date) == current_year
+            )
+            
+            # Apply company filter
+            if company_id:
+                month_income_query = month_income_query.filter(Movement.company_id == company_id)
+                month_expense_query = month_expense_query.filter(Movement.company_id == company_id)
+            
+            month_income = month_income_query.scalar() or 0
+            month_expense = month_expense_query.scalar() or 0
+            
+            monthly_data.append({
+                'month': month_names[month_num - 1],
+                'income': float(month_income),
+                'expenses': float(month_expense),
+                'balance': float(month_income - month_expense)
+            })
+        
+        # Calculate annual statistics (current year)
+        current_year = today.year
+        annual_income_query = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.type == 'INCOME',
+            extract('year', Movement.date) == current_year
+        )
+        annual_expense_query = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.type == 'EXPENSE',
+            extract('year', Movement.date) == current_year
+        )
+        
+        if company_id:
+            annual_income_query = annual_income_query.filter(Movement.company_id == company_id)
+            annual_expense_query = annual_expense_query.filter(Movement.company_id == company_id)
+        
+        annual_income = annual_income_query.scalar() or 0
+        annual_expense = annual_expense_query.scalar() or 0
+        
+        return render_template('dashboard.html',
+            companies=companies,
+            selected_company=selected_company,
+            income=income,
+            expenses=expenses,
+            monthly_data=monthly_data,
+            annual_stats={
+                'year': current_year,
+                'income': float(annual_income),
+                'expenses': float(annual_expense),
+                'balance': float(annual_income - annual_expense)
+            }
+        )
+
+    @app.route('/companies')
+    @login_required
+    def companies():
+        companies_list = Company.query.all()
+        return render_template('companies.html', companies=companies_list)
+
+    @app.route('/companies/add', methods=['POST'])
+    @login_required
+    def add_company():
+        rfc = request.form['rfc']
+        name = request.form['name']
+        
+        new_company = Company(
+            rfc=rfc, 
+            name=name
+        )
+        db.session.add(new_company)
+        db.session.commit()
+        
+        return redirect(url_for('companies'))
+
+    @app.route('/companies/delete/<int:company_id>', methods=['POST'])
+    @login_required
+    def delete_company(company_id):
+        company = Company.query.get_or_404(company_id)
+        
+        try:
+            # Delete dependencies in order to respect FK constraints
+            
+            # 1. Delete Movements (referencing Invoice, Category, Company)
+            Movement.query.filter_by(company_id=company.id).delete()
+            
+            # 2. Delete Invoices (referencing Supplier, Company)
+            Invoice.query.filter_by(company_id=company.id).delete()
+            
+            # 3. Delete Suppliers (referencing Company)
+            Supplier.query.filter_by(company_id=company.id).delete()
+            
+            # 4. Delete Categories (referencing Company)
+            Category.query.filter_by(company_id=company.id).delete()
+            
+            # 5. Delete Company
+            db.session.delete(company)
+            
+            db.session.commit()
+            flash('Empresa y todos sus datos eliminados correctamente.', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al eliminar empresa: {str(e)}', 'error')
+            
+        return redirect(url_for('companies'))
+
+    @app.route('/companies/edit/<int:company_id>', methods=['GET', 'POST'])
+    @login_required
+    def edit_company(company_id):
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'POST':
+            company.rfc = request.form['rfc']
+            company.name = request.form['name']
+            
+            try:
+                db.session.commit()
+                flash('Empresa actualizada correctamente.', 'success')
+                return redirect(url_for('companies'))
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Error al actualizar empresa: {str(e)}', 'error')
+                
+        return render_template('edit_company.html', company=company)
+
+    @app.route('/companies/sync/<int:company_id>', methods=['GET', 'POST'])
+    @login_required
+    def sync_company(company_id):
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'GET':
+            from datetime import datetime, timedelta
+            
+            # Get last invoice date
+            last_invoice_date = db.session.query(db.func.max(Invoice.date)).filter_by(company_id=company.id).scalar()
+            
+            if last_invoice_date:
+                # Start from the last invoice date to ensure we catch any late arrivals for that day
+                start_date = last_invoice_date.strftime('%Y-%m-%d')
+            else:
+                # Default to 30 days ago
+                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            
+            return render_template('sync.html', company=company, start_date=start_date, end_date=end_date)
+        
+        if request.method == 'POST':
+            start_date_str = request.form['start_date']
+            end_date_str = request.form['end_date']
+            
+            # Enforce FIEL usage
+            fiel_password = request.form['fiel_password']
+            fiel_cer = request.files['fiel_cer']
+            fiel_key = request.files['fiel_key']
+
+            # Save temporary files
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.cer') as tmp_cer:
+                fiel_cer.save(tmp_cer.name)
+                cer_path = tmp_cer.name
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.key') as tmp_key:
+                fiel_key.save(tmp_key.name)
+                key_path = tmp_key.name
+
+            sat_service = SATService(
+                rfc=company.rfc,
+                fiel_cer=cer_path,
+                fiel_key=key_path,
+                fiel_password=fiel_password
+            )
+
+        try:
+            from datetime import datetime
+            import re
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            
+            # Download both Received and Emitted invoices
+            received_invoices = sat_service.download_received_invoices(start_date, end_date)
+            emitted_invoices = sat_service.download_emitted_invoices(start_date, end_date)
+            
+            all_invoices = received_invoices + emitted_invoices
+            
+            # Create folder structure for saving invoices
+            # Sanitize company name for use in folder names
+            safe_company_name = re.sub(r'[<>:"/\\|?*]', '_', company.name)
+            invoices_folder = os.path.join(os.path.dirname(__file__), 'facturas', safe_company_name)
+            os.makedirs(invoices_folder, exist_ok=True)
+            
+            # Process invoices
+            count = 0
+            files_saved = 0
+            for inv_data in all_invoices:
+                # Save XML to file first (always save, even if already in DB)
+                xml_filename = f"{inv_data['uuid']}.xml"
+                xml_filepath = os.path.join(invoices_folder, xml_filename)
+                if not os.path.exists(xml_filepath):
+                    with open(xml_filepath, 'w', encoding='utf-8') as xml_file:
+                        xml_file.write(inv_data['xml'])
+                    files_saved += 1
+                
+                # Check if exists in database
+                if not Invoice.query.filter_by(uuid=inv_data['uuid']).first():
+                    new_inv = Invoice(
+                        uuid=inv_data['uuid'],
+                        company_id=company.id,
+                        date=inv_data['date'],
+                        total=inv_data['total'],
+                        subtotal=inv_data['subtotal'],
+                        tax=inv_data['tax'],
+                        type=inv_data['type'],
+                        issuer_rfc=inv_data['issuer_rfc'],
+                        issuer_name=inv_data.get('issuer_name'),
+                        receiver_rfc=inv_data['receiver_rfc'],
+                        receiver_name=inv_data.get('receiver_name'),
+                        forma_pago=inv_data.get('forma_pago'),
+                        metodo_pago=inv_data.get('metodo_pago'),
+                        uso_cfdi=inv_data.get('uso_cfdi'),
+                        descripcion=inv_data.get('descripcion'),
+                        xml_content=inv_data['xml'],
+                        # New fields
+                        periodicity=inv_data.get('periodicity'),
+                        months=inv_data.get('months'),
+                        fiscal_year=inv_data.get('fiscal_year'),
+                        payment_terms=inv_data.get('payment_terms'),
+                        currency=inv_data.get('currency'),
+                        exchange_rate=inv_data.get('exchange_rate'),
+                        exportation=inv_data.get('exportation'),
+                        version=inv_data.get('version')
+                    )
+                    db.session.add(new_inv)
+                    
+                    # Determine Movement Type
+                    # Simple rule: if company is the issuer (emisor) = INCOME
+                    #              if company is the receiver = EXPENSE
+                    is_emitted = (inv_data['issuer_rfc'] == company.rfc)
+                    mov_type = 'INCOME' if is_emitted else 'EXPENSE'
+                            
+                    new_mov = Movement(
+                        invoice=new_inv,
+                        company_id=company.id,
+                        amount=inv_data['total'],
+                        type=mov_type,
+                        description=f"Factura {inv_data['issuer_rfc'] if not is_emitted else inv_data['receiver_rfc']}",
+                        date=inv_data['date']
+                    )
+                    db.session.add(new_mov)
+                    count += 1
+            
+            db.session.commit()
+            
+            if count > 0 or files_saved > 0:
+                flash(f'Sincronización completada. {count} facturas nuevas en BD, {files_saved} archivos XML guardados en facturas/{safe_company_name}/', 'success')
+            else:
+                flash(f'Sincronización finalizada. No se encontraron facturas nuevas. Las facturas existentes ya están en facturas/{safe_company_name}/', 'warning')
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            flash(f'Error en sincronización: {str(e)}', 'error')
+        finally:
+            # Cleanup temp files
+            if 'cer_path' in locals() and os.path.exists(cer_path):
+                os.remove(cer_path)
+            if 'key_path' in locals() and os.path.exists(key_path):
+                os.remove(key_path)
+            
+        return redirect(url_for('companies'))
+
+    @app.route('/companies/csf/<int:company_id>', methods=['GET', 'POST'])
+    @login_required
+    def download_csf_route(company_id):
+        flash('La descarga de CSF (Constancia de Situación Fiscal) no está disponible actualmente.', 'warning')
+        return redirect(url_for('companies'))
+    
+    # Original CSF logic removed as CIEC is not supported
+    #     company = Company.query.get_or_404(company_id)
+    #     if request.method == 'GET':
+    #         return render_template('csf_auth.html', company=company)
+    #     ...
+
+    @app.route('/movements')
+    @login_required
+    def movements():
+        movements_list = Movement.query.all()
+        return render_template('movements.html', movements=movements_list)
+    
+    @app.route('/sync')
+    @login_required
+    def sync_list():
+        """Show list of companies to sync"""
+        companies_list = Company.query.all()
+        return render_template('sync_list.html', companies=companies_list)
+    
+    @app.route('/categories')
+    @login_required
+    def categories_list():
+        """Show list of companies to manage categories"""
+        companies_list = Company.query.all()
+        return render_template('categories_list.html', companies=companies_list)
+    
+    @app.route('/suppliers')
+    @login_required
+    def suppliers_list():
+        """Show list of companies to manage suppliers"""
+        companies_list = Company.query.all()
+        return render_template('suppliers_list.html', companies=companies_list)
+    
+    @app.route('/search/advanced')
+    @login_required
+    def search_advanced():
+        """Show list of companies for advanced search"""
+        companies_list = Company.query.all()
+        return render_template('search_list.html', companies=companies_list)
+    
+    # ==================== DASHBOARD ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/dashboard')
+    @login_required
+    def company_dashboard(company_id):
+        """Dashboard financiero principal de la empresa"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Fecha actual
+        today = datetime.now()
+        current_month = today.month
+        current_year = today.year
+        
+        # Totales del mes actual
+        month_income = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'INCOME',
+            extract('month', Movement.date) == current_month,
+            extract('year', Movement.date) == current_year
+        ).scalar() or 0
+        
+        month_expense = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'EXPENSE',
+            extract('month', Movement.date) == current_month,
+            extract('year', Movement.date) == current_year
+        ).scalar() or 0
+        
+        # Totales históricos
+        total_income = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'INCOME'
+        ).scalar() or 0
+        
+        total_expense = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'EXPENSE'
+        ).scalar() or 0
+        
+        # Tendencia últimos 6 meses
+        monthly_trend = []
+        for i in range(5, -1, -1):
+            month = today.month - i
+            year = today.year
+            
+            if month <= 0:
+                month += 12
+                year -= 1
+            
+            income = db.session.query(func.sum(Movement.amount)).filter(
+                Movement.company_id == company_id,
+                Movement.type == 'INCOME',
+                extract('month', Movement.date) == month,
+                extract('year', Movement.date) == year
+            ).scalar() or 0
+            
+            expense = db.session.query(func.sum(Movement.amount)).filter(
+                Movement.company_id == company_id,
+                Movement.type == 'EXPENSE',
+                extract('month', Movement.date) == month,
+                extract('year', Movement.date) == year
+            ).scalar() or 0
+            
+            month_name = datetime(year, month, 1).strftime('%B')
+            monthly_trend.append({
+                'month': month_name,
+                'income': float(income),
+                'expense': float(expense)
+            })
+        
+        # Distribución por categoría (solo egresos)
+        category_distribution = db.session.query(
+            Category.name,
+            Category.color,
+            func.sum(Movement.amount).label('total')
+        ).join(Movement).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'EXPENSE',
+            Category.active == True
+        ).group_by(Category.id).order_by(func.sum(Movement.amount).desc()).limit(8).all()
+        
+        # Últimas 10 facturas
+        recent_invoices = Invoice.query.filter_by(company_id=company_id).order_by(
+            Invoice.date.desc()
+        ).limit(10).all()
+        
+        # Top 5 proveedores
+        top_suppliers = Supplier.query.filter_by(
+            company_id=company_id,
+            active=True
+        ).order_by(Supplier.total_invoiced.desc()).limit(5).all()
+        
+        return render_template('dashboard/company_dashboard.html',
+            company=company,
+            month_income=month_income,
+            month_expense=month_expense,
+            month_balance=month_income - month_expense,
+            total_income=total_income,
+            total_expense=total_expense,
+            total_balance=total_income - total_expense,
+            monthly_trend=monthly_trend,
+            category_distribution=category_distribution,
+            recent_invoices=recent_invoices,
+            top_suppliers=top_suppliers
+        )
+    
+    # ==================== SUPPLIER ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/suppliers')
+    @login_required
+    def suppliers(company_id):
+        """Lista de proveedores con estadísticas"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Filtros
+        search = request.args.get('search', '')
+        sort_by = request.args.get('sort', 'total')  # total, name, count
+        
+        query = Supplier.query.filter_by(company_id=company_id, active=True)
+        
+        if search:
+            query = query.filter(
+                db.or_(
+                    Supplier.business_name.ilike(f'%{search}%'),
+                    Supplier.rfc.ilike(f'%{search}%')
+                )
+            )
+        
+        if sort_by == 'total':
+            query = query.order_by(Supplier.total_invoiced.desc())
+        elif sort_by == 'name':
+            query = query.order_by(Supplier.business_name)
+        elif sort_by == 'count':
+            query = query.order_by(Supplier.invoice_count.desc())
+        
+        suppliers_list = query.all()
+        
+        # Estadísticas generales
+        total_suppliers = len(suppliers_list)
+        total_spent = sum(s.total_invoiced for s in suppliers_list)
+        
+        return render_template('suppliers/list.html',
+            company=company,
+            suppliers=suppliers_list,
+            total_suppliers=total_suppliers,
+            total_spent=total_spent,
+            search=search,
+            sort_by=sort_by
+        )
+    
+    @app.route('/companies/<int:company_id>/suppliers/<int:supplier_id>')
+    @login_required
+    def supplier_detail(company_id, supplier_id):
+        """Detalle de un proveedor específico con sus facturas"""
+        company = Company.query.get_or_404(company_id)
+        supplier = Supplier.query.get_or_404(supplier_id)
+        
+        # Verificar que el proveedor pertenece a esta empresa
+        if supplier.company_id != company_id:
+            flash('Proveedor no encontrado', 'error')
+            return redirect(url_for('suppliers', company_id=company_id))
+        
+        # Facturas del proveedor
+        invoices = Invoice.query.filter_by(
+            company_id=company_id,
+            supplier_id=supplier_id
+        ).order_by(Invoice.date.desc()).all()
+        
+        # Tendencia mensual
+        monthly_data = db.session.query(
+            extract('year', Invoice.date).label('year'),
+            extract('month', Invoice.date).label('month'),
+            func.sum(Invoice.total).label('total'),
+            func.count(Invoice.id).label('count')
+        ).filter(
+            Invoice.company_id == company_id,
+            Invoice.supplier_id == supplier_id
+        ).group_by('year', 'month').order_by('year', 'month').all()
+        
+        return render_template('suppliers/detail.html',
+            company=company,
+            supplier=supplier,
+            invoices=invoices,
+            monthly_data=monthly_data
+        )
+    
+    # ==================== CATEGORY ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/categories')
+    @login_required
+    def categories(company_id):
+        """Gestión de categorías"""
+        company = Company.query.get_or_404(company_id)
+        
+        income_categories = Category.query.filter_by(
+            company_id=company_id,
+            type='INCOME',
+            active=True
+        ).all()
+        
+        expense_categories = Category.query.filter_by(
+            company_id=company_id,
+            type='EXPENSE',
+            active=True
+        ).all()
+        
+        return render_template('categories/list.html',
+            company=company,
+            income_categories=income_categories,
+            expense_categories=expense_categories
+        )
+    
+    @app.route('/companies/<int:company_id>/categories/create', methods=['GET', 'POST'])
+    @login_required
+    def create_category(company_id):
+        """Crear nueva categoría"""
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'POST':
+            name = request.form.get('name')
+            cat_type = request.form.get('type')
+            description = request.form.get('description')
+            color = request.form.get('color', '#6c757d')
+            
+            category = Category(
+                company_id=company_id,
+                name=name,
+                type=cat_type,
+                description=description,
+                color=color,
+                is_default=False
+            )
+            
+            db.session.add(category)
+            db.session.commit()
+            
+            flash(f'Categoría "{name}" creada exitosamente', 'success')
+            return redirect(url_for('categories', company_id=company_id))
+        
+        return render_template('categories/create.html', company=company)
+    
+    @app.route('/companies/<int:company_id>/categories/<int:category_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_category(company_id, category_id):
+        """Editar categoría existente"""
+        company = Company.query.get_or_404(company_id)
+        category = Category.query.get_or_404(category_id)
+        
+        if category.company_id != company_id:
+            flash('Categoría no encontrada', 'error')
+            return redirect(url_for('categories', company_id=company_id))
+        
+        if request.method == 'POST':
+            category.name = request.form.get('name')
+            category.description = request.form.get('description')
+            category.color = request.form.get('color')
+            
+            db.session.commit()
+            flash(f'Categoría "{category.name}" actualizada', 'success')
+            return redirect(url_for('categories', company_id=company_id))
+        
+        return render_template('categories/edit.html', company=company, category=category)
+    
+    # ==================== AX MANAGMENT ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/taxes')
+    @login_required
+    def taxes_dashboard(company_id):
+        """Dashboard de Impuestos"""
+        company = Company.query.get_or_404(company_id)
+        
+        today = datetime.now()
+        current_year = today.year
+        
+        # Calculate monthly tax data
+        monthly_tax_data = []
+        month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        
+        for month_num in range(1, 13):
+            # IVA Trasladado (Cobrado en Ventas)
+            iva_collected = db.session.query(func.sum(Invoice.tax)).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'I', # Ingreso
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # IVA Acreditable (Pagado en Gastos)
+            iva_deductible = db.session.query(func.sum(Invoice.tax)).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'E', # Egreso
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # Net IVA Position (+ a pagar, - a favor)
+            net_iva = iva_collected - iva_deductible
+            
+            # Payments made
+            payments = TaxPayment.query.filter_by(
+                company_id=company_id,
+                period_month=month_num,
+                period_year=current_year,
+                tax_type='IVA'
+            ).all()
+            
+            paid_amount = sum(p.amount for p in payments)
+            
+            monthly_tax_data.append({
+                'month_num': month_num,
+                'month_name': month_names[month_num - 1],
+                'iva_collected': float(iva_collected),
+                'iva_deductible': float(iva_deductible),
+                'net_iva': float(net_iva),
+                'paid_amount': float(paid_amount),
+                'difference': float(net_iva - paid_amount)
+            })
+            
+        return render_template('taxes/dashboard.html', 
+                             company=company, 
+                             current_year=current_year,
+                             monthly_tax_data=monthly_tax_data)
+
+    @app.route('/companies/<int:company_id>/taxes/payment', methods=['POST'])
+    @login_required
+    def record_tax_payment(company_id):
+        """Registrar pago de impuestos manual"""
+        company = Company.query.get_or_404(company_id)
+        
+        try:
+            month = int(request.form.get('month'))
+            year = int(request.form.get('year'))
+            amount = float(request.form.get('amount'))
+            tax_type = request.form.get('tax_type', 'IVA')
+            notes = request.form.get('notes')
+            
+            payment = TaxPayment(
+                company_id=company_id,
+                period_month=month,
+                period_year=year,
+                tax_type=tax_type,
+                amount=amount,
+                notes=notes,
+                payment_date=datetime.now()
+            )
+            
+            db.session.add(payment)
+            db.session.commit()
+            
+            flash('Pago de impuestos registrado correctamente', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al registrar pago: {str(e)}', 'error')
+            
+        return redirect(url_for('taxes_dashboard', company_id=company_id))
+    
+    @app.route('/companies/<int:company_id>/search')
+    @login_required
+    def search_invoices(company_id):
+        """Búsqueda avanzada de facturas"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Parámetros de búsqueda
+        supplier_id = request.args.get('supplier_id', type=int)
+        category_id = request.args.get('category_id', type=int)
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        min_amount = request.args.get('min_amount', type=float)
+        max_amount = request.args.get('max_amount', type=float)
+        search_text = request.args.get('q', '')
+        
+        # Query base
+        query = Invoice.query.filter_by(company_id=company_id)
+        
+        # Aplicar filtros
+        if supplier_id:
+            query = query.filter_by(supplier_id=supplier_id)
+        
+        if date_from:
+            query = query.filter(Invoice.date >= datetime.fromisoformat(date_from))
+        
+        if date_to:
+            query = query.filter(Invoice.date <= datetime.fromisoformat(date_to))
+        
+        if min_amount:
+            query = query.filter(Invoice.total >= min_amount)
+        
+        if max_amount:
+            query = query.filter(Invoice.total <= max_amount)
+        
+        if search_text:
+            query = query.filter(
+                db.or_(
+                    Invoice.descripcion.ilike(f'%{search_text}%'),
+                    Invoice.issuer_name.ilike(f'%{search_text}%'),
+                    Invoice.receiver_name.ilike(f'%{search_text}%')
+                )
+            )
+        
+        # Ordenar y paginar
+        invoices = query.order_by(Invoice.date.desc()).all()
+        
+        # Listas para filtros
+        suppliers_list = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        categories_list = Category.query.filter_by(company_id=company_id, active=True).all()
+        
+        return render_template('search/invoices.html',
+            company=company,
+            invoices=invoices,
+            suppliers=suppliers_list,
+            categories=categories_list,
+            filters={
+                'supplier_id': supplier_id,
+                'category_id': category_id,
+                'date_from': date_from,
+                'date_to': date_to,
+                'min_amount': min_amount,
+                'max_amount': max_amount,
+                'q': search_text
+            }
+        )
+    
+
+    @app.route('/companies/<int:company_id>/invoices/<int:invoice_id>')
+    @login_required
+    def invoice_detail(company_id, invoice_id):
+        """Detalle completo de una factura"""
+        company = Company.query.get_or_404(company_id)
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('search_invoices', company_id=company_id))
+            
+        return render_template('invoices/detail.html', company=company, invoice=invoice)
+
+    # ==================== API ROUTES ====================
+    
+    @app.route('/api/companies/<int:company_id>/stats')
+    @login_required
+    def api_company_stats(company_id):
+        """API endpoint para estadísticas en tiempo real"""
+        month = request.args.get('month', type=int)
+        year = request.args.get('year', type=int)
+        
+        if not month or not year:
+            today = datetime.now()
+            month = today.month
+            year = today.year
+        
+        income = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'INCOME',
+            extract('month', Movement.date) == month,
+            extract('year', Movement.date) == year
+        ).scalar() or 0
+        
+        expense = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'EXPENSE',
+            extract('month', Movement.date) == month,
+            extract('year', Movement.date) == year
+        ).scalar() or 0
+        
+        return jsonify({
+            'income': float(income),
+            'expense': float(expense),
+            'balance': float(income - expense),
+            'month': month,
+            'year': year
+        })
+
+    with app.app_context():
+        # db.create_all() - Now handled by Flask-Migrate
+        # Create default user if not exists
+        if not User.query.filter_by(username='admin').first():
+            user = User(username='admin', password_hash=generate_password_hash('admin'))
+            db.session.add(user)
+            db.session.commit()
+
+    return app
+
+if __name__ == '__main__':
+    app = create_app()
+    app.run(debug=True)

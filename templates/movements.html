@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Movimientos - SAT Contabilidad{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-green">
+    <h1>
+        <i class="fas fa-exchange-alt"></i> Movimientos
+    </h1>
+    <div class="user-info">
+        Historial de transacciones
+    </div>
+</div>
+
+<!-- Movements Table -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-list"></i> Listado de Movimientos</h5>
+    </div>
+    <div class="card-body">
+        {% if movements %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th>Tipo</th>
+                        <th class="text-end">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for movement in movements %}
+                    <tr>
+                        <td>{{ movement.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ movement.description }}</td>
+                        <td>
+                            {% if movement.type == 'INCOME' %}
+                            <span class="movement-type movement-type-ingreso">
+                                <span class="movement-indicator movement-indicator-ingreso"></span>
+                                Ingreso
+                            </span>
+                            {% else %}
+                            <span class="movement-type movement-type-egreso">
+                                <span class="movement-indicator movement-indicator-egreso"></span>
+                                Egreso
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td
+                            class="text-end text-money {% if movement.type == 'INCOME' %}text-success{% else %}text-danger{% endif %}">
+                            ${{ "%.2f"|format(movement.amount) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center" role="alert">
+            <i class="fas fa-info-circle"></i> No hay movimientos registrados.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

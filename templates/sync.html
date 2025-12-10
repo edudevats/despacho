@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Sincronizar SAT - {{ company.name }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-dark">
+    <h1>
+        <i class="fas fa-sync"></i> Sincronizar SAT
+    </h1>
+    <div class="user-info">
+        {{ company.name }} - {{ company.rfc }}
+    </div>
+</div>
+
+<!-- Sync Form -->
+<div class="form-section">
+    <h3><i class="fas fa-cloud-download-alt"></i> Descargar Facturas del SAT</h3>
+    <p class="text-center text-muted mb-4">Sube los archivos de la FIEL y selecciona el rango de fechas para
+        sincronizar.</p>
+
+    <form action="/companies/sync/{{ company.id }}" method="POST" enctype="multipart/form-data">
+        <!-- Auth Method -->
+        <div class="mb-4">
+            <fieldset>
+                <legend class="form-label">Método de Autenticación</legend>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="fiel" value="fiel" checked
+                        disabled>
+                    <label class="form-check-label" for="fiel">
+                        <i class="fas fa-certificate text-primary"></i> FIEL (Certificado y Llave) - Requerido
+                    </label>
+                </div>
+            </fieldset>
+        </div>
+
+        <!-- Date Range -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <label for="start_date" class="form-label">Fecha Inicio</label>
+                <input type="date" class="form-control" name="start_date" id="start_date" value="{{ start_date }}"
+                    required>
+            </div>
+            <div class="col-md-6">
+                <label for="end_date" class="form-label">Fecha Fin</label>
+                <input type="date" class="form-control" name="end_date" id="end_date" value="{{ end_date }}" required>
+            </div>
+        </div>
+
+        <!-- FIEL Files -->
+        <div class="mb-4">
+            <label for="fiel_cer" class="form-label">
+                <i class="fas fa-file-certificate"></i> Archivo FIEL (.cer)
+            </label>
+            <input type="file" class="form-control" name="fiel_cer" id="fiel_cer" accept=".cer" required>
+        </div>
+
+        <div class="mb-4">
+            <label for="fiel_key" class="form-label">
+                <i class="fas fa-key"></i> Archivo FIEL (.key)
+            </label>
+            <input type="file" class="form-control" name="fiel_key" id="fiel_key" accept=".key" required>
+        </div>
+
+        <div class="mb-4">
+            <label for="fiel_password" class="form-label">
+                <i class="fas fa-lock"></i> Contraseña FIEL
+            </label>
+            <input type="password" class="form-control" name="fiel_password" id="fiel_password" required
+                placeholder="Ingresa la contraseña de tu FIEL">
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between">
+            <a href="/companies" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-sync"></i> Iniciar Sincronización
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Information Panel -->
+<div class="card mt-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Información Importante</h5>
+    </div>
+    <div class="card-body">
+        <ul class="mb-0">
+            <li>La sincronización descargará todas las facturas (emitidas y recibidas) del período seleccionado.</li>
+            <li>Los archivos FIEL (.cer y .key) son necesarios para autenticarse con el SAT.</li>
+            <li>La contraseña FIEL no se almacena en el sistema por seguridad.</li>
+            <li>El proceso puede tardar varios minutos dependiendo del volumen de facturas.</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

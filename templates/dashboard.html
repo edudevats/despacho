@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SAT Contabilidad{% endblock %}
+
+{% block content %}
+<!-- Page Header with Company Selector -->
+<div class="page-header page-header-blue">
+    <h1>
+        <i class="fas fa-chart-line"></i> Dashboard SAT
+        {% if selected_company %}
+        <span class="badge bg-light text-primary">{{ selected_company.name }}</span>
+        {% endif %}
+    </h1>
+    <div class="user-info">
+        <div class="input-group" style="max-width: 300px;">
+            <label class="input-group-text bg-light text-dark">
+                <i class="fas fa-filter"></i> Empresa:
+            </label>
+            <select class="form-select" id="companySelector">
+                <option value="">Todas las Empresas</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}" {% if selected_company and selected_company.id==company.id %}selected{%
+                    endif %}>
+                    {{ company.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="metric-card metric-card-success">
+            <h6 class="card-title">
+                <i class="fas fa-arrow-up"></i> Ingresos Totales
+            </h6>
+            <h3 class="card-value">${{ "%.2f"|format(income) }}</h3>
+            <small class="text-muted">Histórico total</small>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="metric-card metric-card-danger">
+            <h6 class="card-title">
+                <i class="fas fa-arrow-down"></i> Egresos Totales
+            </h6>
+            <h3 class="card-value">${{ "%.2f"|format(expenses) }}</h3>
+            <small class="text-muted">Histórico total</small>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="metric-card metric-card-info">
+            <h6 class="card-title">
+                <i class="fas fa-balance-scale"></i> Balance Neto
+            </h6>
+            <h3 class="card-value">${{ "%.2f"|format(income - expenses) }}</h3>
+            <small class="text-muted">Diferencia total</small>
+        </div>
+    </div>
+</div>
+
+<!-- Annual Statistics -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-calendar-alt"></i> Estadísticas Año {{ annual_stats.year }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 text-center">
+                        <h6 class="text-muted">Ingresos del Año</h6>
+                        <h4 class="text-success">${{ "%.2f"|format(annual_stats.income) }}</h4>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <h6 class="text-muted">Egresos del Año</h6>
+                        <h4 class="text-danger">${{ "%.2f"|format(annual_stats.expenses) }}</h4>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <h6 class="text-muted">Balance del Año</h6>
+                        <h4 class="{% if annual_stats.balance >= 0 %}text-info{% else %}text-warning{% endif %}">
+                            ${{ "%.2f"|format(annual_stats.balance) }}
+                        </h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts and Monthly Data -->
+<div class="row mb-4">
+    <!-- Monthly Comparison Chart -->
+    <div class="col-md-7">
+        <div class="chart-container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> <span id="chartTitle">Comparativo Mensual (Últimos 6
+                        Meses)</span></h5>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Periodo">
+                        <button type="button" class="btn btn-outline-primary" id="btnAnnual"
+                            onclick="changeChartPeriod('annual')">
+                            Anual
+                        </button>
+                        <button type="button" class="btn btn-outline-primary active" id="btn6Months"
+                            onclick="changeChartPeriod('6months')">
+                            6 Meses
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" id="btnMonthly"
+                            onclick="changeChartPeriod('monthly')">
+                            Mensual
+                        </button>
+                    </div>
+                    <select class="form-select form-select-sm d-none" id="monthSelector" style="width: auto;"
+                        onchange="updateMonthlyView()">
+                        <option value="0">Enero</option>
+                        <option value="1">Febrero</option>
+                        <option value="2">Marzo</option>
+                        <option value="3">Abril</option>
+                        <option value="4">Mayo</option>
+                        <option value="5">Junio</option>
+                        <option value="6">Julio</option>
+                        <option value="7">Agosto</option>
+                        <option value="8">Septiembre</option>
+                        <option value="9">Octubre</option>
+                        <option value="10">Noviembre</option>
+                        <option value="11">Diciembre</option>
+                    </select>
+                </div>
+            </div>
+            <div style="position: relative; height: 350px;">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Summary Table -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-table"></i> Resumen Mensual</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mes</th>
+                                <th class="text-end">Ingresos</th>
+                                <th class="text-end">Egresos</th>
+                                <th class="text-end">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for month in monthly_data %}
+                            <tr>
+                                <td><strong>{{ month.month }}</strong></td>
+                                <td class="text-end text-success">${{ "%.0f"|format(month.income) }}</td>
+                                <td class="text-end text-danger">${{ "%.0f"|format(month.expenses) }}</td>
+                                <td
+                                    class="text-end {% if month.balance >= 0 %}text-info{% else %}text-warning{% endif %}">
+                                    ${{ "%.0f"|format(month.balance) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Access -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-bolt"></i> Accesos Rápidos</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <a href="/companies" class="btn btn-outline-primary w-100">
+                    <i class="fas fa-building d-block mb-2" style="font-size: 2rem;"></i>
+                    Empresas
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="/movements" class="btn btn-outline-success w-100">
+                    <i class="fas fa-exchange-alt d-block mb-2" style="font-size: 2rem;"></i>
+                    Movimientos
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="/sync" class="btn btn-outline-info w-100">
+                    <i class="fas fa-sync d-block mb-2" style="font-size: 2rem;"></i>
+                    Sincronización
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="/search/advanced" class="btn btn-outline-warning w-100">
+                    <i class="fas fa-search d-block mb-2" style="font-size: 2rem;"></i>
+                    Búsqueda
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Company selector functionality
+    document.getElementById('companySelector').addEventListener('change', function () {
+        const companyId = this.value;
+        if (companyId) {
+            window.location.href = "/?company_id=" + companyId;
+        } else {
+            window.location.href = "/";
+        }
+    });
+
+    // Monthly comparison chart data
+    const monthlyData = {{ monthly_data | tojson }};
+    const currentYear = {{ annual_stats.year }};
+
+    // Month names in Spanish
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    // Chart instance
+    let chartInstance = null;
+
+    // Function to prepare data for different periods
+    function prepareChartData(period, monthIndex = null) {
+        let data = [];
+        let title = '';
+
+        if (period === 'monthly') {
+            // Use selected month or current month
+            const targetMonth = monthIndex !== null ? monthIndex : new Date().getMonth();
+            const monthData = monthlyData.find(m => m.month === monthNames[targetMonth]) || {
+                month: monthNames[targetMonth],
+                income: 0,
+                expenses: 0
+            };
+            data = [monthData];
+            title = `Comparativo Mensual (${monthNames[targetMonth]} ${currentYear})`;
+        } else if (period === '6months') {
+            // Last 6 months - take the last 6 items from monthlyData
+            data = monthlyData.slice(-6);
+            title = 'Comparativo Mensual (Últimos 6 Meses)';
+        } else if (period === 'annual') {
+            // All months of the current year (monthlyData already contains this)
+            data = monthlyData;
+            title = `Comparativo Anual ${currentYear}`;
+        }
+
+        return { data, title };
+    }
+
+    // Function to update chart
+    function updateChart(period, monthIndex = null) {
+        const { data, title } = prepareChartData(period, monthIndex);
+
+        // Update title
+        document.getElementById('chartTitle').textContent = title;
+
+        // Update chart data
+        if (chartInstance) {
+            chartInstance.data.labels = data.map(m => m.month);
+            chartInstance.data.datasets[0].data = data.map(m => m.income);
+            chartInstance.data.datasets[1].data = data.map(m => m.expenses);
+            chartInstance.update();
+        }
+    }
+
+    // Function to update monthly view based on selected month
+    function updateMonthlyView() {
+        const monthIndex = parseInt(document.getElementById('monthSelector').value);
+        updateChart('monthly', monthIndex);
+    }
+
+    // Function to change period and update button states
+    function changeChartPeriod(period) {
+        // Update button active states
+        document.getElementById('btnMonthly').classList.remove('active');
+        document.getElementById('btn6Months').classList.remove('active');
+        document.getElementById('btnAnnual').classList.remove('active');
+
+        // Show/hide month selector using Bootstrap classes
+        const monthSelector = document.getElementById('monthSelector');
+        if (period === 'monthly') {
+            document.getElementById('btnMonthly').classList.add('active');
+            monthSelector.classList.remove('d-none');  // Show selector
+            // Set selector to current month
+            const currentMonth = new Date().getMonth();
+            monthSelector.value = currentMonth;
+        } else {
+            monthSelector.classList.add('d-none');  // Hide selector
+            if (period === '6months') {
+                document.getElementById('btn6Months').classList.add('active');
+            } else if (period === 'annual') {
+                document.getElementById('btnAnnual').classList.add('active');
+            }
+        }
+
+        // Update the chart
+        updateChart(period);
+    }
+
+    // Create the initial chart (6 months by default)
+    const ctx = document.getElementById('monthlyChart').getContext('2d');
+    const { data: initialData } = prepareChartData('6months');
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: initialData.map(m => m.month),
+            datasets: [
+                {
+                    label: 'Ingresos',
+                    data: initialData.map(m => m.income),
+                    backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                    borderColor: '#28a745',
+                    borderWidth: 2
+                },
+                {
+                    label: 'Egresos',
+                    data: initialData.map(m => m.expenses),
+                    backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                    borderColor: '#dc3545',
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) {
+                            return '$' + value.toLocaleString('es-MX', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0
+                            });
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return context.dataset.label + ': $' + context.parsed.y.toLocaleString('es-MX', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}
