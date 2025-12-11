@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Movimientos - SAT Contabilidad{% endblock %}
+{% block title %}Movimientos - {{ company.name }}{% endblock %}
 
 {% block content %}
-<!-- Page Header -->
-<div class="page-header page-header-green">
-    <h1>
-        <i class="fas fa-exchange-alt"></i> Movimientos
-    </h1>
-    <div class="user-info">
-        Historial de transacciones
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2><i class="fas fa-exchange-alt me-2"></i>Movimientos</h2>
+        <p class="text-muted">{{ company.name }} ({{ company.rfc }})</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('movements') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Volver
+        </a>
     </div>
 </div>
 
@@ -50,7 +52,7 @@
                         </td>
                         <td
                             class="text-end text-money {% if movement.type == 'INCOME' %}text-success{% else %}text-danger{% endif %}">
-                            ${{ "%.2f"|format(movement.amount) }}
+                            ${{ movement.amount|format_currency }}
                         </td>
                     </tr>
                     {% endfor %}
@@ -59,7 +61,7 @@
         </div>
         {% else %}
         <div class="alert alert-info text-center" role="alert">
-            <i class="fas fa-info-circle"></i> No hay movimientos registrados.
+            <i class="fas fa-info-circle"></i> No hay movimientos registrados para esta empresa.
         </div>
         {% endif %}
     </div>

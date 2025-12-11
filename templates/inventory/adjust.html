@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustar Stock - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">Ajuste Manual de Inventario</h4>
+                    <small>Producto: <strong>{{ product.name }}</strong> ({{ product.sku }})</small>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-primary text-center">
+                        Has seleccionado ajustar el stock actual:
+                        <span class="fs-4 fw-bold">{{ product.current_stock }}</span>
+                    </div>
+
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="mb-3">
+                            <label class="form-label">Tipo de Movimiento</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="type" id="type_in" value="IN" checked>
+                                <label class="btn btn-outline-success" for="type_in">
+                                    <i class="fas fa-plus"></i> Entrada (Compra/Devolución)
+                                </label>
+
+                                <input type="radio" class="btn-check" name="type" id="type_out" value="OUT">
+                                <label class="btn btn-outline-danger" for="type_out">
+                                    <i class="fas fa-minus"></i> Salida (Venta/Pérdida)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="quantity" class="form-label">Cantidad a ajustar</label>
+                            <input type="number" class="form-control form-control-lg text-center" id="quantity"
+                                name="quantity" min="1" required placeholder="0">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Motivo / Notas</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2"
+                                placeholder="Ej. Inventario inicial, Ajuste por merma, etc."></textarea>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary">Confirmar Ajuste</button>
+                            <a href="{{ url_for('inventory_list', company_id=company.id) }}"
+                                class="btn btn-light">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

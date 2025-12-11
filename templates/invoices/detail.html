@@ -139,16 +139,16 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between mb-2">
                     <span>Subtotal:</span>
-                    <strong>${{ "%.2f"|format(invoice.subtotal) }}</strong>
+                    <strong>${{ invoice.subtotal|format_currency }}</strong>
                 </div>
                 <div class="d-flex justify-content-between mb-3">
                     <span>Impuestos (Trasladados/Retenidos):</span>
-                    <strong>${{ "%.2f"|format(invoice.tax) }}</strong>
+                    <strong>${{ invoice.tax|format_currency }}</strong>
                 </div>
                 <hr>
                 <div class="d-flex justify-content-between mb-0">
                     <span class="h5">Total:</span>
-                    <span class="h4 text-primary">${{ "%.2f"|format(invoice.total) }}</span>
+                    <span class="h4 text-primary">${{ invoice.total|format_currency }}</span>
                 </div>
 
                 <div class="mt-4 pt-3 border-top">

@@ -11,6 +11,10 @@
             <p class="text-muted">{{ company.rfc }}</p>
         </div>
         <div class="col-md-4 text-end">
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-primary me-2">
+                <!-- Inventory Link -->
+                <i class="fas fa-boxes"></i> Inventario
+            </a>
             <a href="{{ url_for('taxes_dashboard', company_id=company.id) }}" class="btn btn-info me-2">
                 <i class="fas fa-calculator"></i> Impuestos
             </a>
@@ -20,30 +24,38 @@
         </div>
     </div>
 
-    <!-- Métricas del Mes -->
+    <!-- Inventory & Metrics Row -->
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body">
+                    <h6 class="text-muted">Valor Inventario (Costo)</h6>
+                    <h2 class="text-primary">${{ inventory_value|format_currency }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
             <div class="card border-success">
                 <div class="card-body">
                     <h6 class="text-muted">Ingresos del Mes</h6>
-                    <h2 class="text-success">${{ "%.2f"|format(month_income) }}</h2>
+                    <h2 class="text-success">${{ month_income|format_currency }}</h2>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-danger">
                 <div class="card-body">
                     <h6 class="text-muted">Egresos del Mes</h6>
-                    <h2 class="text-danger">${{ "%.2f"|format(month_expense) }}</h2>
+                    <h2 class="text-danger">${{ month_expense|format_currency }}</h2>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-primary">
                 <div class="card-body">
                     <h6 class="text-muted">Balance del Mes</h6>
                     <h2 class="{% if month_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
-                        ${{ "%.2f"|format(month_balance) }}
+                        ${{ month_balance|format_currency }}
                     </h2>
                 </div>
             </div>
@@ -96,7 +108,7 @@
                                     <small class="text-muted">{{ supplier.rfc }}</small>
                                 </div>
                                 <div class="text-end">
-                                    <strong>${{ "%.2f"|format(supplier.total_invoiced) }}</strong>
+                                    <strong>${{ supplier.total_invoiced|format_currency }}</strong>
                                     <br>
                                     <small class="text-muted">{{ supplier.invoice_count }} facturas</small>
                                 </div>
@@ -131,7 +143,7 @@
                                 <tr>
                                     <td>{{ invoice.date.strftime('%d/%m/%Y') }}</td>
                                     <td>{{ invoice.issuer_name or invoice.receiver_name }}</td>
-                                    <td class="text-end">${{ "%.2f"|format(invoice.total) }}</td>
+                                    <td class="text-end">${{ invoice.total|format_currency }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

@@ -31,33 +31,43 @@
 
 <!-- Summary Cards -->
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="metric-card metric-card-success">
             <h6 class="card-title">
                 <i class="fas fa-arrow-up"></i> Ingresos Totales
             </h6>
-            <h3 class="card-value">${{ "%.2f"|format(income) }}</h3>
+            <h3 class="card-value">${{ income|format_currency }}</h3>
             <small class="text-muted">Histórico total</small>
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="metric-card metric-card-danger">
             <h6 class="card-title">
                 <i class="fas fa-arrow-down"></i> Egresos Totales
             </h6>
-            <h3 class="card-value">${{ "%.2f"|format(expenses) }}</h3>
+            <h3 class="card-value">${{ expenses|format_currency }}</h3>
             <small class="text-muted">Histórico total</small>
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="metric-card metric-card-info">
             <h6 class="card-title">
                 <i class="fas fa-balance-scale"></i> Balance Neto
             </h6>
-            <h3 class="card-value">${{ "%.2f"|format(income - expenses) }}</h3>
+            <h3 class="card-value">${{ (income - expenses)|format_currency }}</h3>
             <small class="text-muted">Diferencia total</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="metric-card border-primary">
+            <h6 class="card-title text-primary">
+                <i class="fas fa-boxes"></i> Valor Inventario
+            </h6>
+            <h3 class="card-value text-primary">${{ inventory_value|format_currency }}</h3>
+            <small class="text-muted">Costo total actual</small>
         </div>
     </div>
 </div>
@@ -75,16 +85,16 @@
                 <div class="row">
                     <div class="col-md-4 text-center">
                         <h6 class="text-muted">Ingresos del Año</h6>
-                        <h4 class="text-success">${{ "%.2f"|format(annual_stats.income) }}</h4>
+                        <h4 class="text-success">${{ annual_stats.income|format_currency }}</h4>
                     </div>
                     <div class="col-md-4 text-center">
                         <h6 class="text-muted">Egresos del Año</h6>
-                        <h4 class="text-danger">${{ "%.2f"|format(annual_stats.expenses) }}</h4>
+                        <h4 class="text-danger">${{ annual_stats.expenses|format_currency }}</h4>
                     </div>
                     <div class="col-md-4 text-center">
                         <h6 class="text-muted">Balance del Año</h6>
                         <h4 class="{% if annual_stats.balance >= 0 %}text-info{% else %}text-warning{% endif %}">
-                            ${{ "%.2f"|format(annual_stats.balance) }}
+                            ${{ annual_stats.balance|format_currency }}
                         </h4>
                     </div>
                 </div>
@@ -160,11 +170,11 @@
                             {% for month in monthly_data %}
                             <tr>
                                 <td><strong>{{ month.month }}</strong></td>
-                                <td class="text-end text-success">${{ "%.0f"|format(month.income) }}</td>
-                                <td class="text-end text-danger">${{ "%.0f"|format(month.expenses) }}</td>
+                                <td class="text-end text-success">${{ month.income|format_currency }}</td>
+                                <td class="text-end text-danger">${{ month.expenses|format_currency }}</td>
                                 <td
                                     class="text-end {% if month.balance >= 0 %}text-info{% else %}text-warning{% endif %}">
-                                    ${{ "%.0f"|format(month.balance) }}
+                                    ${{ month.balance|format_currency }}
                                 </td>
                             </tr>
                             {% endfor %}

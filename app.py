@@ -1,14 +1,17 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 import os
+import logging
 from config import Config
 from extensions import db, login_manager, migrate, mail, cache, csrf, init_extensions
-from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment
+from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.sat_service import SATService
 from services.qr_service import QRService
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(config_class=Config):
@@ -17,6 +20,21 @@ def create_app(config_class=Config):
 
     # Initialize all extensions
     init_extensions(app)
+    
+    # Setup logging
+    from logging_config import setup_logging
+    setup_logging(app)
+    
+    # Custom Jinja2 filter for currency formatting with thousands separators
+    @app.template_filter('format_currency')
+    def format_currency(value):
+        """Format a number with thousand separators and 2 decimal places.
+        Example: 1000000 -> 1,000,000.00
+        """
+        try:
+            return "{:,.2f}".format(float(value))
+        except (ValueError, TypeError):
+            return "0.00"
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -41,6 +59,31 @@ def create_app(config_class=Config):
     def logout():
         logout_user()
         return redirect(url_for('login'))
+
+    @app.route('/change_password', methods=['GET', 'POST'])
+    @login_required
+    def change_password():
+        if request.method == 'POST':
+            current_password = request.form['current_password']
+            new_password = request.form['new_password']
+            confirm_password = request.form['confirm_password']
+
+            if not check_password_hash(current_user.password_hash, current_password):
+                flash('La contraseña actual es incorrecta.', 'error')
+                return redirect(url_for('change_password'))
+            
+            if new_password != confirm_password:
+                flash('Las nuevas contraseñas no coinciden.', 'error')
+                return redirect(url_for('change_password'))
+            
+            # Update password
+            current_user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            
+            flash('Tu contraseña ha sido actualizada correctamente.', 'success')
+            return redirect(url_for('index'))
+            
+        return render_template('change_password.html')
 
     @app.route('/')
     @login_required
@@ -128,11 +171,22 @@ def create_app(config_class=Config):
         annual_income = annual_income_query.scalar() or 0
         annual_expense = annual_expense_query.scalar() or 0
         
+        # Calculate Inventory Value (Cost Price)
+        inventory_query = db.session.query(
+            func.sum(Product.current_stock * Product.cost_price)
+        ).filter(Product.active == True)
+        
+        if company_id:
+            inventory_query = inventory_query.filter(Product.company_id == company_id)
+            
+        inventory_value = inventory_query.scalar() or 0
+        
         return render_template('dashboard.html',
             companies=companies,
             selected_company=selected_company,
             income=income,
             expenses=expenses,
+            inventory_value=inventory_value,
             monthly_data=monthly_data,
             annual_stats={
                 'year': current_year,
@@ -182,8 +236,18 @@ def create_app(config_class=Config):
             
             # 4. Delete Categories (referencing Company)
             Category.query.filter_by(company_id=company.id).delete()
+
+            # 5. Delete Inventory (Product referencing Company, Transaction referencing Product)
+            # Need to find products first to delete transactions
+            products = Product.query.filter_by(company_id=company.id).all()
+            for p in products:
+                InventoryTransaction.query.filter_by(product_id=p.id).delete()
+            Product.query.filter_by(company_id=company.id).delete()
             
-            # 5. Delete Company
+            # 6. Delete TaxPayments (referencing Company)
+            TaxPayment.query.filter_by(company_id=company.id).delete()
+            
+            # 7. Delete Company
             db.session.delete(company)
             
             db.session.commit()
@@ -375,8 +439,17 @@ def create_app(config_class=Config):
     @app.route('/movements')
     @login_required
     def movements():
-        movements_list = Movement.query.all()
-        return render_template('movements.html', movements=movements_list)
+        """Show list of companies for movements"""
+        companies_list = Company.query.all()
+        return render_template('movements_list.html', companies=companies_list)
+    
+    @app.route('/companies/<int:company_id>/movements')
+    @login_required
+    def company_movements(company_id):
+        """Show movements for a specific company"""
+        company = Company.query.get_or_404(company_id)
+        movements_list = Movement.query.filter_by(company_id=company_id).order_by(Movement.date.desc()).all()
+        return render_template('movements.html', movements=movements_list, company=company)
     
     @app.route('/sync')
     @login_required
@@ -505,6 +578,14 @@ def create_app(config_class=Config):
             active=True
         ).order_by(Supplier.total_invoiced.desc()).limit(5).all()
         
+        # Calculate Inventory Value (Cost Price)
+        inventory_value = db.session.query(
+            func.sum(Product.current_stock * Product.cost_price)
+        ).filter(
+            Product.company_id == company_id,
+            Product.active == True
+        ).scalar() or 0
+        
         return render_template('dashboard/company_dashboard.html',
             company=company,
             month_income=month_income,
@@ -516,8 +597,10 @@ def create_app(config_class=Config):
             monthly_trend=monthly_trend,
             category_distribution=category_distribution,
             recent_invoices=recent_invoices,
-            top_suppliers=top_suppliers
+            top_suppliers=top_suppliers,
+            inventory_value=inventory_value
         )
+
     
     # ==================== SUPPLIER ROUTES ====================
     
@@ -674,7 +757,170 @@ def create_app(config_class=Config):
             flash(f'Categoría "{category.name}" actualizada', 'success')
             return redirect(url_for('categories', company_id=company_id))
         
-        return render_template('categories/edit.html', company=company, category=category)
+
+    
+    # ==================== INVENTORY ROUTES ====================
+
+    @app.route('/inventory')
+    @login_required
+    def inventory_companies_list():
+        """Show list of companies for inventory management"""
+        companies_list = Company.query.all()
+        return render_template('inventory_list_companies.html', companies=companies_list)
+
+    @app.route('/companies/<int:company_id>/inventory')
+    @login_required
+    def inventory_list(company_id):
+        """Listado de productos e inventario"""
+        company = Company.query.get_or_404(company_id)
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        
+        # Calculate total inventory value (Cost Price * Stock)
+        total_inventory_value = sum(p.current_stock * p.cost_price for p in products)
+        total_items = sum(p.current_stock for p in products)
+        
+        return render_template('inventory/list.html', 
+                               company=company, 
+                               products=products,
+                               total_inventory_value=total_inventory_value,
+                               total_items=total_items)
+
+    @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
+    @login_required
+    def add_product(company_id):
+        """Agregar nuevo producto"""
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'POST':
+            name = request.form['name']
+            sku = request.form.get('sku')
+            description = request.form.get('description')
+            cost_price = float(request.form.get('cost_price', 0))
+            selling_price = float(request.form.get('selling_price', 0))
+            initial_stock = int(request.form.get('initial_stock', 0))
+            min_stock = int(request.form.get('min_stock', 0))
+            
+            new_product = Product(
+                company_id=company_id,
+                name=name,
+                sku=sku,
+                description=description,
+                cost_price=cost_price,
+                selling_price=selling_price,
+                current_stock=initial_stock,
+                min_stock_level=min_stock
+            )
+            
+            db.session.add(new_product)
+            db.session.flush() # Get ID
+            
+            # Record initial stock as transaction if > 0
+            if initial_stock > 0:
+                transaction = InventoryTransaction(
+                    product_id=new_product.id,
+                    type='IN',
+                    quantity=initial_stock,
+                    previous_stock=0,
+                    new_stock=initial_stock,
+                    reference='Initial Stock',
+                    notes='Inventario inicial al crear producto'
+                )
+                db.session.add(transaction)
+            
+            db.session.commit()
+            flash(f'Producto "{name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        return render_template('inventory/add.html', company=company)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_product(company_id, product_id):
+        """Editar producto"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            flash('Producto no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        if request.method == 'POST':
+            product.name = request.form['name']
+            product.sku = request.form.get('sku')
+            product.description = request.form.get('description')
+            product.cost_price = float(request.form.get('cost_price', 0))
+            product.selling_price = float(request.form.get('selling_price', 0))
+            product.min_stock_level = int(request.form.get('min_stock', 0))
+            
+            db.session.commit()
+            flash(f'Producto "{product.name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        return render_template('inventory/edit.html', company=company, product=product)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/adjust', methods=['GET', 'POST'])
+    @login_required
+    def adjust_stock(company_id, product_id):
+        """Ajuste manual de stock"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            flash('Producto no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        if request.method == 'POST':
+            adjustment_type = request.form['type'] # 'IN' or 'OUT'
+            quantity = int(request.form['quantity'])
+            notes = request.form.get('notes')
+            
+            if quantity <= 0:
+                flash('La cantidad debe ser mayor a 0.', 'error')
+                return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+            
+            previous_stock = product.current_stock
+            new_stock = previous_stock
+            
+            if adjustment_type == 'IN':
+                new_stock += quantity
+            elif adjustment_type == 'OUT':
+                if previous_stock < quantity:
+                    flash('No hay suficiente stock para realizar esta salida.', 'error')
+                    return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+                new_stock -= quantity
+                
+            product.current_stock = new_stock
+            
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                type=adjustment_type,
+                quantity=quantity,
+                previous_stock=previous_stock,
+                new_stock=new_stock,
+                reference='Manual Adjustment',
+                notes=notes
+            )
+            
+            db.session.add(transaction)
+            db.session.commit()
+            
+            flash('Inventario actualizado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        return render_template('inventory/adjust.html', company=company, product=product)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/history')
+    @login_required
+    def product_history(company_id, product_id):
+        """Historial de movimientos de un producto"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        return render_template('inventory/history.html', company=company, product=product)
+
     
     # ==================== AX MANAGMENT ROUTES ====================
 
@@ -1034,18 +1280,9 @@ def create_app(config_class=Config):
             'year': year
         })
 
-    # Only create default user in non-testing mode
-    if not app.config.get('TESTING', False):
-        with app.app_context():
-            # Create default user if not exists
-            try:
-                if not User.query.filter_by(username='admin').first():
-                    user = User(username='admin', password_hash=generate_password_hash('admin'))
-                    db.session.add(user)
-                    db.session.commit()
-            except Exception:
-                # Table might not exist yet (before migrations)
-                pass
+    # Register CLI commands
+    from cli import register_commands
+    register_commands(app)
 
     return app
 

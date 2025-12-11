@@ -107,7 +107,7 @@
                             </small>
                         </td>
                         <td><small class="font-monospace">{{ invoice.uuid[:8] }}...</small></td>
-                        <td class="text-end text-money">${{ "%.2f"|format(invoice.total) }}</td>
+                        <td class="text-end text-money">${{ invoice.total|format_currency }}</td>
                         <td>
                             {# Simple rule: if company is issuer = INGRESO, otherwise = EGRESO #}
                             {% if invoice.issuer_rfc == company.rfc %}

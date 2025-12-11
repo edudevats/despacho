@@ -21,8 +21,8 @@
         <div class="card border-primary shadow-sm h-100">
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">IVA a Pagar (Anual)</h6>
-                <h3 class="text-primary">${{ "%.2f"|format(annual_summary.iva_to_pay) }}</h3>
-                <small class="text-muted">Pagado: ${{ "%.2f"|format(annual_summary.iva_paid) }}</small>
+                <h3 class="text-primary">${{ annual_summary.iva_to_pay|format_currency }}</h3>
+                <small class="text-muted">Pagado: ${{ annual_summary.iva_paid|format_currency }}</small>
             </div>
         </div>
     </div>
@@ -31,7 +31,7 @@
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">IVA Pendiente</h6>
                 <h3 class="{% if annual_summary.iva_pending > 0 %}text-warning{% else %}text-success{% endif %}">
-                    ${{ "%.2f"|format(annual_summary.iva_pending) }}
+                    ${{ annual_summary.iva_pending|format_currency }}
                 </h3>
             </div>
         </div>
@@ -40,8 +40,8 @@
         <div class="card border-info shadow-sm h-100">
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">ISR Estimado (Anual)</h6>
-                <h3 class="text-info">${{ "%.2f"|format(annual_summary.isr_estimated) }}</h3>
-                <small class="text-muted">Pagado: ${{ "%.2f"|format(annual_summary.isr_paid) }}</small>
+                <h3 class="text-info">${{ annual_summary.isr_estimated|format_currency }}</h3>
+                <small class="text-muted">Pagado: ${{ annual_summary.isr_paid|format_currency }}</small>
             </div>
         </div>
     </div>
@@ -50,7 +50,7 @@
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">ISR Pendiente</h6>
                 <h3 class="{% if annual_summary.isr_pending > 0 %}text-danger{% else %}text-success{% endif %}">
-                    ${{ "%.2f"|format(annual_summary.isr_pending) }}
+                    ${{ annual_summary.isr_pending|format_currency }}
                 </h3>
             </div>
         </div>
@@ -110,20 +110,20 @@
                     {% for data in monthly_tax_data %}
                     <tr>
                         <td class="fw-bold">{{ data.month_name }}</td>
-                        <td class="text-end text-success">${{ "%.2f"|format(data.iva_collected) }}</td>
-                        <td class="text-end text-danger">${{ "%.2f"|format(data.iva_deductible) }}</td>
+                        <td class="text-end text-success">${{ data.iva_collected|format_currency }}</td>
+                        <td class="text-end text-danger">${{ data.iva_deductible|format_currency }}</td>
 
                         {% set net_iva = data.net_iva %}
                         <td class="text-end fw-bold {% if net_iva > 0 %}text-danger{% else %}text-success{% endif %}">
-                            ${{ "%.2f"|format(net_iva) }}
+                            ${{ net_iva|format_currency }}
                         </td>
 
-                        <td class="text-end text-primary">${{ "%.2f"|format(data.iva_paid_amount) }}</td>
+                        <td class="text-end text-primary">${{ data.iva_paid_amount|format_currency }}</td>
 
                         {% set diff = data.iva_difference %}
                         <td
                             class="text-end fw-bold {% if diff > 0.1 %}text-danger{% elif diff < -0.1 %}text-info{% else %}text-secondary{% endif %}">
-                            ${{ "%.2f"|format(diff) }}
+                            ${{ diff|format_currency }}
                         </td>
 
                         <td class="text-center">
@@ -159,7 +159,7 @@
                                                             name="amount" value="{{ " %.2f"|format(diff if diff> 0 else
                                                         0) }}" required>
                                                     </div>
-                                                    <div class="form-text">IVA Calculado: ${{ "%.2f"|format(net_iva) }}
+                                                    <div class="form-text">IVA Calculado: ${{ net_iva|format_currency }}
                                                     </div>
                                                 </div>
 
@@ -214,21 +214,21 @@
                     {% for data in monthly_tax_data %}
                     <tr>
                         <td class="fw-bold">{{ data.month_name }}</td>
-                        <td class="text-end text-success">${{ "%.2f"|format(data.income) }}</td>
-                        <td class="text-end text-danger">${{ "%.2f"|format(data.expense) }}</td>
+                        <td class="text-end text-success">${{ data.income|format_currency }}</td>
+                        <td class="text-end text-danger">${{ data.expense|format_currency }}</td>
 
                         {% set profit = data.profit %}
                         <td class="text-end fw-bold {% if profit > 0 %}text-success{% else %}text-danger{% endif %}">
-                            ${{ "%.2f"|format(profit) }}
+                            ${{ profit|format_currency }}
                         </td>
 
-                        <td class="text-end text-info fw-bold">${{ "%.2f"|format(data.isr_estimated) }}</td>
-                        <td class="text-end text-primary">${{ "%.2f"|format(data.isr_paid_amount) }}</td>
+                        <td class="text-end text-info fw-bold">${{ data.isr_estimated|format_currency }}</td>
+                        <td class="text-end text-primary">${{ data.isr_paid_amount|format_currency }}</td>
 
                         {% set isr_diff = data.isr_difference %}
                         <td
                             class="text-end fw-bold {% if isr_diff > 0.1 %}text-danger{% elif isr_diff < -0.1 %}text-info{% else %}text-secondary{% endif %}">
-                            ${{ "%.2f"|format(isr_diff) }}
+                            ${{ isr_diff|format_currency }}
                         </td>
 
                         <td class="text-center">
@@ -265,7 +265,7 @@
                                                         0 else 0) }}" required>
                                                     </div>
                                                     <div class="form-text">ISR Estimado: ${{
-                                                        "%.2f"|format(data.isr_estimated) }}</div>
+                                                        data.isr_estimated|format_currency }}</div>
                                                 </div>
 
                                                 <div class="mb-3">

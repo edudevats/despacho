@@ -29,7 +29,7 @@
             <h6 class="card-title">
                 <i class="fas fa-dollar-sign"></i> Total Gastado
             </h6>
-            <h3 class="card-value">${{ "%.2f"|format(total_spent) }}</h3>
+            <h3 class="card-value">${{ total_spent|format_currency }}</h3>
         </div>
     </div>
 </div>
@@ -57,7 +57,7 @@
                     <tr>
                         <td><strong>{{ supplier.business_name }}</strong></td>
                         <td><span class="badge bg-secondary">{{ supplier.rfc }}</span></td>
-                        <td class="text-end text-money text-danger">${{ "%.2f"|format(supplier.total_invoiced) }}</td>
+                        <td class="text-end text-money text-danger">${{ supplier.total_invoiced|format_currency }}</td>
                         <td class="text-center"><span class="badge bg-info">{{ supplier.invoice_count }}</span></td>
                         <td class="text-center">
                             <a href="/companies/{{ company.id }}/suppliers/{{ supplier.id }}"

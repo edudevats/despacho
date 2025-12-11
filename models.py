@@ -2,10 +2,25 @@ from flask_login import UserMixin
 from datetime import datetime
 from extensions import db
 
+
 class User(UserMixin, db.Model):
+    """User model for authentication and authorization."""
+    __tablename__ = 'user'
+    
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128))
+    username = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
+    password_hash = db.Column(db.String(256))  # Larger for modern hash algorithms
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, nullable=True)
+    
+    # Status
+    is_active = db.Column(db.Boolean, default=True)
+    
+    def __repr__(self):
+        return f'<User {self.username}>'
 
 class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -151,6 +166,55 @@ class TaxPayment(db.Model):
     notes = db.Column(db.Text)
     
     company = db.relationship('Company', backref=db.backref('tax_payments', lazy=True))
+
+class Product(db.Model):
+    """
+    Producto para inventario
+    """
+    __tablename__ = 'product'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    
+    sku = db.Column(db.String(50), nullable=True) # Código interno/barras
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    
+    cost_price = db.Column(db.Float, default=0.0) # Costo real (para valuación inventario)
+    selling_price = db.Column(db.Float, default=0.0) # Precio venta al público
+    
+    current_stock = db.Column(db.Integer, default=0)
+    min_stock_level = db.Column(db.Integer, default=0)
+    
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    company = db.relationship('Company', backref=db.backref('products', lazy=True))
+    
+    def __repr__(self):
+        return f'<Product {self.name}>'
+
+class InventoryTransaction(db.Model):
+    """
+    Historial de movimientos de inventario
+    """
+    __tablename__ = 'inventory_transaction'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    
+    type = db.Column(db.String(20), nullable=False) # 'IN', 'OUT', 'ADJUSTMENT'
+    quantity = db.Column(db.Integer, nullable=False) # Cantidad movida (positiva o negativa según lógica, aqui guardamos valor absoluto y el tipo define)
+    
+    previous_stock = db.Column(db.Integer, nullable=False)
+    new_stock = db.Column(db.Integer, nullable=False)
+    
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+    reference = db.Column(db.String(100)) # ID Factura, Orden, etc.
+    notes = db.Column(db.Text)
+    
+    product = db.relationship('Product', backref=db.backref('transactions', lazy=True, order_by='InventoryTransaction.date.desc()'))
+
 
 # Late import to avoid circular dependency if needed, or put at top if safe.
 # Assuming utils package exists.

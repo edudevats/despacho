@@ -1,0 +1,81 @@
+2025-12-10 20:35:30 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:35:30 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 20:35:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:35:49 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 20:44:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:44:33 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:44:33 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 20:44:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:44:35 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 20:44:48 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:44:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:44:49 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 20:47:17 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 20:47:17 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 20:48:08 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:43:52 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:43:52 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 21:43:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:43:58 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 21:44:10 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:44:10 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 21:47:55 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:47:55 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 21:48:37 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:48:38 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:48:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 21:59:47 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:59:48 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 21:59:48 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:22:57 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:22:57 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:23:30 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:23:30 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:25:21 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:25:21 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:26:40 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:26:41 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:26:41 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:28:02 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:28:02 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:44:03 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:44:05 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:44:05 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:44:14 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:48:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:48:59 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:48:59 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:49:48 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:49:48 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:50:15 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:50:15 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:51:03 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:51:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:51:40 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:51:40 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:53:15 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:53:36 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:53:44 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:54:10 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:54:13 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-10 23:54:13 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-10 23:54:34 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:34:53 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:34:53 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 00:39:26 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:39:28 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:39:28 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 00:39:28 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:39:28 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 00:40:54 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:40:54 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 00:40:55 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 00:40:55 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 01:05:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 01:05:58 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 01:05:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 01:05:58 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 01:07:21 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 01:07:21 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 01:07:21 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 01:07:21 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!

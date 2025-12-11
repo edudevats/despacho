@@ -86,12 +86,27 @@ def test_user(app):
 def test_company(app):
     """Create a test company"""
     from extensions import db
-    from models import Company
+    from models import Company, Product, InventoryTransaction, Invoice, Movement, Supplier, Category, TaxPayment
     
     with app.app_context():
         # Check if test company already exists
         existing = Company.query.filter_by(rfc='TEST123456ABC').first()
         if existing:
+            # Clean up dependencies for existing company to allow delete
+            
+            # Inventory
+            products = Product.query.filter_by(company_id=existing.id).all()
+            for p in products:
+                InventoryTransaction.query.filter_by(product_id=p.id).delete()
+            Product.query.filter_by(company_id=existing.id).delete()
+            
+            # Other dependencies (simplified from app.py logic)
+            Movement.query.filter_by(company_id=existing.id).delete()
+            Invoice.query.filter_by(company_id=existing.id).delete()
+            Supplier.query.filter_by(company_id=existing.id).delete()
+            Category.query.filter_by(company_id=existing.id).delete()
+            TaxPayment.query.filter_by(company_id=existing.id).delete()
+            
             db.session.delete(existing)
             db.session.commit()
         
@@ -109,6 +124,19 @@ def test_company(app):
         # Cleanup
         company_to_delete = db.session.get(Company, company_id)
         if company_to_delete:
+            # Inventory
+            products = Product.query.filter_by(company_id=company_to_delete.id).all()
+            for p in products:
+                InventoryTransaction.query.filter_by(product_id=p.id).delete()
+            Product.query.filter_by(company_id=company_to_delete.id).delete()
+            
+            # Other dependencies
+            Movement.query.filter_by(company_id=company_to_delete.id).delete()
+            Invoice.query.filter_by(company_id=company_to_delete.id).delete()
+            Supplier.query.filter_by(company_id=company_to_delete.id).delete()
+            Category.query.filter_by(company_id=company_to_delete.id).delete()
+            TaxPayment.query.filter_by(company_id=company_to_delete.id).delete()
+            
             db.session.delete(company_to_delete)
             db.session.commit()
 

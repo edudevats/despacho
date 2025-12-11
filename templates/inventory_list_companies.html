@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Seleccionar Empresa - Inventario{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2>Gestión de Inventario</h2>
+            <p class="text-muted">Selecciona una empresa para gestionar su inventario</p>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for company in companies %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 shadow-sm hover-card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">{{ company.name }}</h5>
+                    <p class="card-text text-muted">{{ company.rfc }}</p>
+                    <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-primary">
+                        <i class="fas fa-boxes"></i> Ver Inventario
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-md-12">
+            <div class="alert alert-info">
+                No hay empresas registradas. <a href="{{ url_for('companies') }}">Agregar empresa</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
