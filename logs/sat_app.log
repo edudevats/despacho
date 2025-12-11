@@ -79,3 +79,39 @@
 2025-12-11 01:07:21 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
 2025-12-11 01:07:21 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2025-12-11 01:07:21 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:04:28 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:04:28 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:04:28 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:04:28 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:06:17 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:17 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:06:17 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:17 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:06:39 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:41 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:41 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:06:41 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:41 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:06:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:06:50 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:06:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:07:38 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:07:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:07:38 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:07:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:08:15 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:08:15 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:08:15 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:08:15 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:08:36 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:08:36 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:08:36 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:08:36 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2025-12-11 11:10:16 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:10:17 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:10:25 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:11:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:16:01 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:41:24 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-11 11:48:55 - __main__ - ERROR - [app.py:437] - Sync error for company GQA170124FQA: SAT no aceptó la solicitud. Código: 301, Mensaje: XML Mal Formado:La solicitud de descarga no es válida. Fecha final invalida

@@ -3,6 +3,132 @@
 {% block title %}Sincronizar SAT - {{ company.name }}{% endblock %}
 
 {% block content %}
+<!-- Loading Overlay -->
+<div id="syncLoadingOverlay" class="sync-loading-overlay" style="display: none;">
+    <div class="sync-loading-content">
+        <div class="sync-spinner"></div>
+        <h3 id="syncStatusTitle">Conectando con el SAT...</h3>
+        <p id="syncStatusMessage" class="text-muted">Por favor espere, este proceso puede tardar varios minutos.</p>
+        <div class="sync-progress-steps">
+            <div class="sync-step" id="step1">
+                <i class="fas fa-check-circle"></i>
+                <span>Validando credenciales FIEL</span>
+            </div>
+            <div class="sync-step" id="step2">
+                <i class="fas fa-circle"></i>
+                <span>Solicitando facturas al SAT</span>
+            </div>
+            <div class="sync-step" id="step3">
+                <i class="fas fa-circle"></i>
+                <span>Descargando paquetes</span>
+            </div>
+            <div class="sync-step" id="step4">
+                <i class="fas fa-circle"></i>
+                <span>Procesando facturas</span>
+            </div>
+        </div>
+        <p class="sync-warning mt-4">
+            <i class="fas fa-exclamation-triangle text-warning"></i>
+            No cierre esta ventana durante la sincronización
+        </p>
+    </div>
+</div>
+
+<style>
+    .sync-loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .sync-loading-content {
+        background: white;
+        padding: 3rem;
+        border-radius: 1rem;
+        text-align: center;
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .sync-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid #e0e0e0;
+        border-top: 4px solid #28a745;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1.5rem;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .sync-progress-steps {
+        text-align: left;
+        margin-top: 2rem;
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+    }
+
+    .sync-step {
+        padding: 0.5rem 0;
+        color: #6c757d;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .sync-step.active {
+        color: #212529;
+        font-weight: 500;
+    }
+
+    .sync-step.active i {
+        color: #007bff;
+        animation: pulse 1.5s infinite;
+    }
+
+    .sync-step.completed {
+        color: #28a745;
+    }
+
+    .sync-step.completed i {
+        color: #28a745;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.4;
+        }
+    }
+
+    .sync-warning {
+        font-size: 0.9rem;
+        color: #856404;
+    }
+</style>
+
 <!-- Page Header -->
 <div class="page-header page-header-dark">
     <h1>
@@ -19,7 +145,7 @@
     <p class="text-center text-muted mb-4">Sube los archivos de la FIEL y selecciona el rango de fechas para
         sincronizar.</p>
 
-    <form action="/companies/sync/{{ company.id }}" method="POST" enctype="multipart/form-data">
+    <form id="syncForm" action="/companies/sync/{{ company.id }}" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <!-- Auth Method -->
         <div class="mb-4">
@@ -97,4 +223,42 @@
         </ul>
     </div>
 </div>
+
+<script>
+    document.getElementById('syncForm').addEventListener('submit', function (e) {
+        // Show loading overlay
+        document.getElementById('syncLoadingOverlay').style.display = 'flex';
+
+        // Animate progress steps
+        const steps = ['step1', 'step2', 'step3', 'step4'];
+        const messages = [
+            { title: 'Validando credenciales...', msg: 'Verificando archivos FIEL con el SAT.' },
+            { title: 'Solicitando facturas...', msg: 'Conexión establecida. El SAT está procesando la solicitud.' },
+            { title: 'Descargando paquetes...', msg: 'Descargando archivos XML de facturas.' },
+            { title: 'Procesando facturas...', msg: 'Guardando facturas en la base de datos.' }
+        ];
+
+        // Mark step 1 as active immediately
+        document.getElementById('step1').classList.add('active');
+
+        // Simulate progress through steps
+        let currentStep = 0;
+        const progressInterval = setInterval(() => {
+            if (currentStep < steps.length - 1) {
+                // Mark current as completed
+                document.getElementById(steps[currentStep]).classList.remove('active');
+                document.getElementById(steps[currentStep]).classList.add('completed');
+                document.getElementById(steps[currentStep]).querySelector('i').className = 'fas fa-check-circle';
+
+                // Move to next step
+                currentStep++;
+                document.getElementById(steps[currentStep]).classList.add('active');
+                document.getElementById('syncStatusTitle').textContent = messages[currentStep].title;
+                document.getElementById('syncStatusMessage').textContent = messages[currentStep].msg;
+            } else {
+                clearInterval(progressInterval);
+            }
+        }, 8000); // Every 8 seconds move to next step
+    });
+</script>
 {% endblock %}

@@ -298,12 +298,40 @@ class SATService:
             anio = None
             if informacion_global:
                 periodicidad = informacion_global.get('Periodicidad')
+                # Convert Code object to string if needed
+                if periodicidad is not None and hasattr(periodicidad, 'code'):
+                    periodicidad = periodicidad.code
+                elif periodicidad is not None:
+                    periodicidad = str(periodicidad)
+                
                 meses = informacion_global.get('Meses')
+                # Convert Code object to string if needed
+                if meses is not None and hasattr(meses, 'code'):
+                    meses = meses.code
+                elif meses is not None:
+                    meses = str(meses)
+                
                 anio = informacion_global.get('Año')
+                # Convert to int or string if needed
+                if anio is not None:
+                    try:
+                        anio = int(anio)
+                    except (ValueError, TypeError):
+                        anio = None
 
             # Extract other fields
             condiciones_de_pago = cfdi.get('CondicionesDePago')
+            if condiciones_de_pago is not None and hasattr(condiciones_de_pago, 'code'):
+                condiciones_de_pago = condiciones_de_pago.code
+            elif condiciones_de_pago is not None:
+                condiciones_de_pago = str(condiciones_de_pago)
+            
             moneda = cfdi.get('Moneda')
+            if moneda is not None and hasattr(moneda, 'code'):
+                moneda = moneda.code
+            elif moneda is not None:
+                moneda = str(moneda)
+            
             tipo_cambio = cfdi.get('TipoCambio')
             if tipo_cambio:
                 try:
@@ -312,7 +340,16 @@ class SATService:
                     tipo_cambio = None
             
             exportacion = cfdi.get('Exportacion')
+            if exportacion is not None and hasattr(exportacion, 'code'):
+                exportacion = exportacion.code
+            elif exportacion is not None:
+                exportacion = str(exportacion)
+            
             version = cfdi.get('Version')
+            if version is not None and hasattr(version, 'code'):
+                version = version.code
+            elif version is not None:
+                version = str(version)
 
             return {
                 'uuid': uuid,

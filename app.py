@@ -414,7 +414,28 @@ def create_app(config_class=Config):
         except Exception as e:
             import traceback
             traceback.print_exc()
-            flash(f'Error en sincronización: {str(e)}', 'error')
+            # Translate technical errors to user-friendly messages
+            error_str = str(e).lower()
+            if 'invalid fiel' in error_str or 'password' in error_str or 'decrypt' in error_str:
+                user_message = 'La contraseña FIEL es incorrecta o los archivos no son válidos.'
+            elif 'certificado' in error_str or 'certificate' in error_str or 'expired' in error_str:
+                user_message = 'El certificado FIEL está expirado o no es válido.'
+            elif 'timeout' in error_str or 'connection' in error_str:
+                user_message = 'No se pudo conectar con el SAT. Por favor intente más tarde.'
+            elif 'rechaz' in error_str or '5002' in error_str:
+                user_message = 'El SAT rechazó la solicitud. Intente con un rango de fechas diferente.'
+            elif '5004' in error_str or 'no se encontr' in error_str:
+                user_message = 'No se encontraron facturas en el rango de fechas seleccionado.'
+            elif '5005' in error_str or 'duplicad' in error_str:
+                user_message = 'Ya existe una solicitud en proceso. Por favor espere unos minutos.'
+            elif 'binding parameter' in error_str or 'programming' in error_str:
+                user_message = 'Hubo un problema procesando las facturas. Por favor contacte soporte técnico.'
+            else:
+                user_message = 'Ocurrió un error durante la sincronización. Por favor intente nuevamente.'
+            
+            # Log technical error for debugging
+            logger.error(f'Sync error for company {company.rfc}: {str(e)}')
+            flash(user_message, 'error')
         finally:
             # Cleanup temp files
             if 'cer_path' in locals() and os.path.exists(cer_path):
@@ -1288,4 +1309,4 @@ def create_app(config_class=Config):
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True)
+    app.run(debug=False)

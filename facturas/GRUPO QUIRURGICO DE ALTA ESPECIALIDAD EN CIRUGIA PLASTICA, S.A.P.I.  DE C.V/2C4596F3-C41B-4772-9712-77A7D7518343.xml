@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Fecha="2025-05-31T17:10:12" Sello="RdUNjOoigUNG7tAj4zT9fEiIKJ9upLZ5xkwfvkuyPO1NnqM07ZhUQdNthQ3B8p4QS5vvJ8rzvpgowwmjGIKLy6QgdNh2kN9T638KdQoN7bZhGE0BtsFIoG1km8Hd2jC3Bsse6wVux6GoYwZL0AUKUchM8ndxE3iTLbbGdAbiEeP88Q3fKlNSt4O5nhiCDXgq5t7zL4C68vQsjJ/UM2nsX9S6Ysnaw6EuJsczYT7pI2HkzsFYtmVPAdzI+ori1d1BoszDC3u8jjeNEUBd2tF4AhUc8+eOkLZjq+xEBBVSND1BFfjlkSIMRu5qAmiT5ZfVtTk3AbESy1DOvbsVJUXd2w==" FormaPago="03" NoCertificado="00001000000600298394" Certificado="MIIGvjCCBKagAwIBAgIUMDAwMDEwMDAwMDA2MDAyOTgzOTQwDQYJKoZIhvcNAQELBQAwggGwMTowOAYDVQQDDDFBLkMuIGRlbCBTZXJ2aWNpbyBkZSBBZG1pbmlzdHJhY2nDg8KzbiBUcmlidXRhcmlhMTEwLwYDVQQKDChTZXJ2aWNpbyBkZSBBZG1pbmlzdHJhY2nDg8KzbiBUcmlidXRhcmlhMRowGAYDVQQLDBFTQVQtSUVTIEF1dGhvcml0eTEyMDAGCSqGSIb3DQEJARYjc2VydmljaW9zYWxjb250cmlidXllbnRlQHNhdC5nb2IubXgxJjAkBgNVBAkMHUF2LiBIaWRhbGdvIDc3LCBDb2wuIEd1ZXJyZXJvMQ4wDAYDVQQRDAUwNjMwMDELMAkGA1UEBhMCTVgxHDAaBgNVBAgME0NpdWRhZCBkZSBNw4PCqXhpY28xFjAUBgNVBAcMDUN1YXVodMODwqltb2MxFTATBgNVBC0TDFNBVDk3MDcwMU5OMzFdMFsGCSqGSIb3DQEJAhNOcmVzcG9uc2FibGU6IEFkbWluaXN0cmFjacOzbiBDZW50cmFsIGRlIFNlcnZpY2lvcyBUcmlidXRhcmlvcyBhbCBDb250cmlidXllbnRlMB4XDTIzMDUyMTE3MjMxMVoXDTI3MDUyMTE3MjMxMVowggFfMUkwRwYDVQQDE0BHUlVQTyBRVUlSVVJHSUNPIERFIEFMVEEgRVNQRUNJQUxJREFEIEVOIENJUlVHSUEgUExBU1RJQ0EgUyBBIFAgMVAwTgYDVQQpE0dHUlVQTyBRVUlSVVJHSUNPIERFIEFMVEEgRVNQRUNJQUxJREFEIEVOIENJUlVHSUEgUExBU1RJQ0EgUyBBIFAgSSBERSBDVjFJMEcGA1UEChNAR1JVUE8gUVVJUlVSR0lDTyBERSBBTFRBIEVTUEVDSUFMSURBRCBFTiBDSVJVR0lBIFBMQVNUSUNBIFMgQSBQIDElMCMGA1UELRMcR1FBMTcwMTI0RlFBIC8gTE9TRjY4MTExOEdZMzEeMBwGA1UEBRMVIC8gTE9TRjY4MTExOEhHVFBMTDAwMS4wLAYDVQQLEyVHUlVQTyBRVUlSVVJHSUNPIERFIEFMVEEgRVNQRUNJQUxJREFEMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApfYcrizjdpsDNM9nSNcjTGweP86xt8Oq6T0KA317NZ8TT1eyFv07tINqXu7ArjvUi+VRUvk5U+xmTNgdsYiMcrfsac1CbeGPl84N+tyBtl4RtI4MYBtRRWNH1wcFCghcLFfQD/1LhJ2LTVPQlwhTJShhRACAoSvpLIZpQytfHGXjmxGMs1AqX0Ob6pNMOtpfmLLeezPZssliLZJzN72OGtR/9UKGd54lCdEGjEmXw/p/Fx411MasZ0sb/VAtO58ynnBFmgUBs2bcFFQYdWR86oGF5Nd0tXBbOpOmJcVF/iS7uHxb1hMg1XZp/GlPbE4ybhP+UCFEhnHZRZKsVkd6cQIDAQABox0wGzAMBgNVHRMBAf8EAjAAMAsGA1UdDwQEAwIGwDANBgkqhkiG9w0BAQsFAAOCAgEAdNp5pEX2dOp3LLyNFrnBrUw6cKswAjFJUkXhOUXcgnSoncK1YHVEy5wcQI/nHvAdP3/GHptE48DC4j3WhlTMkavPDc/W+cxgfeY+ztcxiZm2/EFcmzmhsmHeAIWBF3Qmgd4RN/26p+4d5Lajy1/3d4QleGzwPkVWE3CTedo37mAwqzx7NRx4TYT2/03BWkge3fb+X0pPLnr9HtjR45bdgPvu55GzC9sOm8WW8JidaMPn0Ygj6E3wAcwAe6ItafXBviEiPPlQBMKIStYuTWfeZKpHm9R+Zs/WXWODP3R/VXtDoTw3DMZhTK67lsRUNN6CqI7Tr9co1EFz7IAJg6gIjI8/ZzTw3KXrvlqba1W0ZkdZXPgMJ83P1LDpL6bf3n2C0NFyvh8Rikn5S/NS+/u7vdjCGbBk7aery4C4ntPp8Uu1m/iLcMiwIm04VOS9DAhAEIf/wIpZS8gXQKgvJJyv2lDewVdQcq4jVlxOQrrsUnoknA2IbarN0NwhR18leYw9sjPj51/JbLpvPZkVov73rHHVx7i4rsvdMj7wmO787FeW+KTJ5p+InfvdjeZPYHWkgsz4ZEwDuWWqjOWH3KG7dUnbdYLOzjhDcFhHf6PZOrwvaewQ3VGufqHKSRrh+UrpmNA+aV3h1ISZGeyA0oHFX5qZVoZCf2OfAs5DIEUrOAk=" SubTotal="92465.52" Moneda="MXN" Total="107260.00" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" LugarExpedicion="54050" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cfdi:InformacionGlobal Periodicidad="03" Meses="05" Año="2025" />
+  <cfdi:Emisor Rfc="GQA170124FQA" Nombre="GRUPO QUIRURGICO DE ALTA ESPECIALIDAD EN CIRUGIA PLASTICA" RegimenFiscal="626" />
+  <cfdi:Receptor Rfc="XAXX010101000" Nombre="PUBLICO EN GENERAL" DomicilioFiscalReceptor="54050" RegimenFiscalReceptor="616" UsoCFDI="S01" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="01010101" Cantidad="1.00" ClaveUnidad="ACT" Unidad="Actividad" Descripcion="SERVICIOS HOSPITALARIOS MAYO" ValorUnitario="34482.76" Importe="34482.760000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="34482.760000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="5517.241600" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+      <cfdi:CuentaPredial Numero="0921212611000000" />
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="01010101" Cantidad="1.00" ClaveUnidad="ACT" Unidad="Actividad" Descripcion="SERVICIOS HOSPITALARIOS MAYO" ValorUnitario="6896.55" Importe="6896.550000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="6896.550000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="1103.448000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+      <cfdi:CuentaPredial Numero="0921212611000000" />
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="01010101" Cantidad="1.00" ClaveUnidad="ACT" Unidad="Actividad" Descripcion="SERVICIOS HOSPITALARIOS MAYO" ValorUnitario="8620.69" Importe="8620.690000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="8620.690000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="1379.310400" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+      <cfdi:CuentaPredial Numero="0921212611000000" />
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="01010101" Cantidad="1.00" ClaveUnidad="ACT" Unidad="Actividad" Descripcion="SERVICIOS HOSPITALARIOS MAYO" ValorUnitario="18965.52" Importe="18965.520000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="18965.520000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="3034.483200" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+      <cfdi:CuentaPredial Numero="0921212611000000" />
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="01010101" Cantidad="1.00" ClaveUnidad="ACT" Unidad="Actividad" Descripcion="SERVICIOS HOSPITALARIOS MAYO" ValorUnitario="4534.48" Importe="4534.480000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="4534.480000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="725.516800" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+      <cfdi:CuentaPredial Numero="0921212611000000" />
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="01010101" Cantidad="1.00" ClaveUnidad="ACT" Unidad="Actividad" Descripcion="SERVICIOS HOSPITALARIOS MAYO" ValorUnitario="18965.52" Importe="18965.520000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="18965.520000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="3034.483200" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+      <cfdi:CuentaPredial Numero="0921212611000000" />
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="14794.48">
+    <cfdi:Traslados>
+      <cfdi:Traslado Base="92465.52" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="14794.48" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" Version="1.1" UUID="2C4596F3-C41B-4772-9712-77A7D7518343" FechaTimbrado="2025-06-02T17:11:14" RfcProvCertif="SAT970701NN3" SelloCFD="RdUNjOoigUNG7tAj4zT9fEiIKJ9upLZ5xkwfvkuyPO1NnqM07ZhUQdNthQ3B8p4QS5vvJ8rzvpgowwmjGIKLy6QgdNh2kN9T638KdQoN7bZhGE0BtsFIoG1km8Hd2jC3Bsse6wVux6GoYwZL0AUKUchM8ndxE3iTLbbGdAbiEeP88Q3fKlNSt4O5nhiCDXgq5t7zL4C68vQsjJ/UM2nsX9S6Ysnaw6EuJsczYT7pI2HkzsFYtmVPAdzI+ori1d1BoszDC3u8jjeNEUBd2tF4AhUc8+eOkLZjq+xEBBVSND1BFfjlkSIMRu5qAmiT5ZfVtTk3AbESy1DOvbsVJUXd2w==" NoCertificadoSAT="00001000000705250068" SelloSAT="KaBE1cCGB6LAB1GV3tDNrIQXavYfGCaZT5rY4bt74Wpv7YRBuHILBK7m8fTDgzkzgvlB7ahzkme4zt2yrtVwAl1CQNm2FN/J8OY6dDoVVdmL6uQdBA5JSH9K/vgIrJbwkcJj055HPnVEK5g/g5yJgCCjJ9c+lc4HimL3uGanX0UtOAIQlMS94aFt4XccOQJMtCPZVruyYa4d8QEXhwN8W8+Z2mj9fEURxjSIIrXkCzyuU5HhZ0d+eft0jcEjFoluAvcmIGOIekkTHYWwWzCCDE2XolYT5EeZAkM7zjasZ6GV5jS9d52Ff/+Nnzmc7PY2xw9PL/9F99NDoTMv7nEzvw==" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>
