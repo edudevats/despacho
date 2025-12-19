@@ -6,12 +6,71 @@ from extensions import db, login_manager, migrate, mail, cache, csrf, init_exten
 from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from services.sat_service import SATService
+from services.sat_service import SATService, SATError
 from services.qr_service import QRService
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+def get_or_create_supplier(company_id, rfc, business_name):
+    """
+    Obtiene o crea un proveedor y actualiza su información básica.
+    
+    Args:
+        company_id: ID de la empresa
+        rfc: RFC del proveedor
+        business_name: Razón social del proveedor
+        
+    Returns:
+        Supplier: Objeto del proveedor
+    """
+    supplier = Supplier.query.filter_by(
+        company_id=company_id,
+        rfc=rfc
+    ).first()
+    
+    if not supplier:
+        supplier = Supplier(
+            company_id=company_id,
+            rfc=rfc,
+            business_name=business_name or rfc,
+            active=True
+        )
+        db.session.add(supplier)
+        db.session.flush()  # Para obtener el ID
+    else:
+        # Actualizar nombre si viene más completo
+        if business_name and len(business_name) > len(supplier.business_name or ''):
+            supplier.business_name = business_name
+    
+    return supplier
+
+
+def update_supplier_stats(supplier_id):
+    """
+    Recalcula las estadísticas de un proveedor basándose en sus facturas.
+    
+    Args:
+        supplier_id: ID del proveedor
+    """
+    supplier = Supplier.query.get(supplier_id)
+    if not supplier:
+        return
+    
+    invoices = Invoice.query.filter_by(supplier_id=supplier_id).all()
+    
+    if invoices:
+        supplier.invoice_count = len(invoices)
+        supplier.total_invoiced = sum(inv.total for inv in invoices)
+        supplier.first_invoice_date = min(inv.date for inv in invoices)
+        supplier.last_invoice_date = max(inv.date for inv in invoices)
+    else:
+        supplier.invoice_count = 0
+        supplier.total_invoiced = 0
+        supplier.first_invoice_date = None
+        supplier.last_invoice_date = None
 
 
 def create_app(config_class=Config):
@@ -35,6 +94,11 @@ def create_app(config_class=Config):
             return "{:,.2f}".format(float(value))
         except (ValueError, TypeError):
             return "0.00"
+
+    @app.template_filter('chunk_split')
+    def chunk_split(body, chunklen=76, end='\r\n'):
+        if not body: return ""
+        return end.join(body[i:i+chunklen] for i in range(0, len(body), chunklen))
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -207,10 +271,28 @@ def create_app(config_class=Config):
     def add_company():
         rfc = request.form['rfc']
         name = request.form['name']
+        logo = request.files.get('logo')
+        
+        logo_path = None
+        if logo and logo.filename:
+            # Validar extensión
+            allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+            if '.' in logo.filename:
+                ext = logo.filename.rsplit('.', 1)[1].lower()
+                if ext in allowed_extensions:
+                    # Crear carpeta logos si no existe
+                    logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
+                    os.makedirs(logos_dir, exist_ok=True)
+                    
+                    # Guardar con nombre único (RFC)
+                    filename = f"{rfc}.{ext}"
+                    logo_path = os.path.join(logos_dir, filename)
+                    logo.save(logo_path)
         
         new_company = Company(
             rfc=rfc, 
-            name=name
+            name=name,
+            logo_path=logo_path
         )
         db.session.add(new_company)
         db.session.commit()
@@ -267,6 +349,28 @@ def create_app(config_class=Config):
         if request.method == 'POST':
             company.rfc = request.form['rfc']
             company.name = request.form['name']
+            
+            # Manejar logo
+            logo = request.files.get('logo')
+            if logo and logo.filename:
+                allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+                if '.' in logo.filename:
+                    ext = logo.filename.rsplit('.', 1)[1].lower()
+                    if ext in allowed_extensions:
+                        logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
+                        os.makedirs(logos_dir, exist_ok=True)
+                        
+                        # Eliminar logo anterior si existe
+                        if company.logo_path and os.path.exists(company.logo_path):
+                            try:
+                                os.remove(company.logo_path)
+                            except:
+                                pass
+                        
+                        filename = f"{company.rfc}.{ext}"
+                        logo_path = os.path.join(logos_dir, filename)
+                        logo.save(logo_path)
+                        company.logo_path = logo_path
             
             try:
                 db.session.commit()
@@ -358,9 +462,26 @@ def create_app(config_class=Config):
                 
                 # Check if exists in database
                 if not Invoice.query.filter_by(uuid=inv_data['uuid']).first():
+                    # Determine Movement Type
+                    # Simple rule: if company is the issuer (emisor) = INCOME
+                    #              if company is the receiver = EXPENSE
+                    is_emitted = (inv_data['issuer_rfc'] == company.rfc)
+                    mov_type = 'INCOME' if is_emitted else 'EXPENSE'
+                    
+                    # For received invoices (expenses), create/update supplier
+                    supplier_id = None
+                    if not is_emitted:
+                        supplier = get_or_create_supplier(
+                            company_id=company.id,
+                            rfc=inv_data['issuer_rfc'],
+                            business_name=inv_data.get('issuer_name')
+                        )
+                        supplier_id = supplier.id
+                    
                     new_inv = Invoice(
                         uuid=inv_data['uuid'],
                         company_id=company.id,
+                        supplier_id=supplier_id,  # Set supplier_id for received invoices
                         date=inv_data['date'],
                         total=inv_data['total'],
                         subtotal=inv_data['subtotal'],
@@ -387,11 +508,9 @@ def create_app(config_class=Config):
                     )
                     db.session.add(new_inv)
                     
-                    # Determine Movement Type
-                    # Simple rule: if company is the issuer (emisor) = INCOME
-                    #              if company is the receiver = EXPENSE
-                    is_emitted = (inv_data['issuer_rfc'] == company.rfc)
-                    mov_type = 'INCOME' if is_emitted else 'EXPENSE'
+                    # Update supplier statistics if this is a received invoice
+                    if supplier_id:
+                        update_supplier_stats(supplier_id)
                             
                     new_mov = Movement(
                         invoice=new_inv,
@@ -411,6 +530,13 @@ def create_app(config_class=Config):
             else:
                 flash(f'Sincronización finalizada. No se encontraron facturas nuevas. Las facturas existentes ya están en facturas/{safe_company_name}/', 'warning')
             
+        except SATError as sat_e:
+            import traceback
+            traceback.print_exc()
+            # SATError contains detailed user-friendly messages with suggested actions
+            user_message = sat_e.get_user_message()
+            logger.error(f'SAT error for company {company.rfc}: Code={sat_e.code}, Message={sat_e.mensaje}, Raw={sat_e.raw_message}')
+            flash(user_message, 'error')
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -422,12 +548,6 @@ def create_app(config_class=Config):
                 user_message = 'El certificado FIEL está expirado o no es válido.'
             elif 'timeout' in error_str or 'connection' in error_str:
                 user_message = 'No se pudo conectar con el SAT. Por favor intente más tarde.'
-            elif 'rechaz' in error_str or '5002' in error_str:
-                user_message = 'El SAT rechazó la solicitud. Intente con un rango de fechas diferente.'
-            elif '5004' in error_str or 'no se encontr' in error_str:
-                user_message = 'No se encontraron facturas en el rango de fechas seleccionado.'
-            elif '5005' in error_str or 'duplicad' in error_str:
-                user_message = 'Ya existe una solicitud en proceso. Por favor espere unos minutos.'
             elif 'binding parameter' in error_str or 'programming' in error_str:
                 user_message = 'Hubo un problema procesando las facturas. Por favor contacte soporte técnico.'
             else:
@@ -457,20 +577,67 @@ def create_app(config_class=Config):
     #         return render_template('csf_auth.html', company=company)
     #     ...
 
+    @app.route('/invoices/<uuid>/download/<file_type>')
+    @login_required
+    def download_invoice_file(uuid, file_type):
+        """
+        Descarga el archivo XML o genera y descarga PDF de una factura.
+        
+        Args:
+            uuid: UUID de la factura
+            file_type: 'xml' o 'pdf'
+        """
+        invoice = Invoice.query.filter_by(uuid=uuid).first_or_404()
+        
+        # TODO: Agregar verificación de que el usuario tenga acceso a esta empresa
+        # if invoice.company_id not in user_accessible_companies:
+        #     abort(403)
+        
+        if file_type == 'xml':
+            # Servir XML almacenado
+            return Response(
+                invoice.xml_content,
+                mimetype='application/xml',
+                headers={'Content-Disposition': f'attachment; filename={uuid}.xml'}
+            )
+        elif file_type == 'pdf':
+            # Generar PDF bajo demanda desde el XML usando satcfdi
+            try:
+                # Genera PDF usando satcfdi (genera PDFs profesionales de alta calidad)
+                pdf_bytes = SATService.generate_pdf(invoice.xml_content)
+                
+                return Response(
+                    pdf_bytes,
+                    mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename={uuid}.pdf'}
+                )
+            except Exception as e:
+                logger.error(f'Error generando PDF para factura {uuid}: {str(e)}')
+                flash('Error al generar el PDF. Por favor intente nuevamente.', 'error')
+                return redirect(request.referrer or url_for('index'))
+        else:
+            from flask import abort
+            abort(400)
+
+    @app.route('/logos/<filename>')
+    def serve_logo(filename):
+        """Servir archivos de logos de empresas"""
+        from flask import send_from_directory
+        logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
+        return send_from_directory(logos_dir, filename)
+
+
     @app.route('/movements')
     @login_required
     def movements():
-        """Show list of companies for movements"""
-        companies_list = Company.query.all()
-        return render_template('movements_list.html', companies=companies_list)
+        """Redirect to unified search/movements page"""
+        return redirect(url_for('search_advanced'))
     
     @app.route('/companies/<int:company_id>/movements')
     @login_required
     def company_movements(company_id):
-        """Show movements for a specific company"""
-        company = Company.query.get_or_404(company_id)
-        movements_list = Movement.query.filter_by(company_id=company_id).order_by(Movement.date.desc()).all()
-        return render_template('movements.html', movements=movements_list, company=company)
+        """Redirect to unified search page for specific company"""
+        return redirect(url_for('search_invoices', company_id=company_id))
     
     @app.route('/sync')
     @login_required
@@ -1123,6 +1290,200 @@ def create_app(config_class=Config):
             flash(f'Error al registrar pago: {str(e)}', 'error')
             
         return redirect(url_for('taxes_dashboard', company_id=company_id))
+    
+    # ==================== SALES ANALYTICS ROUTES ====================
+    
+    @app.route('/sales')
+    @login_required
+    def sales_list():
+        """Show list of companies for sales analysis"""
+        companies_list = Company.query.all()
+        return render_template('sales_list.html', companies=companies_list)
+    
+    @app.route('/companies/<int:company_id>/sales')
+    @login_required
+    def sales_dashboard(company_id):
+        """Dashboard de Análisis de Ventas con comparación año a año"""
+        company = Company.query.get_or_404(company_id)
+        
+        today = datetime.now()
+        
+        # Get year parameters from query string, default to current and previous year
+        current_year = request.args.get('current_year', type=int, default=today.year)
+        previous_year = request.args.get('previous_year', type=int, default=today.year - 1)
+        
+        # Get available years from invoices
+        available_years = db.session.query(
+            extract('year', Invoice.date).label('year')
+        ).filter(
+            Invoice.company_id == company_id,
+            Invoice.type == 'I'  # Only income invoices
+        ).distinct().order_by(extract('year', Invoice.date).desc()).all()
+        available_years = [int(y[0]) for y in available_years]
+        
+        # Monthly comparison data
+        monthly_comparison = []
+        month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        
+        # Chart data arrays
+        chart_months = []
+        chart_current_sales = []
+        chart_previous_sales = []
+        chart_growth_percentage = []
+        
+        # Annual totals
+        annual_current_total = 0
+        annual_previous_total = 0
+        annual_current_invoices = 0
+        annual_previous_invoices = 0
+        
+        for month_num in range(1, 13):
+            # Current year sales
+            current_sales_query = db.session.query(
+                func.sum(Invoice.total).label('total'),
+                func.count(Invoice.id).label('count')
+            ).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'I',
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).first()
+            
+            current_sales = float(current_sales_query.total or 0)
+            current_invoices = int(current_sales_query.count or 0)
+            
+            # Previous year sales
+            previous_sales_query = db.session.query(
+                func.sum(Invoice.total).label('total'),
+                func.count(Invoice.id).label('count')
+            ).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'I',
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == previous_year
+            ).first()
+            
+            previous_sales = float(previous_sales_query.total or 0)
+            previous_invoices = int(previous_sales_query.count or 0)
+            
+            # Calculate growth
+            growth_amount = current_sales - previous_sales
+            growth_percentage = ((growth_amount / previous_sales) * 100) if previous_sales > 0 else 0
+            
+            # Calculate average ticket
+            current_avg_ticket = (current_sales / current_invoices) if current_invoices > 0 else 0
+            previous_avg_ticket = (previous_sales / previous_invoices) if previous_invoices > 0 else 0
+            
+            # Accumulate annual totals
+            annual_current_total += current_sales
+            annual_previous_total += previous_sales
+            annual_current_invoices += current_invoices
+            annual_previous_invoices += previous_invoices
+            
+            # Chart data
+            chart_months.append(month_names[month_num - 1][:3])  # Abbreviated
+            chart_current_sales.append(current_sales)
+            chart_previous_sales.append(previous_sales)
+            chart_growth_percentage.append(round(growth_percentage, 2))
+            
+            monthly_comparison.append({
+                'month_num': month_num,
+                'month_name': month_names[month_num - 1],
+                'current_sales': current_sales,
+                'previous_sales': previous_sales,
+                'growth_amount': growth_amount,
+                'growth_percentage': round(growth_percentage, 2),
+                'current_invoices': current_invoices,
+                'previous_invoices': previous_invoices,
+                'current_avg_ticket': current_avg_ticket,
+                'previous_avg_ticket': previous_avg_ticket
+            })
+        
+        # Annual summary
+        annual_growth_amount = annual_current_total - annual_previous_total
+        annual_growth_percentage = ((annual_growth_amount / annual_previous_total) * 100) if annual_previous_total > 0 else 0
+        
+        current_avg_monthly = annual_current_total / 12
+        previous_avg_monthly = annual_previous_total / 12
+        
+        # Find best and worst months
+        months_with_sales = [m for m in monthly_comparison if m['current_sales'] > 0]
+        best_month = max(months_with_sales, key=lambda x: x['current_sales']) if months_with_sales else None
+        worst_month = min(months_with_sales, key=lambda x: x['current_sales']) if months_with_sales else None
+        
+        # Find month with highest growth
+        months_with_growth = [m for m in monthly_comparison if m['previous_sales'] > 0]
+        best_growth_month = max(months_with_growth, key=lambda x: x['growth_percentage']) if months_with_growth else None
+        worst_growth_month = min(months_with_growth, key=lambda x: x['growth_percentage']) if months_with_growth else None
+        
+        annual_summary = {
+            'current_year': current_year,
+            'previous_year': previous_year,
+            'current_total': annual_current_total,
+            'previous_total': annual_previous_total,
+            'growth_amount': annual_growth_amount,
+            'growth_percentage': round(annual_growth_percentage, 2),
+            'current_avg_monthly': current_avg_monthly,
+            'previous_avg_monthly': previous_avg_monthly,
+            'current_invoices': annual_current_invoices,
+            'previous_invoices': annual_previous_invoices,
+            'current_avg_ticket': (annual_current_total / annual_current_invoices) if annual_current_invoices > 0 else 0,
+            'previous_avg_ticket': (annual_previous_total / annual_previous_invoices) if annual_previous_invoices > 0 else 0,
+            'best_month': best_month,
+            'worst_month': worst_month,
+            'best_growth_month': best_growth_month,
+            'worst_growth_month': worst_growth_month
+        }
+        
+        # Top customers (receivers of income invoices)
+        top_customers = db.session.query(
+            Invoice.receiver_rfc,
+            Invoice.receiver_name,
+            func.sum(Invoice.total).label('total_sales'),
+            func.count(Invoice.id).label('invoice_count')
+        ).filter(
+            Invoice.company_id == company_id,
+            Invoice.type == 'I',
+            extract('year', Invoice.date) == current_year
+        ).group_by(
+            Invoice.receiver_rfc,
+            Invoice.receiver_name
+        ).order_by(
+            func.sum(Invoice.total).desc()
+        ).limit(10).all()
+        
+        top_customers_data = []
+        for customer in top_customers:
+            total_sales = float(customer.total_sales)
+            invoice_count = int(customer.invoice_count)
+            avg_ticket = total_sales / invoice_count if invoice_count > 0 else 0
+            percentage = (total_sales / annual_current_total * 100) if annual_current_total > 0 else 0
+            
+            top_customers_data.append({
+                'rfc': customer.receiver_rfc,
+                'name': customer.receiver_name or customer.receiver_rfc,
+                'total_sales': total_sales,
+                'invoice_count': invoice_count,
+                'avg_ticket': avg_ticket,
+                'percentage': round(percentage, 2)
+            })
+        
+        # Chart data for JavaScript
+        chart_data = {
+            'months': chart_months,
+            'current_sales': chart_current_sales,
+            'previous_sales': chart_previous_sales,
+            'growth_percentage': chart_growth_percentage
+        }
+        
+        return render_template('sales/dashboard.html',
+                             company=company,
+                             available_years=available_years,
+                             monthly_comparison=monthly_comparison,
+                             annual_summary=annual_summary,
+                             top_customers=top_customers_data,
+                             chart_data=chart_data)
     
     @app.route('/companies/<int:company_id>/search')
     @login_required

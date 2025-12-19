@@ -115,3 +115,81 @@
 2025-12-11 11:16:01 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2025-12-11 11:41:24 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2025-12-11 11:48:55 - __main__ - ERROR - [app.py:437] - Sync error for company GQA170124FQA: SAT no aceptó la solicitud. Código: 301, Mensaje: XML Mal Formado:La solicitud de descarga no es válida. Fecha final invalida
+2025-12-11 12:55:26 - __main__ - ERROR - [app.py:437] - Sync error for company GQA170124FQA: SAT no aceptó la solicitud. Código: 301, Mensaje: XML Mal Formado:La solicitud de descarga no es válida. Fecha final invalida
+2025-12-14 19:25:13 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 21:53:01 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 21:54:38 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 21:54:51 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 21:55:10 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura CEB1A5D4-F001-40B3-A3E5-219D71D790E5: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 21:55:22 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 21:56:31 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 21:56:41 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 21:57:46 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 21:58:00 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 21:58:14 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 21:58:20 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 22:06:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 22:06:36 - __main__ - ERROR - [app.py:494] - Error generando PDF para factura 7403ED89-9510-4D0E-8BE2-15994877E166: Error al generar PDF desde XML: weasyprint is not installed
+2025-12-14 22:06:48 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-14 22:07:00 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 13:33:18 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 13:48:05 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 13:51:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 13:51:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 14:05:02 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 14:15:51 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 14:16:22 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 14:19:23 - app - ERROR - [app.py:838] - Exception on /companies/2/suppliers/16 [GET]
+Traceback (most recent call last):
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\desarrollo\sat\working\app.py", line 738, in supplier_detail
+    
+    
+    ...<4 lines>...
+    def suppliers(company_id):
+    ^^^^^^^^^
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\templating.py", line 149, in render_template
+    template = app.jinja_env.get_or_select_template(template_name_or_list)
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\jinja2\environment.py", line 1084, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\jinja2\environment.py", line 1013, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\jinja2\environment.py", line 972, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\jinja2\loaders.py", line 126, in load
+    source, filename, uptodate = self.get_source(environment, name)
+                                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\templating.py", line 65, in get_source
+    return self._get_source_fast(environment, template)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ameri\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\flask\templating.py", line 99, in _get_source_fast
+    raise TemplateNotFound(template)
+jinja2.exceptions.TemplateNotFound: suppliers/detail.html
+2025-12-15 17:58:23 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 18:01:40 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 18:22:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-15 18:28:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-18 01:10:09 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-18 01:16:04 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-18 19:02:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-18 19:04:51 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-18 19:04:59 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2025-12-18 19:04:59 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2025-12-18 19:04:59 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2025-12-18 19:19:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-18 19:20:06 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2025-12-18 19:20:06 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2025-12-18 19:20:06 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.

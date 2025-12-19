@@ -16,7 +16,7 @@
 <!-- Add Company Form -->
 <div class="form-section mb-4">
     <h3>Agregar Nueva Empresa</h3>
-    <form action="/companies/add" method="POST">
+    <form action="/companies/add" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
             <div class="col-md-6 mb-3">
@@ -27,6 +27,13 @@
                 <label for="name" class="form-label">Nombre / Razón Social</label>
                 <input type="text" class="form-control" name="name" id="name" required
                     placeholder="Nombre de la empresa">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12 mb-3">
+                <label for="logo" class="form-label">Logo (opcional)</label>
+                <input type="file" class="form-control" name="logo" id="logo" accept="image/*">
+                <small class="text-muted">Formatos: PNG, JPG, JPEG, GIF. Se usará en los PDFs de facturas.</small>
             </div>
         </div>
         <div class="text-center">

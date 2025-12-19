@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis de Ventas - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2><i class="fas fa-chart-line me-2"></i>Análisis de Ventas</h2>
+        <p class="text-muted">{{ company.name }} ({{ company.rfc }})</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('company_dashboard', company_id=company.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Volver al Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Year Selector -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('sales_dashboard', company_id=company.id) }}"
+            class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Año Actual</label>
+                <select name="current_year" class="form-select">
+                    {% for year in available_years %}
+                    <option value="{{ year }}" {% if year==annual_summary.current_year %}selected{% endif %}>
+                        {{ year }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Comparar con</label>
+                <select name="previous_year" class="form-select">
+                    {% for year in available_years %}
+                    <option value="{{ year }}" {% if year==annual_summary.previous_year %}selected{% endif %}>
+                        {{ year }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-sync-alt me-1"></i> Actualizar Comparación
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary shadow-sm h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-2">Ventas {{ annual_summary.current_year }}</h6>
+                <h3 class="text-primary">${{ annual_summary.current_total|format_currency }}</h3>
+                <small class="text-muted">{{ annual_summary.current_invoices }} facturas</small>
+                {% if annual_summary.growth_percentage > 0 %}
+                <div class="mt-2">
+                    <span class="badge bg-success">
+                        <i class="fas fa-arrow-up"></i> {{ annual_summary.growth_percentage }}%
+                    </span>
+                </div>
+                {% elif annual_summary.growth_percentage < 0 %} <div class="mt-2">
+                    <span class="badge bg-danger">
+                        <i class="fas fa-arrow-down"></i> {{ annual_summary.growth_percentage }}%
+                    </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<div class="col-md-3">
+    <div class="card border-secondary shadow-sm h-100">
+        <div class="card-body text-center">
+            <h6 class="text-muted mb-2">Ventas {{ annual_summary.previous_year }}</h6>
+            <h3 class="text-secondary">${{ annual_summary.previous_total|format_currency }}</h3>
+            <small class="text-muted">{{ annual_summary.previous_invoices }} facturas</small>
+        </div>
+    </div>
+</div>
+<div class="col-md-3">
+    <div class="card border-success shadow-sm h-100">
+        <div class="card-body text-center">
+            <h6 class="text-muted mb-2">Crecimiento Absoluto</h6>
+            <h3 class="{% if annual_summary.growth_amount >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ${{ annual_summary.growth_amount|format_currency }}
+            </h3>
+            <small class="text-muted">Diferencia en pesos</small>
+        </div>
+    </div>
+</div>
+<div class="col-md-3">
+    <div class="card border-info shadow-sm h-100">
+        <div class="card-body text-center">
+            <h6 class="text-muted mb-2">Crecimiento %</h6>
+            <h3 class="{% if annual_summary.growth_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+                {{ annual_summary.growth_percentage }}%
+            </h3>
+            <small class="text-muted">Año sobre año</small>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Charts -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-chart-bar me-2"></i>Comparación Mensual de Ventas
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="salesComparisonChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-success">
+                    <i class="fas fa-chart-line me-2"></i>Crecimiento Porcentual Mensual
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="growthChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Comparison Table -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-table me-2"></i>Análisis Mensual Detallado
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th>Mes</th>
+                        <th class="text-primary">Ventas {{ annual_summary.current_year }}</th>
+                        <th class="text-secondary">Ventas {{ annual_summary.previous_year }}</th>
+                        <th>Crecimiento ($)</th>
+                        <th>Crecimiento (%)</th>
+                        <th>Facturas {{ annual_summary.current_year }}</th>
+                        <th>Ticket Promedio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in monthly_comparison %}
+                    <tr>
+                        <td class="fw-bold">{{ data.month_name }}</td>
+                        <td class="text-end text-primary">${{ data.current_sales|format_currency }}</td>
+                        <td class="text-end text-secondary">${{ data.previous_sales|format_currency }}</td>
+                        <td
+                            class="text-end fw-bold {% if data.growth_amount >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            ${{ data.growth_amount|format_currency }}
+                        </td>
+                        <td
+                            class="text-end fw-bold {% if data.growth_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ data.growth_percentage }}%
+                        </td>
+                        <td class="text-center">{{ data.current_invoices }}</td>
+                        <td class="text-end">${{ data.current_avg_ticket|format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="table-primary fw-bold">
+                        <td>TOTAL</td>
+                        <td class="text-end">${{ annual_summary.current_total|format_currency }}</td>
+                        <td class="text-end">${{ annual_summary.previous_total|format_currency }}</td>
+                        <td class="text-end">${{ annual_summary.growth_amount|format_currency }}</td>
+                        <td class="text-end">{{ annual_summary.growth_percentage }}%</td>
+                        <td class="text-center">{{ annual_summary.current_invoices }}</td>
+                        <td class="text-end">${{ annual_summary.current_avg_ticket|format_currency }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Insights Section -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow h-100">
+            <div class="card-header py-3 bg-success text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-lightbulb me-2"></i>Insights de Rendimiento
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if annual_summary.best_month %}
+                <div class="mb-3">
+                    <strong class="text-success"><i class="fas fa-trophy me-1"></i> Mejor Mes:</strong>
+                    <span class="ms-2">{{ annual_summary.best_month.month_name }} - ${{
+                        annual_summary.best_month.current_sales|format_currency }}</span>
+                </div>
+                {% endif %}
+
+                {% if annual_summary.worst_month %}
+                <div class="mb-3">
+                    <strong class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i> Mes Más Bajo:</strong>
+                    <span class="ms-2">{{ annual_summary.worst_month.month_name }} - ${{
+                        annual_summary.worst_month.current_sales|format_currency }}</span>
+                </div>
+                {% endif %}
+
+                {% if annual_summary.best_growth_month %}
+                <div class="mb-3">
+                    <strong class="text-info"><i class="fas fa-rocket me-1"></i> Mayor Crecimiento:</strong>
+                    <span class="ms-2">{{ annual_summary.best_growth_month.month_name }} - {{
+                        annual_summary.best_growth_month.growth_percentage }}%</span>
+                </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <strong><i class="fas fa-calculator me-1"></i> Promedio Mensual:</strong>
+                    <span class="ms-2">${{ annual_summary.current_avg_monthly|format_currency }}</span>
+                </div>
+
+                <div class="mb-3">
+                    <strong><i class="fas fa-receipt me-1"></i> Ticket Promedio:</strong>
+                    <span class="ms-2">${{ annual_summary.current_avg_ticket|format_currency }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Customers -->
+    <div class="col-md-6">
+        <div class="card shadow h-100">
+            <div class="card-header py-3 bg-primary text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-users me-2"></i>Top 10 Clientes {{ annual_summary.current_year }}
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if top_customers %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-center">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for customer in top_customers %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>
+                                    <small class="text-muted d-block">{{ customer.rfc }}</small>
+                                    {{ customer.name[:30] }}{% if customer.name|length > 30 %}...{% endif %}
+                                </td>
+                                <td class="text-end">${{ customer.total_sales|format_currency }}</td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary">{{ customer.percentage }}%</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center">No hay datos de clientes disponibles</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Info Alert -->
+<div class="alert alert-info">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Nota:</strong> Este análisis se basa en las facturas de ingreso (tipo I) registradas en el sistema.
+    Los cálculos de crecimiento comparan {{ annual_summary.current_year }} vs {{ annual_summary.previous_year }}.
+</div>
+
+<script>
+    // Sales Comparison Chart
+    const salesCtx = document.getElementById('salesComparisonChart').getContext('2d');
+    new Chart(salesCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_data.months | tojson }},
+        datasets: [{
+            label: '{{ annual_summary.current_year }}',
+            data: {{ chart_data.current_sales | tojson }},
+        backgroundColor: 'rgba(13, 110, 253, 0.7)',
+        borderColor: 'rgba(13, 110, 253, 1)',
+        borderWidth: 1
+        }, {
+            label: '{{ annual_summary.previous_year }}',
+            data: {{ chart_data.previous_sales | tojson }},
+        backgroundColor: 'rgba(108, 117, 125, 0.7)',
+        borderColor: 'rgba(108, 117, 125, 1)',
+        borderWidth: 1
+        }]
+    },
+        options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            tooltip: {
+                callbacks: {
+                    label: function (context) {
+                        return context.dataset.label + ': $' + context.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 2 });
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function (value) {
+                        return '$' + value.toLocaleString('es-MX');
+                    }
+                }
+            }
+        }
+    }
+});
+
+    // Growth Percentage Chart
+    const growthCtx = document.getElementById('growthChart').getContext('2d');
+    const growthData = {{ chart_data.growth_percentage | tojson }};
+    const growthColors = growthData.map(val => val >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)');
+    const growthBorderColors = growthData.map(val => val >= 0 ? 'rgba(25, 135, 84, 1)' : 'rgba(220, 53, 69, 1)');
+
+    new Chart(growthCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_data.months | tojson }},
+        datasets: [{
+            label: 'Crecimiento %',
+            data: growthData,
+            backgroundColor: growthColors,
+            borderColor: growthBorderColors,
+            borderWidth: 1
+        }]
+    },
+        options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function (context) {
+                        return 'Crecimiento: ' + context.parsed.y + '%';
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                ticks: {
+                    callback: function (value) {
+                        return value + '%';
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

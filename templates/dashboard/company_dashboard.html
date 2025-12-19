@@ -136,6 +136,7 @@
                                     <th>Fecha</th>
                                     <th>Proveedor</th>
                                     <th class="text-end">Monto</th>
+                                    <th class="text-center">Descargas</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -144,6 +145,16 @@
                                     <td>{{ invoice.date.strftime('%d/%m/%Y') }}</td>
                                     <td>{{ invoice.issuer_name or invoice.receiver_name }}</td>
                                     <td class="text-end">${{ invoice.total|format_currency }}</td>
+                                    <td class="text-center">
+                                        <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
+                                            class="btn btn-sm btn-outline-primary" title="Descargar XML">
+                                            <i class="fas fa-file-code"></i>
+                                        </a>
+                                        <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}"
+                                            class="btn btn-sm btn-outline-danger" title="Descargar PDF">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </a>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

@@ -60,10 +60,14 @@ PyJWT==2.9.0
 setuptools>=65.0.0
 
 # SAT CFDI
-satcfdi
+satcfdi==4.8.2
+
+# PDF Generation (satcfdi uses weasyprint/reportlab internally)
+weasyprint==62.3
+reportlab==4.4.6
 
 # XML Processing
-lxml
+lxml==6.0.0
 
 # Date utilities
-python-dateutil
+python-dateutil==2.9.0.post0

@@ -26,6 +26,7 @@ class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rfc = db.Column(db.String(13), unique=True, nullable=False)
     name = db.Column(db.String(128), nullable=False)
+    logo_path = db.Column(db.String(512), nullable=True)  # Path to company logo
     fiel_cer_path = db.Column(db.String(256), nullable=True)
     fiel_key_path = db.Column(db.String(256), nullable=True)
     fiel_password_enc = db.Column(db.String(256), nullable=True) # Encrypted password

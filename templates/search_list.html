@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Búsqueda Avanzada - SAT Contabilidad{% endblock %}
+{% block title %}Facturas y Movimientos - SAT Contabilidad{% endblock %}
 
 {% block content %}
 <!-- Page Header -->
 <div class="page-header page-header-blue">
     <h1>
-        <i class="fas fa-search"></i> Búsqueda Avanzada
+        <i class="fas fa-file-invoice"></i> Facturas y Movimientos
     </h1>
     <div class="user-info">
-        Busca facturas en tus empresas
+        Consulta y busca facturas de tus empresas
     </div>
 </div>
 
@@ -36,7 +36,7 @@
                         <td><span class="badge bg-primary">{{ company.rfc }}</span></td>
                         <td class="text-center">
                             <a href="/companies/{{ company.id }}/search" class="btn btn-primary btn-sm">
-                                <i class="fas fa-search"></i> Buscar Facturas
+                                <i class="fas fa-file-invoice"></i> Ver Facturas
                             </a>
                         </td>
                     </tr>
@@ -56,16 +56,16 @@
 <!-- Information -->
 <div class="card mt-4">
     <div class="card-header bg-light">
-        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Búsqueda Avanzada de Facturas</h5>
+        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Búsqueda y Filtrado de Facturas</h5>
     </div>
     <div class="card-body">
-        <p>Utiliza filtros avanzados para encontrar facturas específicas:</p>
+        <p>Consulta todas las facturas y movimientos de tu empresa con filtros avanzados:</p>
         <ul class="mb-0">
             <li><strong>Por proveedor:</strong> Filtra facturas de un proveedor específico</li>
-            <li><strong>Por categoría:</strong> Encuentra gastos de una categoría</li>
             <li><strong>Por rango de fechas:</strong> Busca facturas en un período específico</li>
             <li><strong>Por monto:</strong> Filtra por rangos de montos</li>
             <li><strong>Por texto:</strong> Busca en descripciones y nombres</li>
+            <li><strong>Descargas:</strong> Descarga XML o genera PDF de cualquier factura</li>
         </ul>
     </div>
 </div>

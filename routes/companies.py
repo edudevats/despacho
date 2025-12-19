@@ -11,7 +11,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from extensions import db
 from models import Company, Invoice, Movement, Category, Supplier
-from services.sat_service import SATService
+from services.sat_service import SATService, SATError
 
 logger = logging.getLogger(__name__)
 
@@ -229,9 +229,22 @@ def sync_company(company_id):
         else:
             flash('Sincronización finalizada. No se encontraron facturas nuevas.', 'warning')
         
+    except SATError as sat_e:
+        logger.error(f'SAT error for company {company.rfc}: Code={sat_e.code}, Message={sat_e.mensaje}')
+        flash(sat_e.get_user_message(), 'error')
     except Exception as e:
         logger.exception(f"Sync error for company {company_id}")
-        flash(f'Error en sincronización: {str(e)}', 'error')
+        # Translate technical errors to user-friendly messages
+        error_str = str(e).lower()
+        if 'invalid fiel' in error_str or 'password' in error_str or 'decrypt' in error_str:
+            user_message = 'La contraseña FIEL es incorrecta o los archivos no son válidos.'
+        elif 'certificado' in error_str or 'certificate' in error_str or 'expired' in error_str:
+            user_message = 'El certificado FIEL está expirado o no es válido.'
+        elif 'timeout' in error_str or 'connection' in error_str:
+            user_message = 'No se pudo conectar con el SAT. Por favor intente más tarde.'
+        else:
+            user_message = 'Ocurrió un error durante la sincronización. Por favor intente nuevamente.'
+        flash(user_message, 'error')
     
     finally:
         # Cleanup temp files

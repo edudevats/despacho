@@ -5,6 +5,87 @@ import time
 import zipfile
 import io
 import base64
+import os
+from satcfdi.cfdi import CFDI
+from satcfdi import render
+
+
+
+# SAT Error Codes Map - Moved to module level for reuse
+SAT_ERROR_CODES = {
+    '300': {
+        'mensaje': 'Usuario No Válido',
+        'accion': 'Verifique que el RFC y FIEL correspondan a la empresa correcta.'
+    },
+    '301': {
+        'mensaje': 'XML Mal Formado (Información inválida)',
+        'accion': 'Verifique que el RFC receptor sea correcto.'
+    },
+    '302': {
+        'mensaje': 'Sello Mal Formado',
+        'accion': 'Verifique que los archivos FIEL (.cer y .key) sean válidos.'
+    },
+    '303': {
+        'mensaje': 'Sello no corresponde con RFC Solicitante',
+        'accion': 'El FIEL no corresponde al RFC de la empresa. Use el FIEL correcto.'
+    },
+    '304': {
+        'mensaje': 'Certificado Revocado o Caduco',
+        'accion': 'Su certificado FIEL ha expirado o fue revocado. Renueve su FIEL en el portal del SAT.'
+    },
+    '305': {
+        'mensaje': 'Certificado Inválido',
+        'accion': 'Verifique que esté usando un certificado FIEL válido (no CSD).'
+    },
+    '5000': {
+        'mensaje': 'Solicitud recibida con éxito',
+        'accion': 'La solicitud fue procesada correctamente.'
+    },
+    '5002': {
+        'mensaje': 'Se agotaron las solicitudes de por vida para estos parámetros',
+        'accion': 'Intente cambiando las fechas de inicio o fin. El SAT limita las consultas por rango de fechas.'
+    },
+    '5003': {
+        'mensaje': 'Tope máximo de elementos excedido',
+        'accion': 'Reduzca el rango de fechas para obtener menos facturas por solicitud.'
+    },
+    '5004': {
+        'mensaje': 'No se encontró información',
+        'accion': 'No hay facturas en el rango de fechas seleccionado. Verifique las fechas.'
+    },
+    '5005': {
+        'mensaje': 'Solicitud duplicada',
+        'accion': 'Ya existe una solicitud en proceso con estos parámetros. Espere unos minutos e intente nuevamente.'
+    },
+    '5011': {
+        'mensaje': 'Límite de descargas diarias alcanzado',
+        'accion': 'Ha alcanzado el límite diario de descargas. Intente nuevamente mañana.'
+    },
+    '404': {
+        'mensaje': 'Error no controlado del SAT',
+        'accion': 'Intente nuevamente. Si persiste, reporte el problema.'
+    }
+}
+
+
+class SATError(Exception):
+    """Custom exception for SAT-specific errors with user-friendly messages."""
+    
+    def __init__(self, code, mensaje=None, accion=None, raw_message=None):
+        self.code = str(code)
+        error_info = SAT_ERROR_CODES.get(self.code, {
+            'mensaje': f'Error desconocido del SAT (Código: {code})',
+            'accion': 'Intente nuevamente o contacte soporte técnico.'
+        })
+        self.mensaje = mensaje or error_info['mensaje']
+        self.accion = accion or error_info['accion']
+        self.raw_message = raw_message
+        super().__init__(f"[{self.code}] {self.mensaje}")
+    
+    def get_user_message(self):
+        """Returns a formatted message for display to the user."""
+        return f"Error del SAT ({self.code}): {self.mensaje}. {self.accion}"
+
 
 class SATService:
     def __init__(self, rfc, fiel_cer, fiel_key, fiel_password):
@@ -32,6 +113,108 @@ class SATService:
             return True
         except Exception as e:
             raise Exception(f"Invalid FIEL credentials: {str(e)}")
+
+    class Catalogos:
+        @staticmethod
+        def catTipoComprobante(valor):
+            # Valida si es objeto Code de satcfdi o string
+            code = valor.code if hasattr(valor, 'code') else str(valor)
+            mapa = {
+                'I': 'Ingreso',
+                'E': 'Egreso',
+                'T': 'Traslado',
+                'N': 'Nómina',
+                'P': 'Pago'
+            }
+            return f"{code} - {mapa.get(code, '')}"
+
+        @staticmethod
+        def catFormaPago(valor):
+            code = valor.code if hasattr(valor, 'code') else str(valor)
+            return code  # Podríamos agregar mapa completo si se requiere
+
+        @staticmethod
+        def catMetodoPago(valor):
+            code = valor.code if hasattr(valor, 'code') else str(valor)
+            mapa = {'PUE': 'Pago en una sola exhibición', 'PPD': 'Pago en parcialidades o diferido'}
+            return f"{code} - {mapa.get(code, '')}"
+
+        @staticmethod
+        def catExportacion(valor):
+            code = valor.code if hasattr(valor, 'code') else str(valor)
+            mapa = {'01': 'No aplica', '02': 'Definitiva', '03': 'Temporal', '04': 'Definitiva con clave distinta'}
+            return f"{code} - {mapa.get(code, '')}"
+
+        @staticmethod
+        def catPeriodicidad(valor):
+            code = valor.code if hasattr(valor, 'code') else str(valor)
+            mapa = {'01': 'Diaria', '02': 'Semanal', '03': 'Quincenal', '04': 'Mensual', '05': 'Bimestral'}
+            return f"{code} - {mapa.get(code, '')}"
+        
+        @staticmethod
+        def catMeses(valor):
+            code = valor.code if hasattr(valor, 'code') else str(valor)
+            return code
+
+        @staticmethod
+        def catRegimenFiscal(valor):
+             code = valor.code if hasattr(valor, 'code') else str(valor)
+             return code
+
+        @staticmethod
+        def catUsoCFDI(valor):
+             code = valor.code if hasattr(valor, 'code') else str(valor)
+             return code
+        
+        @staticmethod
+        def catObjetoImp(valor):
+             code = valor.code if hasattr(valor, 'code') else str(valor)
+             mapa = {'01': 'No objeto de impuesto', '02': 'Sí objeto de impuesto', '03': 'Sí objeto de impuesto y no obligado a desglose', '04': 'Sí objeto de impuesto y no causa impuesto'}
+             return f"{code} - {mapa.get(code, '')}"
+
+        @staticmethod
+        def catImpuesto(valor):
+             code = valor.code if hasattr(valor, 'code') else str(valor)
+             mapa = {'001': 'ISR', '002': 'IVA', '003': 'IEPS'}
+             return f"{code} - {mapa.get(code, '')}"
+
+    class AttrDict(dict):
+        """Helper to allow dot access to dictionary keys."""
+        def __getattr__(self, name):
+            if name in self:
+                return self[name]
+            raise AttributeError(f"'AttrDict' object has no attribute '{name}'. Available keys: {list(self.keys())}")
+        
+        def __setattr__(self, name, value):
+             self[name] = value
+
+    @staticmethod
+    def generate_pdf(xml_content):
+        """
+        Genera PDF bytes desde contenido XML usando satcfdi.
+        Esta implementación usa la librería satcfdi que genera PDFs de alta calidad
+        con formato profesional para facturas mexicanas (CFDI).
+        
+        Args:
+            xml_content: Contenido XML del CFDI (string o bytes)
+            
+        Returns:
+            bytes: Contenido del PDF generado
+        """
+        if isinstance(xml_content, bytes):
+            xml_content = xml_content.decode('utf-8')
+        
+        # Cargar el CFDI desde el XML
+        cfdi = CFDI.from_string(xml_content)
+        
+        # Generar PDF usando satcfdi render
+        # pdf_bytes retorna los bytes del PDF directamente
+        pdf_content = render.pdf_bytes(cfdi)
+        
+        return pdf_content
+
+
+
 
     def _process_bulk_download(self, request_id):
         """
@@ -101,30 +284,10 @@ class SATService:
                 return results
             
             elif state == EstadoSolicitud.RECHAZADA or state == 5 or state == 'Rechazada':
-                # SAT Error Codes Map
-                SAT_ERRORS = {
-                    '300': 'Usuario No Válido',
-                    '301': 'XML Mal Formado (Información inválida, ej. RFC receptor)',
-                    '302': 'Sello Mal Formado',
-                    '303': 'Sello no corresponde con RFC Solicitante',
-                    '304': 'Certificado Revocado o Caduco',
-                    '305': 'Certificado Inválido',
-                    '5000': 'Solicitud recibida con éxito',
-                    '5002': 'Se agotaron las solicitudes "de por vida" para estos parámetros. Intente cambiando fechas.',
-                    '5003': 'Tope máximo de elementos excedido por solicitud',
-                    '5004': 'No se encontró información para la solicitud',
-                    '5005': 'Solicitud duplicada (Ya existe una solicitud vigente con estos parámetros)',
-                    '5011': 'Se ha alcanzado el límite de descargas diarias por folio',
-                    '404': 'Error no controlado (Intente nuevamente o reporte RMA)'
-                }
-                
-                reason = SAT_ERRORS.get(str(code_state), f"Código SAT desconocido: {code_state}")
-                if code_state == 'Solicitud rechazada': 
-                     reason = f"{code_state} (Verifique permisos/fechas)"
-                
-                error_msg = f"SAT rechazó la solicitud ({code_state}): {reason}"
-                print(error_msg)
-                raise Exception(error_msg)
+                # Use the module-level SAT_ERROR_CODES and SATError exception
+                code_str = str(code_state) if code_state else 'unknown'
+                print(f"SAT rechazó la solicitud. Código: {code_str}")
+                raise SATError(code=code_str, raw_message=f"EstadoSolicitud: {state}")
             
             time.sleep(10) # Wait 10 seconds before next check
         
