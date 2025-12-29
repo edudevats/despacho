@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Facturas PPD - {{ company.name }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-blue">
+    <h1>
+        <i class="fas fa-hourglass-half"></i> Facturas PPD
+        <span class="badge bg-light text-primary">{{ company.name }}</span>
+    </h1>
+    <div class="user-info">
+        Acredita facturas PPD al mes correspondiente
+    </div>
+</div>
+
+<!-- Info Card -->
+<div class="alert alert-info mb-4">
+    <i class="fas fa-info-circle"></i>
+    <strong>¿Qué son las facturas PPD?</strong><br>
+    Las facturas con método de pago <strong>PPD (Pago en Parcialidades o Diferido)</strong> no se registran
+    automáticamente.
+    El contador debe acreditarlas al mes en que se liquide el pago para que aparezcan en los reportes de
+    ingresos/egresos.
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-4" id="ppdTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button"
+            role="tab">
+            <i class="fas fa-hourglass-half text-warning"></i>
+            Pendientes <span class="badge bg-warning text-dark">{{ pending_invoices|length }}</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="accredited-tab" data-bs-toggle="tab" data-bs-target="#accredited" type="button"
+            role="tab">
+            <i class="fas fa-check-circle text-success"></i>
+            Acreditadas <span class="badge bg-success">{{ accredited_invoices|length }}</span>
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="ppdTabsContent">
+    <!-- Pending Tab -->
+    <div class="tab-pane fade show active" id="pending" role="tabpanel">
+        <div class="card">
+            <div class="card-header bg-warning bg-opacity-25">
+                <h5 class="mb-0"><i class="fas fa-hourglass-half"></i> Facturas PPD Pendientes de Acreditación</h5>
+            </div>
+            <div class="card-body">
+                {% if pending_invoices %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Fecha Factura</th>
+                                <th>Emisor/Receptor</th>
+                                <th>UUID</th>
+                                <th class="text-end">Total</th>
+                                <th>Tipo</th>
+                                <th class="text-center">Acreditar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invoice in pending_invoices %}
+                            <tr {% if selected_invoice_id==invoice.id %}class="table-warning" {% endif %}>
+                                <td>{{ invoice.date.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    {% if invoice.issuer_rfc == company.rfc %}
+                                    <strong>→ {{ invoice.receiver_name or invoice.receiver_rfc }}</strong>
+                                    <small class="text-muted d-block">Emisor: Tu empresa</small>
+                                    {% else %}
+                                    <strong>← {{ invoice.issuer_name or invoice.issuer_rfc }}</strong>
+                                    <small class="text-muted d-block">Proveedor</small>
+                                    {% endif %}
+                                </td>
+                                <td><small class="font-monospace">{{ invoice.uuid[:8] }}...</small></td>
+                                <td class="text-end text-money">${{ invoice.total|format_currency }}</td>
+                                <td>
+                                    {% if invoice.issuer_rfc == company.rfc %}
+                                    <span class="badge bg-success">Ingreso</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Egreso</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                        data-bs-target="#acreditarModal" data-invoice-id="{{ invoice.id }}"
+                                        data-invoice-uuid="{{ invoice.uuid }}" data-invoice-total="{{ invoice.total }}"
+                                        data-invoice-date="{{ invoice.date.strftime('%Y-%m-%d') }}">
+                                        <i class="fas fa-calendar-check"></i> Acreditar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-success text-center mb-0">
+                    <i class="fas fa-check-circle"></i> No hay facturas PPD pendientes de acreditación.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Accredited Tab -->
+    <div class="tab-pane fade" id="accredited" role="tabpanel">
+        <div class="card">
+            <div class="card-header bg-success bg-opacity-25">
+                <h5 class="mb-0"><i class="fas fa-check-circle"></i> Facturas PPD Acreditadas</h5>
+            </div>
+            <div class="card-body">
+                {% if accredited_invoices %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Fecha Factura</th>
+                                <th>Emisor/Receptor</th>
+                                <th class="text-end">Total</th>
+                                <th>Tipo</th>
+                                <th class="text-center">Mes Acreditado</th>
+                                <th>Fecha Acreditación</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invoice in accredited_invoices %}
+                            <tr>
+                                <td>{{ invoice.date.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    {% if invoice.issuer_rfc == company.rfc %}
+                                    <strong>→ {{ invoice.receiver_name or invoice.receiver_rfc }}</strong>
+                                    {% else %}
+                                    <strong>← {{ invoice.issuer_name or invoice.issuer_rfc }}</strong>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end text-money">${{ invoice.total|format_currency }}</td>
+                                <td>
+                                    {% if invoice.issuer_rfc == company.rfc %}
+                                    <span class="badge bg-success">Ingreso</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Egreso</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary">
+                                        {{ ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre',
+                                        'Diciembre'][invoice.ppd_mes_acreditado] }}
+                                        {{ invoice.ppd_anio_acreditado }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if invoice.ppd_fecha_acreditacion %}
+                                    {{ invoice.ppd_fecha_acreditacion.strftime('%Y-%m-%d %H:%M') }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <form
+                                        action="{{ url_for('ppd_desacreditar', company_id=company.id, invoice_id=invoice.id) }}"
+                                        method="POST" class="d-inline"
+                                        onsubmit="return confirm('¿Desea remover la acreditación de esta factura?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            title="Remover Acreditación">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info text-center mb-0">
+                    <i class="fas fa-info-circle"></i> No hay facturas PPD acreditadas aún.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Back Button -->
+<div class="mt-4">
+    <a href="{{ url_for('company_dashboard', company_id=company.id) }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Volver al Dashboard
+    </a>
+</div>
+
+<!-- Acreditar Modal -->
+<div class="modal fade" id="acreditarModal" tabindex="-1" aria-labelledby="acreditarModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="acreditarModalLabel">
+                    <i class="fas fa-calendar-check"></i> Acreditar Factura PPD
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('ppd_acreditar', company_id=company.id, invoice_id=0) }}" method="POST"
+                id="acreditarForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <strong>Factura:</strong> <span id="modal-invoice-uuid"></span><br>
+                        <strong>Total:</strong> $<span id="modal-invoice-total"></span><br>
+                        <strong>Fecha Emisión:</strong> <span id="modal-invoice-date"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="mes_acreditado" class="form-label">Mes a Acreditar *</label>
+                        <select class="form-select" id="mes_acreditado" name="mes_acreditado" required>
+                            <option value="">Seleccione el mes...</option>
+                            <option value="1">Enero</option>
+                            <option value="2">Febrero</option>
+                            <option value="3">Marzo</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Mayo</option>
+                            <option value="6">Junio</option>
+                            <option value="7">Julio</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Septiembre</option>
+                            <option value="10">Octubre</option>
+                            <option value="11">Noviembre</option>
+                            <option value="12">Diciembre</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="anio_acreditado" class="form-label">Año *</label>
+                        <select class="form-select" id="anio_acreditado" name="anio_acreditado" required>
+                            <option value="">Seleccione el año...</option>
+                            {% for year in range(2020, current_year + 2) %}
+                            <option value="{{ year }}" {% if year==current_year %}selected{% endif %}>{{ year }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check"></i> Acreditar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const acreditarModal = document.getElementById('acreditarModal');
+        acreditarModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const invoiceId = button.getAttribute('data-invoice-id');
+            const invoiceUuid = button.getAttribute('data-invoice-uuid');
+            const invoiceTotal = button.getAttribute('data-invoice-total');
+            const invoiceDate = button.getAttribute('data-invoice-date');
+
+            // Update modal content
+            document.getElementById('modal-invoice-uuid').textContent = invoiceUuid;
+            document.getElementById('modal-invoice-total').textContent = parseFloat(invoiceTotal).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+            document.getElementById('modal-invoice-date').textContent = invoiceDate;
+
+            // Update form action
+            const form = document.getElementById('acreditarForm');
+            form.action = form.action.replace('/0/acreditar', '/' + invoiceId + '/acreditar');
+        });
+    });
+</script>
+{% endblock %}

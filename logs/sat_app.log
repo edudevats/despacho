@@ -193,3 +193,19 @@ jinja2.exceptions.TemplateNotFound: suppliers/detail.html
 2025-12-18 19:20:06 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
 2025-12-18 19:20:06 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
 2025-12-18 19:20:06 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2025-12-19 00:52:50 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-19 00:53:57 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-19 01:06:31 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-19 01:06:53 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-19 01:07:25 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-19 01:07:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-22 15:29:33 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-28 23:51:56 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:08:52 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:11:37 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:14:09 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:14:17 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:14:48 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:15:13 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:15:31 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2025-12-29 00:16:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO

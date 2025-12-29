@@ -90,6 +90,7 @@
                         <th>Descripción</th>
                         <th>UUID</th>
                         <th class="text-end">Total</th>
+                        <th class="text-center">Método</th>
                         <th>Tipo</th>
                         <th class="text-center">Descargas</th>
                         <th></th>
@@ -114,6 +115,30 @@
                         </td>
                         <td><small class="font-monospace">{{ invoice.uuid[:8] }}...</small></td>
                         <td class="text-end text-money">${{ invoice.total|format_currency }}</td>
+
+                        <!-- PPD/PUE Method Indicator -->
+                        <td class="text-center">
+                            {% if invoice.metodo_pago == 'PPD' %}
+                            {% if invoice.ppd_acreditado %}
+                            <span class="badge bg-success"
+                                title="PPD Acreditado: {{ invoice.ppd_mes_acreditado }}/{{ invoice.ppd_anio_acreditado }}">
+                                <i class="fas fa-check-circle"></i> PPD
+                            </span>
+                            {% else %}
+                            <a href="{{ url_for('ppd_list', company_id=company.id) }}?invoice_id={{ invoice.id }}"
+                                class="badge bg-warning text-dark text-decoration-none"
+                                title="PPD Pendiente - Click para acreditar">
+                                <i class="fas fa-hourglass-half"></i> PPD
+                            </a>
+                            {% endif %}
+                            {% else %}
+                            <span class="badge bg-light text-success"
+                                title="Pago en Una Exhibición - Registrado automáticamente">
+                                <i class="fas fa-bolt"></i> PUE
+                            </span>
+                            {% endif %}
+                        </td>
+
                         <td>
                             {# Simple rule: if company is issuer = INGRESO, otherwise = EGRESO #}
                             {% if invoice.issuer_rfc == company.rfc %}

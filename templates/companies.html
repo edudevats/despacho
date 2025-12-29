@@ -79,6 +79,10 @@
                             <a href="/companies/csf/{{ company.id }}" class="btn btn-sm btn-outline-info">
                                 <i class="fas fa-download"></i> CSF
                             </a>
+                            <a href="{{ url_for('ppd_list', company_id=company.id) }}"
+                                class="btn btn-sm btn-outline-warning text-dark">
+                                <i class="fas fa-hourglass-half"></i> PPD
+                            </a>
                             <button type="button" class="btn btn-sm btn-outline-danger"
                                 onclick="confirmDelete('{{ company.id }}', '{{ company.name }}')">
                                 <i class="fas fa-trash"></i> Eliminar

@@ -129,6 +129,12 @@ class Invoice(db.Model):
     exchange_rate = db.Column(db.Float)     # TipoCambio
     exportation = db.Column(db.String(5))   # Exportacion
     version = db.Column(db.String(5))       # 3.3, 4.0
+    
+    # Campos para acreditación de facturas PPD (Pago en Parcialidades o Diferido)
+    ppd_acreditado = db.Column(db.Boolean, default=False)  # Si la factura PPD fue acreditada
+    ppd_fecha_acreditacion = db.Column(db.DateTime, nullable=True)  # Cuándo se acreditó
+    ppd_mes_acreditado = db.Column(db.Integer, nullable=True)  # Mes al que se acredita (1-12)
+    ppd_anio_acreditado = db.Column(db.Integer, nullable=True)  # Año al que se acredita
 
     company = db.relationship('Company', backref=db.backref('invoices', lazy=True))
 

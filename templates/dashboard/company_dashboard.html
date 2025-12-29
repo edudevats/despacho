@@ -18,6 +18,9 @@
             <a href="{{ url_for('taxes_dashboard', company_id=company.id) }}" class="btn btn-info me-2">
                 <i class="fas fa-calculator"></i> Impuestos
             </a>
+            <a href="{{ url_for('ppd_list', company_id=company.id) }}" class="btn btn-warning me-2">
+                <i class="fas fa-hourglass-half"></i> Facturas PPD
+            </a>
             <a href="{{ url_for('companies') }}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left"></i> Volver
             </a>

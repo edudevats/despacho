@@ -112,6 +112,17 @@
                             <a class="nav-link" href="/search/advanced">
                                 <i class="fas fa-file-invoice"></i> Facturas y Movimientos
                             </a>
+                            {% set nav_company = company or selected_company %}
+                            {% if nav_company %}
+                            <ul class="nav flex-column ms-3">
+                                <li class="nav-item">
+                                    <a class="nav-link py-1"
+                                        href="{{ url_for('ppd_list', company_id=nav_company.id) }}">
+                                        <small><i class="fas fa-hourglass-half"></i> Facturas PPD</small>
+                                    </a>
+                                </li>
+                            </ul>
+                            {% endif %}
                         </li>
                     </ul>
 

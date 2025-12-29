@@ -511,16 +511,20 @@ def create_app(config_class=Config):
                     # Update supplier statistics if this is a received invoice
                     if supplier_id:
                         update_supplier_stats(supplier_id)
-                            
-                    new_mov = Movement(
-                        invoice=new_inv,
-                        company_id=company.id,
-                        amount=inv_data['total'],
-                        type=mov_type,
-                        description=f"Factura {inv_data['issuer_rfc'] if not is_emitted else inv_data['receiver_rfc']}",
-                        date=inv_data['date']
-                    )
-                    db.session.add(new_mov)
+                    
+                    # Solo crear Movement automáticamente para facturas PUE
+                    # Las facturas PPD requieren acreditación manual del contador
+                    metodo_pago = inv_data.get('metodo_pago', 'PUE')
+                    if metodo_pago != 'PPD':
+                        new_mov = Movement(
+                            invoice=new_inv,
+                            company_id=company.id,
+                            amount=inv_data['total'],
+                            type=mov_type,
+                            description=f"Factura {inv_data['issuer_rfc'] if not is_emitted else inv_data['receiver_rfc']}",
+                            date=inv_data['date']
+                        )
+                        db.session.add(new_mov)
                     count += 1
             
             db.session.commit()
@@ -947,6 +951,136 @@ def create_app(config_class=Config):
         
 
     
+
+    # ==================== PPD MANAGEMENT ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/ppd')
+    @login_required
+    def ppd_list(company_id):
+        """Gestión de facturas PPD (Pago en Parcialidades o Diferido)"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Facturas PPD pendientes (no acreditadas)
+        pending_invoices = Invoice.query.filter(
+            Invoice.company_id == company_id,
+            Invoice.metodo_pago == 'PPD',
+            Invoice.ppd_acreditado == False
+        ).order_by(Invoice.date.asc()).all()
+        
+        # Facturas PPD ya acreditadas
+        accredited_invoices = Invoice.query.filter(
+            Invoice.company_id == company_id,
+            Invoice.metodo_pago == 'PPD',
+            Invoice.ppd_acreditado == True
+        ).order_by(Invoice.ppd_anio_acreditado.desc(), Invoice.ppd_mes_acreditado.desc()).all()
+        
+        # Get selected invoice from query param for highlighting
+        selected_invoice_id = request.args.get('invoice_id', type=int)
+        
+        from datetime import datetime
+        return render_template('ppd/list.html',
+            company=company,
+            pending_invoices=pending_invoices,
+            accredited_invoices=accredited_invoices,
+            selected_invoice_id=selected_invoice_id,
+            current_year=datetime.now().year
+        )
+
+    @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/acreditar', methods=['POST'])
+    @login_required
+    def ppd_acreditar(company_id, invoice_id):
+        """Acreditar una factura PPD a un mes específico"""
+        company = Company.query.get_or_404(company_id)
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        if invoice.metodo_pago != 'PPD':
+            flash('Solo se pueden acreditar facturas PPD', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        mes = request.form.get('mes_acreditado', type=int)
+        anio = request.form.get('anio_acreditado', type=int)
+        
+        if not mes or not anio:
+            flash('Debe seleccionar mes y año', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        try:
+            from datetime import datetime
+            
+            # 1. Update Invoice status
+            invoice.ppd_acreditado = True
+            invoice.ppd_mes_acreditado = mes
+            invoice.ppd_anio_acreditado = anio
+            invoice.ppd_fecha_acreditacion = datetime.now()
+            
+            # 2. Create Movement
+            # Set date to the 1st of the accredited month/year so it appears in that month's reports
+            movement_date = datetime(anio, mes, 1)
+            
+            # Determine type (Ingreso/Egreso)
+            is_emitted = (invoice.issuer_rfc == company.rfc)
+            mov_type = 'INCOME' if is_emitted else 'EXPENSE'
+            
+            description = f"Factura PPD {invoice.uuid[:8]}... (Acreditada en {mes}/{anio})"
+            
+            new_mov = Movement(
+                invoice=invoice,
+                company_id=company.id,
+                amount=invoice.total,
+                type=mov_type,
+                description=description,
+                date=movement_date,
+                source='manual_ppd'
+            )
+            db.session.add(new_mov)
+            
+            db.session.commit()
+            flash('Factura acreditada correctamente.', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al acreditar factura: {str(e)}', 'error')
+            
+        return redirect(url_for('ppd_list', company_id=company_id))
+
+    @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/desacreditar', methods=['POST'])
+    @login_required
+    def ppd_desacreditar(company_id, invoice_id):
+        """Remover acreditación de una factura PPD"""
+        company = Company.query.get_or_404(company_id)
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        try:
+            # 1. Delete associated Movement
+            if invoice.movement:
+                db.session.delete(invoice.movement)
+            else:
+                # Fallback if relationship is not set but movement exists (search manually)
+                Movement.query.filter_by(invoice_id=invoice.id).delete()
+            
+            # 2. Reset Invoice status
+            invoice.ppd_acreditado = False
+            invoice.ppd_mes_acreditado = None
+            invoice.ppd_anio_acreditado = None
+            invoice.ppd_fecha_acreditacion = None
+            
+            db.session.commit()
+            flash('Acreditación removida correctamente.', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al remover acreditación: {str(e)}', 'error')
+            
+        return redirect(url_for('ppd_list', company_id=company_id))
+
     # ==================== INVENTORY ROUTES ====================
 
     @app.route('/inventory')
@@ -1141,34 +1275,34 @@ def create_app(config_class=Config):
         chart_isr_estimated = []
         
         for month_num in range(1, 13):
-            # IVA Trasladado (Cobrado en Ventas)
+            # IVA Trasladado (Cobrado en Ventas) - invoices where company is the issuer
             iva_collected = db.session.query(func.sum(Invoice.tax)).filter(
                 Invoice.company_id == company_id,
-                Invoice.type == 'I',  # Ingreso
+                Invoice.issuer_rfc == company.rfc,  # Company issued this invoice (income)
                 extract('month', Invoice.date) == month_num,
                 extract('year', Invoice.date) == current_year
             ).scalar() or 0
             
-            # IVA Acreditable (Pagado en Gastos)
+            # IVA Acreditable (Pagado en Gastos) - invoices where company is the receiver
             iva_deductible = db.session.query(func.sum(Invoice.tax)).filter(
                 Invoice.company_id == company_id,
-                Invoice.type == 'E',  # Egreso
+                Invoice.receiver_rfc == company.rfc,  # Company received this invoice (expense)
                 extract('month', Invoice.date) == month_num,
                 extract('year', Invoice.date) == current_year
             ).scalar() or 0
             
-            # Ingresos del mes (para ISR)
+            # Ingresos del mes (para ISR) - invoices where company is the issuer
             month_income = db.session.query(func.sum(Invoice.subtotal)).filter(
                 Invoice.company_id == company_id,
-                Invoice.type == 'I',
+                Invoice.issuer_rfc == company.rfc,  # Company issued this invoice (income)
                 extract('month', Invoice.date) == month_num,
                 extract('year', Invoice.date) == current_year
             ).scalar() or 0
             
-            # Egresos del mes (para ISR)
+            # Egresos del mes (para ISR) - invoices where company is the receiver
             month_expense = db.session.query(func.sum(Invoice.subtotal)).filter(
                 Invoice.company_id == company_id,
-                Invoice.type == 'E',
+                Invoice.receiver_rfc == company.rfc,  # Company received this invoice (expense)
                 extract('month', Invoice.date) == month_num,
                 extract('year', Invoice.date) == current_year
             ).scalar() or 0
