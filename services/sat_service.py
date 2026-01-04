@@ -538,7 +538,30 @@ class SATService:
                 'currency': moneda,
                 'exchange_rate': tipo_cambio,
                 'exportation': exportacion,
-                'version': version
+                'version': version,
+                # New fields for granular tracking
+                # Comprobante
+                'serie': cfdi.get('Serie'),
+                'folio': cfdi.get('Folio'),
+                'lugar_expedicion': cfdi.get('LugarExpedicion'),
+                'no_certificado': cfdi.get('NoCertificado'),
+                'sello': cfdi.get('Sello'),
+                'certificado': cfdi.get('Certificado'),
+                
+                # Emisor
+                'regimen_fiscal_emisor': emisor.get('RegimenFiscal'),
+                
+                # Receptor
+                'regimen_fiscal_receptor': receptor.get('RegimenFiscalReceptor'),
+                'domicilio_fiscal_receptor': receptor.get('DomicilioFiscalReceptor'),
+                
+                # TimbreFiscalDigital
+                'fecha_timbrado': (lambda x: datetime.fromisoformat(x.replace('Z', '+00:00')) if x and isinstance(x, str) else x)(
+                    tfd.get('FechaTimbrado') if isinstance(tfd, dict) else (tfd[0].get('FechaTimbrado') if isinstance(tfd, list) and tfd else None)
+                ),
+                'rfc_prov_certif': tfd.get('RfcProvCertif') if isinstance(tfd, dict) else (tfd[0].get('RfcProvCertif') if isinstance(tfd, list) and tfd else None),
+                'sello_sat': tfd.get('SelloSAT') if isinstance(tfd, dict) else (tfd[0].get('SelloSAT') if isinstance(tfd, list) and tfd else None),
+                'no_certificado_sat': tfd.get('NoCertificadoSAT') if isinstance(tfd, dict) else (tfd[0].get('NoCertificadoSAT') if isinstance(tfd, list) and tfd else None),
             }
         except Exception as e:
             print(f"Error parsing XML: {e}")

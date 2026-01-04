@@ -209,3 +209,135 @@ jinja2.exceptions.TemplateNotFound: suppliers/detail.html
 2025-12-29 00:15:13 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2025-12-29 00:15:31 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2025-12-29 00:16:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:34:59 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:34:59 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:55:31 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:55:56 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:56:20 - app - ERROR - [app.py:838] - Exception on /companies/2/inventory [GET]
+Traceback (most recent call last):
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 941, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: product.sanitary_registration
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "c:\desarrollo\sat\working\app.py", line 1198, in inventory_list
+    products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2673, in all
+    return self._iter().all()  # type: ignore
+           ~~~~~~~~~~^^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2827, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+        params,
+        ^^^^^^^
+        execution_options={"_sa_orm_load_options": self.load_options},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2362, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2247, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+    ...<4 lines>...
+        conn,
+        ^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\orm\context.py", line 305, in orm_execute_statement
+    result = conn.execute(
+        statement, params or {}, execution_options=execution_options
+    )
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1418, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 515, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1640, in _execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 941, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such column: product.sanitary_registration
+[SQL: SELECT product.id AS product_id, product.company_id AS product_company_id, product.sku AS product_sku, product.name AS product_name, product.description AS product_description, product.cost_price AS product_cost_price, product.selling_price AS product_selling_price, product.current_stock AS product_current_stock, product.min_stock_level AS product_min_stock_level, product.active AS product_active, product.created_at AS product_created_at, product.sanitary_registration AS product_sanitary_registration, product.is_controlled AS product_is_controlled, product.active_ingredient AS product_active_ingredient, product.presentation AS product_presentation, product.therapeutic_group AS product_therapeutic_group, product.unit_measure AS product_unit_measure 
+FROM product 
+WHERE product.company_id = ? AND product.active = 1 ORDER BY product.name]
+[parameters: (2,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-01-04 11:56:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:56:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:56:54 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:57:22 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:57:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:58:54 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:59:02 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-04 11:59:32 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO

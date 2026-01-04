@@ -12,35 +12,78 @@
                 </div>
                 <div class="card-body">
                     <form method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {{ form.hidden_tag() }}
 
                         <div class="row mb-3">
                             <div class="col-md-8">
-                                <label for="name" class="form-label">Nombre del Producto *</label>
-                                <input type="text" class="form-control" id="name" name="name" required>
+                                {{ form.name.label(class="form-label") }}
+                                {{ form.name(class="form-control") }}
+                                {% if form.name.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.name.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
                             <div class="col-md-4">
-                                <label for="sku" class="form-label">SKU / Código</label>
-                                <input type="text" class="form-control" id="sku" name="sku">
+                                {{ form.sku.label(class="form-label") }}
+                                {{ form.sku(class="form-control") }}
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="description" class="form-label">Descripción</label>
-                            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control", rows="2") }}
+                        </div>
+
+                        <!-- COFEPRIS Section -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title text-primary"><i class="bi bi-shield-check"></i> Datos Sanitarios
+                                    (COFEPRIS)</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        {{ form.sanitary_registration.label(class="form-label") }}
+                                        {{ form.sanitary_registration(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6 d-flex align-items-center mt-4">
+                                        <div class="form-check form-switch">
+                                            {{ form.is_controlled(class="form-check-input") }}
+                                            {{ form.is_controlled.label(class="form-check-label") }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        {{ form.active_ingredient.label(class="form-label") }}
+                                        {{ form.active_ingredient(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        {{ form.presentation.label(class="form-label") }}
+                                        {{ form.presentation(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        {{ form.unit_measure.label(class="form-label") }}
+                                        {{ form.unit_measure(class="form-select") }}
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    {{ form.therapeutic_group.label(class="form-label") }}
+                                    {{ form.therapeutic_group(class="form-control") }}
+                                </div>
+                            </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="cost_price" class="form-label">Costo Real (Unitario) $</label>
-                                <input type="number" step="0.01" class="form-control" id="cost_price" name="cost_price"
-                                    value="0.00">
+                                {{ form.cost_price.label(class="form-label") }}
+                                {{ form.cost_price(class="form-control") }}
                                 <small class="text-muted">Usado para calcular valor del inventario.</small>
                             </div>
                             <div class="col-md-6">
-                                <label for="selling_price" class="form-label">Precio Venta Público $</label>
-                                <input type="number" step="0.01" class="form-control" id="selling_price"
-                                    name="selling_price" value="0.00">
+                                {{ form.selling_price.label(class="form-label") }}
+                                {{ form.selling_price(class="form-control") }}
                             </div>
                         </div>
 
@@ -48,13 +91,13 @@
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="initial_stock" class="form-label">Stock Inicial</label>
-                                <input type="number" class="form-control" id="initial_stock" name="initial_stock"
-                                    value="0">
+                                {{ form.initial_stock.label(class="form-label") }}
+                                {{ form.initial_stock(class="form-control", value="0") }}
+                                <small class="text-muted">Stock inicial general (sin lote).</small>
                             </div>
                             <div class="col-md-6">
-                                <label for="min_stock" class="form-label">Stock Mínimo (Alerta)</label>
-                                <input type="number" class="form-control" id="min_stock" name="min_stock" value="0">
+                                {{ form.min_stock_level.label(class="form-label") }}
+                                {{ form.min_stock_level(class="form-control") }}
                             </div>
                         </div>
 

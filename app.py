@@ -3,7 +3,8 @@ import os
 import logging
 from config import Config
 from extensions import db, login_manager, migrate, mail, cache, csrf, init_extensions
-from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction
+from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction, ProductBatch
+from forms import LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm, CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.sat_service import SATService, SATError
@@ -450,21 +451,91 @@ def create_app(config_class=Config):
             
             # Process invoices
             count = 0
+            updated_count = 0
+            modified_details = []
             files_saved = 0
+            
             for inv_data in all_invoices:
-                # Save XML to file first (always save, even if already in DB)
+                # Save XML to file first (always save/overwrite to ensure latest version)
                 xml_filename = f"{inv_data['uuid']}.xml"
                 xml_filepath = os.path.join(invoices_folder, xml_filename)
-                if not os.path.exists(xml_filepath):
-                    with open(xml_filepath, 'w', encoding='utf-8') as xml_file:
-                        xml_file.write(inv_data['xml'])
-                    files_saved += 1
+                
+                # Always write the file to ensure we have the exact version from SAT
+                with open(xml_filepath, 'w', encoding='utf-8') as xml_file:
+                    xml_file.write(inv_data['xml'])
+                files_saved += 1
                 
                 # Check if exists in database
-                if not Invoice.query.filter_by(uuid=inv_data['uuid']).first():
+                existing_inv = Invoice.query.filter_by(uuid=inv_data['uuid']).first()
+                
+                if existing_inv:
+                    # Check for changes in existing invoice
+                    changes = []
+                    
+                    # --- Comprobante Changes ---
+                    if abs(existing_inv.total - inv_data['total']) > 0.01:
+                        changes.append(f"Comprobante: Total ({existing_inv.total} -> {inv_data['total']})")
+                    
+                    # Check string fields (handling None)
+                    if (existing_inv.serie or '') != (inv_data.get('serie') or ''):
+                        changes.append(f"Comprobante: Serie ({existing_inv.serie} -> {inv_data.get('serie')})")
+                    if (existing_inv.folio or '') != (inv_data.get('folio') or ''):
+                        changes.append(f"Comprobante: Folio ({existing_inv.folio} -> {inv_data.get('folio')})")
+                        
+                    # --- Emisor Changes ---
+                    # Name is often slightly different in encoding, maybe skip strict check or normalize?
+                    # We will check strict for now as requested
+                    if (existing_inv.issuer_name or '') != (inv_data.get('issuer_name') or ''):
+                        changes.append(f"Emisor: Nombre")
+                    if (existing_inv.regimen_fiscal_emisor or '') != (inv_data.get('regimen_fiscal_emisor') or ''):
+                         changes.append(f"Emisor: Régimen Fiscal")
+
+                    # --- Receptor Changes ---
+                    if (existing_inv.receiver_name or '') != (inv_data.get('receiver_name') or ''):
+                        changes.append(f"Receptor: Nombre")
+                    if (existing_inv.domicilio_fiscal_receptor or '') != (inv_data.get('domicilio_fiscal_receptor') or ''):
+                         changes.append(f"Receptor: Domicilio")
+                    if (existing_inv.regimen_fiscal_receptor or '') != (inv_data.get('regimen_fiscal_receptor') or ''):
+                         changes.append(f"Receptor: Régimen Fiscal")
+
+                    # --- Timbre (SAT) Changes ---
+                    # Check if 'fecha_timbrado' matches (aware of timezone offset issues in naive comparison, but typically exact match expected)
+                    # We compare string ISO format if strictly needed, or datetime objects
+                    # If existing is None, it's an update, not a "change" in strict sense but good to note
+                    if existing_inv.fecha_timbrado != inv_data.get('fecha_timbrado'):
+                         changes.append(f"Timbre: Fecha Timbrado")
+                    
+                    if changes:
+                        # Update the record
+                        existing_inv.xml_content = inv_data['xml']
+                        existing_inv.total = inv_data['total']
+                        existing_inv.subtotal = inv_data['subtotal']
+                        existing_inv.tax = inv_data['tax']
+                        existing_inv.issuer_name = inv_data.get('issuer_name')
+                        existing_inv.receiver_name = inv_data.get('receiver_name')
+                        existing_inv.serie = inv_data.get('serie')
+                        existing_inv.folio = inv_data.get('folio')
+                        existing_inv.lugar_expedicion = inv_data.get('lugar_expedicion')
+                        existing_inv.no_certificado = inv_data.get('no_certificado')
+                        existing_inv.sello = inv_data.get('sello')
+                        existing_inv.certificado = inv_data.get('certificado')
+                        existing_inv.regimen_fiscal_emisor = inv_data.get('regimen_fiscal_emisor')
+                        existing_inv.regimen_fiscal_receptor = inv_data.get('regimen_fiscal_receptor')
+                        existing_inv.domicilio_fiscal_receptor = inv_data.get('domicilio_fiscal_receptor')
+                        existing_inv.fecha_timbrado = inv_data.get('fecha_timbrado')
+                        existing_inv.rfc_prov_certif = inv_data.get('rfc_prov_certif')
+                        existing_inv.sello_sat = inv_data.get('sello_sat')
+                        existing_inv.no_certificado_sat = inv_data.get('no_certificado_sat')
+                        # Also update version/payment terms if needed
+                        existing_inv.version = inv_data.get('version')
+                        existing_inv.payment_terms = inv_data.get('payment_terms')
+                        
+                        updated_count += 1
+                        modified_details.append(f"Factura {inv_data['uuid']} ({inv_data['date'].strftime('%Y-%m-%d') if inv_data['date'] else '?'}): {', '.join(changes)}")
+
+                else:
+                    # Create NEW Invoice
                     # Determine Movement Type
-                    # Simple rule: if company is the issuer (emisor) = INCOME
-                    #              if company is the receiver = EXPENSE
                     is_emitted = (inv_data['issuer_rfc'] == company.rfc)
                     mov_type = 'INCOME' if is_emitted else 'EXPENSE'
                     
@@ -481,7 +552,7 @@ def create_app(config_class=Config):
                     new_inv = Invoice(
                         uuid=inv_data['uuid'],
                         company_id=company.id,
-                        supplier_id=supplier_id,  # Set supplier_id for received invoices
+                        supplier_id=supplier_id,
                         date=inv_data['date'],
                         total=inv_data['total'],
                         subtotal=inv_data['subtotal'],
@@ -496,7 +567,7 @@ def create_app(config_class=Config):
                         uso_cfdi=inv_data.get('uso_cfdi'),
                         descripcion=inv_data.get('descripcion'),
                         xml_content=inv_data['xml'],
-                        # New fields
+                        # Standard fields
                         periodicity=inv_data.get('periodicity'),
                         months=inv_data.get('months'),
                         fiscal_year=inv_data.get('fiscal_year'),
@@ -504,16 +575,32 @@ def create_app(config_class=Config):
                         currency=inv_data.get('currency'),
                         exchange_rate=inv_data.get('exchange_rate'),
                         exportation=inv_data.get('exportation'),
-                        version=inv_data.get('version')
+                        version=inv_data.get('version'),
+                        # --- New Fields for Granular Tracking ---
+                        # Comprobante
+                        serie=inv_data.get('serie'),
+                        folio=inv_data.get('folio'),
+                        lugar_expedicion=inv_data.get('lugar_expedicion'),
+                        no_certificado=inv_data.get('no_certificado'),
+                        sello=inv_data.get('sello'),
+                        certificado=inv_data.get('certificado'),
+                        # Emisor
+                        regimen_fiscal_emisor=inv_data.get('regimen_fiscal_emisor'),
+                        # Receptor
+                        regimen_fiscal_receptor=inv_data.get('regimen_fiscal_receptor'),
+                        domicilio_fiscal_receptor=inv_data.get('domicilio_fiscal_receptor'),
+                        # Timbre
+                        fecha_timbrado=inv_data.get('fecha_timbrado'),
+                        rfc_prov_certif=inv_data.get('rfc_prov_certif'),
+                        sello_sat=inv_data.get('sello_sat'),
+                        no_certificado_sat=inv_data.get('no_certificado_sat')
                     )
                     db.session.add(new_inv)
                     
-                    # Update supplier statistics if this is a received invoice
                     if supplier_id:
                         update_supplier_stats(supplier_id)
                     
-                    # Solo crear Movement automáticamente para facturas PUE
-                    # Las facturas PPD requieren acreditación manual del contador
+                    # Movement creation logic
                     metodo_pago = inv_data.get('metodo_pago', 'PUE')
                     if metodo_pago != 'PPD':
                         new_mov = Movement(
@@ -529,10 +616,23 @@ def create_app(config_class=Config):
             
             db.session.commit()
             
-            if count > 0 or files_saved > 0:
-                flash(f'Sincronización completada. {count} facturas nuevas en BD, {files_saved} archivos XML guardados en facturas/{safe_company_name}/', 'success')
+            # Construct summary message
+            messages = []
+            if count > 0:
+                messages.append(f"{count} facturas nuevas importadas.")
+            if updated_count > 0:
+                messages.append(f"{updated_count} facturas existentes actualizadas.")
+            
+            if modified_details:
+                # Show first 5 details if many
+                details_text = "<br>".join(modified_details[:5])
+                if len(modified_details) > 5:
+                    details_text += f"<br>... y {len(modified_details)-5} más."
+                flash(f"Sincronización finalizada.<br>{' '.join(messages)}<br><strong>Cambios detectados:</strong><br>{details_text}", 'warning' if updated_count > 0 else 'success')
+            elif count > 0:
+                flash(f"Sincronización completada. {count} facturas nuevas.", 'success')
             else:
-                flash(f'Sincronización finalizada. No se encontraron facturas nuevas. Las facturas existentes ya están en facturas/{safe_company_name}/', 'warning')
+                flash("Sincronización al día. No se encontraron cambios ni facturas nuevas.", 'success')
             
         except SATError as sat_e:
             import traceback
@@ -1112,48 +1212,48 @@ def create_app(config_class=Config):
     def add_product(company_id):
         """Agregar nuevo producto"""
         company = Company.query.get_or_404(company_id)
+        form = ProductForm()
         
-        if request.method == 'POST':
-            name = request.form['name']
-            sku = request.form.get('sku')
-            description = request.form.get('description')
-            cost_price = float(request.form.get('cost_price', 0))
-            selling_price = float(request.form.get('selling_price', 0))
-            initial_stock = int(request.form.get('initial_stock', 0))
-            min_stock = int(request.form.get('min_stock', 0))
-            
+        if form.validate_on_submit():
             new_product = Product(
                 company_id=company_id,
-                name=name,
-                sku=sku,
-                description=description,
-                cost_price=cost_price,
-                selling_price=selling_price,
-                current_stock=initial_stock,
-                min_stock_level=min_stock
+                name=form.name.data,
+                sku=form.sku.data,
+                description=form.description.data,
+                cost_price=form.cost_price.data or 0,
+                selling_price=form.selling_price.data or 0,
+                current_stock=form.initial_stock.data or 0,
+                min_stock_level=form.min_stock_level.data or 0,
+                # COFEPRIS Fields
+                sanitary_registration=form.sanitary_registration.data,
+                is_controlled=form.is_controlled.data,
+                active_ingredient=form.active_ingredient.data,
+                presentation=form.presentation.data,
+                therapeutic_group=form.therapeutic_group.data,
+                unit_measure=form.unit_measure.data
             )
             
             db.session.add(new_product)
             db.session.flush() # Get ID
             
             # Record initial stock as transaction if > 0
-            if initial_stock > 0:
+            if new_product.current_stock > 0:
                 transaction = InventoryTransaction(
                     product_id=new_product.id,
                     type='IN',
-                    quantity=initial_stock,
+                    quantity=new_product.current_stock,
                     previous_stock=0,
-                    new_stock=initial_stock,
+                    new_stock=new_product.current_stock,
                     reference='Initial Stock',
                     notes='Inventario inicial al crear producto'
                 )
                 db.session.add(transaction)
             
             db.session.commit()
-            flash(f'Producto "{name}" agregado correctamente.', 'success')
+            flash(f'Producto "{new_product.name}" agregado correctamente.', 'success')
             return redirect(url_for('inventory_list', company_id=company_id))
             
-        return render_template('inventory/add.html', company=company)
+        return render_template('inventory/add.html', company=company, form=form)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/edit', methods=['GET', 'POST'])
     @login_required
@@ -1166,19 +1266,15 @@ def create_app(config_class=Config):
             flash('Producto no encontrado.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id))
             
-        if request.method == 'POST':
-            product.name = request.form['name']
-            product.sku = request.form.get('sku')
-            product.description = request.form.get('description')
-            product.cost_price = float(request.form.get('cost_price', 0))
-            product.selling_price = float(request.form.get('selling_price', 0))
-            product.min_stock_level = int(request.form.get('min_stock', 0))
-            
+        form = ProductForm(obj=product)
+        
+        if form.validate_on_submit():
+            form.populate_obj(product)
             db.session.commit()
             flash(f'Producto "{product.name}" actualizado.', 'success')
             return redirect(url_for('inventory_list', company_id=company_id))
             
-        return render_template('inventory/edit.html', company=company, product=product)
+        return render_template('inventory/edit.html', company=company, product=product, form=form)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/adjust', methods=['GET', 'POST'])
     @login_required
@@ -1242,6 +1338,74 @@ def create_app(config_class=Config):
             return redirect(url_for('inventory_list', company_id=company_id))
             
         return render_template('inventory/history.html', company=company, product=product)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/batches')
+    @login_required
+    def product_batches(company_id, product_id):
+        """List batches for a product"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        today = datetime.now().date()
+        batches = ProductBatch.query.filter_by(product_id=product_id).order_by(ProductBatch.expiration_date).all()
+        
+        return render_template('inventory/batches.html', 
+                             company=company, 
+                             product=product, 
+                             batches=batches, 
+                             today=today)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/receive', methods=['GET', 'POST'])
+    @login_required
+    def receive_batch(company_id, product_id):
+        """Recibir stock con lote y caducidad"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        form = BatchForm()
+        
+        if form.validate_on_submit():
+            quantity = form.quantity.data
+            
+            # Create Batch
+            batch = ProductBatch(
+                product_id=product.id,
+                batch_number=form.batch_number.data,
+                expiration_date=form.expiration_date.data,
+                initial_stock=quantity,
+                current_stock=quantity,
+                acquisition_date=form.acquisition_date.data
+            )
+            db.session.add(batch)
+            db.session.flush()
+            
+            # Create Transaction
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                batch_id=batch.id,
+                type='IN',
+                quantity=quantity,
+                previous_stock=product.current_stock,
+                new_stock=product.current_stock + quantity,
+                reference=f'Recibo Lote {batch.batch_number}',
+                notes='Recepción de stock con lote'
+            )
+            db.session.add(transaction)
+            
+            # Update Product Total Stock
+            product.current_stock += quantity
+            
+            db.session.commit()
+            flash(f'Lote {batch.batch_number} registrado correctamente.', 'success')
+            return redirect(url_for('product_batches', company_id=company_id, product_id=product_id))
+            
+        return render_template('inventory/receive_batch.html', company=company, product=product, form=form)
 
     
     # ==================== AX MANAGMENT ROUTES ====================

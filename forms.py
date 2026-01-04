@@ -13,6 +13,7 @@ from wtforms.validators import (
 )
 from flask_wtf.file import FileAllowed
 import re
+from datetime import datetime
 
 
 # Custom Validators
@@ -194,3 +195,79 @@ class InvoiceSearchForm(FlaskForm):
     date_to = DateField('Hasta', validators=[Optional()])
     min_amount = FloatField('Monto mínimo', validators=[Optional()])
     max_amount = FloatField('Monto máximo', validators=[Optional()])
+
+# Inventory Forms
+class ProductForm(FlaskForm):
+    """Form for creating/editing products"""
+    name = StringField('Nombre del Producto', validators=[
+        DataRequired(),
+        Length(max=200)
+    ])
+    sku = StringField('SKU / Código', validators=[
+        Optional(),
+        Length(max=50)
+    ])
+    description = TextAreaField('Descripción', validators=[Optional()])
+    
+    cost_price = FloatField('Costo Real', validators=[
+        NumberRange(min=0, message='El costo debe ser positivo'),
+        Optional()
+    ], default=0.0)
+    
+    selling_price = FloatField('Precio Venta', validators=[
+        NumberRange(min=0, message='El precio debe ser positivo'),
+        Optional()
+    ], default=0.0)
+    
+    initial_stock = IntegerField('Stock Inicial', validators=[
+        Optional(),
+        NumberRange(min=0)
+    ])
+    
+    min_stock_level = IntegerField('Stock Mínimo', validators=[
+        Optional(),
+        NumberRange(min=0)
+    ])
+    
+    # COFEPRIS Fields
+    sanitary_registration = StringField('Registro Sanitario', validators=[
+        Optional(),
+        Length(max=100)
+    ])
+    is_controlled = BooleanField('Medicamento Controlado')
+    
+    active_ingredient = StringField('Principio Activo', validators=[
+        Optional(),
+        Length(max=200)
+    ])
+    presentation = StringField('Presentación', validators=[
+        Optional(),
+        Length(max=100)
+    ])
+    therapeutic_group = StringField('Grupo Terapéutico', validators=[
+        Optional(),
+        Length(max=100)
+    ])
+    unit_measure = SelectField('Unidad de Medida', choices=[
+        ('PZA', 'Pieza'),
+        ('CAJA', 'Caja'),
+        ('PAQ', 'Paquete'),
+        ('KIT', 'Kit'),
+        ('LITRO', 'Litro'),
+        ('METRO', 'Metro')
+    ], default='PZA')
+
+
+class BatchForm(FlaskForm):
+    """Form for adding a new batch"""
+    batch_number = StringField('Número de Lote', validators=[
+        DataRequired(),
+        Length(max=100)
+    ])
+    expiration_date = DateField('Fecha de Caducidad', validators=[DataRequired()])
+    quantity = IntegerField('Cantidad', validators=[
+        DataRequired(),
+        NumberRange(min=1, message='La cantidad debe ser mayor a 0')
+    ])
+    acquisition_date = DateField('Fecha de Adquisición', default=datetime.utcnow)
+

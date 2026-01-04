@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Lotes - {{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Lotes de Producto: {{ product.name }}</h2>
+        <div>
+            <a href="{{ url_for('receive_batch', company_id=company.id, product_id=product.id) }}"
+                class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Nuevo Lote
+            </a>
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Volver al Inventario
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            {% if batches %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Lote</th>
+                            <th>Caducidad</th>
+                            <th>Stock Inicial</th>
+                            <th>Stock Actual</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for batch in batches %}
+                        <tr>
+                            <td>{{ batch.batch_number }}</td>
+                            <td>
+                                {{ batch.expiration_date.strftime('%d/%m/%Y') }}
+                                {% if batch.expiration_date < today %} <span class="badge bg-danger">Caducado</span>
+                                    {% elif (batch.expiration_date - today).days < 90 %} <span
+                                        class="badge bg-warning text-dark">Próximo a Vencer</span>
+                                        {% endif %}
+                            </td>
+                            <td>{{ batch.initial_stock }}</td>
+                            <td>{{ batch.current_stock }}</td>
+                            <td>
+                                {% if batch.is_active and batch.current_stock > 0 %}
+                                <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <!-- Placeholder for future actions like adjust batch stock or view movements -->
+                                <button class="btn btn-sm btn-outline-primary" title="Ver Movimientos">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                No hay lotes registrados para este producto.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

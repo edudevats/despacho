@@ -12,52 +12,86 @@
                 </div>
                 <div class="card-body">
                     <form method="POST">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {{ form.hidden_tag() }}
 
                         <div class="row mb-3">
                             <div class="col-md-8">
-                                <label for="name" class="form-label">Nombre del Producto *</label>
-                                <input type="text" class="form-control" id="name" name="name" value="{{ product.name }}"
-                                    required>
+                                {{ form.name.label(class="form-label") }}
+                                {{ form.name(class="form-control") }}
                             </div>
                             <div class="col-md-4">
-                                <label for="sku" class="form-label">SKU / Código</label>
-                                <input type="text" class="form-control" id="sku" name="sku"
-                                    value="{{ product.sku or '' }}">
+                                {{ form.sku.label(class="form-label") }}
+                                {{ form.sku(class="form-control") }}
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="description" class="form-label">Descripción</label>
-                            <textarea class="form-control" id="description" name="description"
-                                rows="2">{{ product.description or '' }}</textarea>
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control", rows="2") }}
+                        </div>
+
+                        <!-- COFEPRIS Section -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title text-primary"><i class="bi bi-shield-check"></i> Datos Sanitarios
+                                    (COFEPRIS)</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        {{ form.sanitary_registration.label(class="form-label") }}
+                                        {{ form.sanitary_registration(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-6 d-flex align-items-center mt-4">
+                                        <div class="form-check form-switch">
+                                            {{ form.is_controlled(class="form-check-input") }}
+                                            {{ form.is_controlled.label(class="form-check-label") }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        {{ form.active_ingredient.label(class="form-label") }}
+                                        {{ form.active_ingredient(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        {{ form.presentation.label(class="form-label") }}
+                                        {{ form.presentation(class="form-control") }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        {{ form.unit_measure.label(class="form-label") }}
+                                        {{ form.unit_measure(class="form-select") }}
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    {{ form.therapeutic_group.label(class="form-label") }}
+                                    {{ form.therapeutic_group(class="form-control") }}
+                                </div>
+                            </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="cost_price" class="form-label">Costo Real (Unitario) $</label>
-                                <input type="number" step="0.01" class="form-control" id="cost_price" name="cost_price"
-                                    value="{{ product.cost_price }}">
+                                {{ form.cost_price.label(class="form-label") }}
+                                {{ form.cost_price(class="form-control") }}
                             </div>
                             <div class="col-md-6">
-                                <label for="selling_price" class="form-label">Precio Venta Público $</label>
-                                <input type="number" step="0.01" class="form-control" id="selling_price"
-                                    name="selling_price" value="{{ product.selling_price }}">
+                                {{ form.selling_price.label(class="form-label") }}
+                                {{ form.selling_price(class="form-control") }}
                             </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="min_stock" class="form-label">Stock Mínimo (Alerta)</label>
-                                <input type="number" class="form-control" id="min_stock" name="min_stock"
-                                    value="{{ product.min_stock_level }}">
+                                {{ form.min_stock_level.label(class="form-label") }}
+                                {{ form.min_stock_level(class="form-control") }}
                             </div>
                             <div class="col-md-6 d-flex align-items-end">
                                 <div class="alert alert-info py-2 w-100 mb-0">
                                     Stock Actual: <strong>{{ product.current_stock }}</strong>
                                     <br>
-                                    <small class="text-muted">Para modificar stock, usa la opción "Ajustar
-                                        Stock".</small>
+                                    <a href="{{ url_for('product_batches', company_id=company.id, product_id=product.id) }}"
+                                        class="alert-link">
+                                        Ver/Gestionar Lotes (COFEPRIS)
+                                    </a>
                                 </div>
                             </div>
                         </div>
