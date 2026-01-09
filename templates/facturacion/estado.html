@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Consultar Estado - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-10 mx-auto">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-search"></i> Consultar Estado de CFDI
+                    </h4>
+                    <small>{{ company.name }}</small>
+                </div>
+                <div class="card-body">
+                    <!-- Tabs for input method -->
+                    <ul class="nav nav-tabs mb-4" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="generadas-tab" data-bs-toggle="tab"
+                                data-bs-target="#generadas-panel" type="button">
+                                <i class="fas fa-file-invoice"></i> Facturas Generadas
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="xml-tab" data-bs-toggle="tab" data-bs-target="#xml-panel"
+                                type="button">
+                                <i class="fas fa-file-code"></i> Subir XML
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-panel"
+                                type="button">
+                                <i class="fas fa-keyboard"></i> Datos Manuales
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- Facturas Generadas Tab -->
+                        <div class="tab-pane fade show active" id="generadas-panel">
+                            <h5 class="mb-3"><i class="fas fa-list"></i> Facturas Generadas por el Sistema</h5>
+
+                            {% if facturas_generadas %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Archivo</th>
+                                            <th>UUID</th>
+                                            <th>Fecha Creación</th>
+                                            <th>Tamaño</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for factura in facturas_generadas %}
+                                        <tr>
+                                            <td>
+                                                <i class="fas fa-file-invoice text-success"></i>
+                                                {{ factura.filename }}
+                                            </td>
+                                            <td>
+                                                {% if factura.uuid %}
+                                                <small class="text-muted font-monospace">{{ factura.uuid[:18]
+                                                    }}...</small>
+                                                {% else %}
+                                                <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ factura.created.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>{{ '%.1f' | format(factura.size / 1024) }} KB</td>
+                                            <td>
+                                                <form method="POST" style="display: inline;">
+                                                    {{ form.csrf_token }}
+                                                    <input type="hidden" name="xml_filepath" value="{{ factura.path }}">
+                                                    <button type="submit" class="btn btn-sm btn-info">
+                                                        <i class="fas fa-search"></i> Checar Status
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> No hay facturas generadas aún.
+                                <a href="{{ url_for('crear_factura', company_id=company.id) }}">Crear primera
+                                    factura</a>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- XML Upload Tab -->
+                        <div class="tab-pane fade" id="xml-panel">
+                            <form method="POST" enctype="multipart/form-data">
+                                {{ form.csrf_token }}
+                                <div class="mb-4">
+                                    {{ form.xml_file.label(class="form-label") }}
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-file-upload"></i></span>
+                                        {{ form.xml_file(class="form-control") }}
+                                    </div>
+                                    {% if form.xml_file.errors %}
+                                    <div class="text-danger mt-2">{{ form.xml_file.errors[0] }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="d-flex justify-content-between mt-4">
+                                    <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}"
+                                        class="btn btn-outline-secondary">
+                                        <i class="fas fa-arrow-left"></i> Regresar
+                                    </a>
+                                    <button type="submit" class="btn btn-info btn-lg">
+                                        <i class="fas fa-search"></i> Consultar Estado
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Manual Input Tab -->
+                        <div class="tab-pane fade" id="manual-panel">
+                            <form method="POST">
+                                {{ form.csrf_token }}
+                                <div class="mb-3">
+                                    {{ form.uuid.label(class="form-label") }}
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-fingerprint"></i></span>
+                                        {{ form.uuid(class="form-control",
+                                        placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX") }}
+                                    </div>
+                                    {% if form.uuid.errors %}
+                                    <div class="text-danger mt-2">{{ form.uuid.errors[0] }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        {{ form.rfc_emisor.label(class="form-label") }}
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-id-card"></i></span>
+                                            {{ form.rfc_emisor(class="form-control", placeholder="RFC del emisor") }}
+                                        </div>
+                                        {% if form.rfc_emisor.errors %}
+                                        <div class="text-danger mt-2">{{ form.rfc_emisor.errors[0] }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        {{ form.rfc_receptor.label(class="form-label") }}
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-id-card"></i></span>
+                                            {{ form.rfc_receptor(class="form-control", placeholder="RFC del receptor")
+                                            }}
+                                        </div>
+                                        {% if form.rfc_receptor.errors %}
+                                        <div class="text-danger mt-2">{{ form.rfc_receptor.errors[0] }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    {{ form.total.label(class="form-label") }}
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                                        {{ form.total(class="form-control", placeholder="0.00") }}
+                                    </div>
+                                    {% if form.total.errors %}
+                                    <div class="text-danger mt-2">{{ form.total.errors[0] }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="d-flex justify-content-between mt-4">
+                                    <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}"
+                                        class="btn btn-outline-secondary">
+                                        <i class="fas fa-arrow-left"></i> Regresar
+                                    </a>
+                                    <button type="submit" class="btn btn-info btn-lg">
+                                        <i class="fas fa-search"></i> Consultar Estado
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if result %}
+            <!-- Results -->
+            <hr class="my-4">
+            <div class="result-section">
+                <h5 class="mb-3"><i class="fas fa-clipboard-list"></i> Resultado de la Consulta</h5>
+
+                {% if result.estado == 'Vigente' %}
+                <div class="alert alert-success d-flex align-items-center">
+                    <i class="fas fa-check-circle fa-3x me-3"></i>
+                    <div>
+                        <h5 class="alert-heading mb-1">CFDI Vigente</h5>
+                        <p class="mb-0">El comprobante está activo y válido ante el SAT</p>
+                    </div>
+                </div>
+                {% elif result.estado == 'Cancelado' %}
+                <div class="alert alert-danger d-flex align-items-center">
+                    <i class="fas fa-times-circle fa-3x me-3"></i>
+                    <div>
+                        <h5 class="alert-heading mb-1">CFDI Cancelado</h5>
+                        <p class="mb-0">El comprobante ha sido cancelado</p>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-warning d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-3x me-3"></i>
+                    <div>
+                        <h5 class="alert-heading mb-1">{{ result.estado }}</h5>
+                        <p class="mb-0">Estado del comprobante</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Información Detallada</h6>
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">Estado:</dt>
+                            <dd class="col-sm-8"><span
+                                    class="badge bg-{{ 'success' if result.estado == 'Vigente' else 'danger' }}">{{
+                                    result.estado }}</span></dd>
+
+                            <dt class="col-sm-4">Código de Estado:</dt>
+                            <dd class="col-sm-8"><code>{{ result.codigo_estado }}</code></dd>
+
+                            <dt class="col-sm-4">Es Cancelable:</dt>
+                            <dd class="col-sm-8">
+                                {% if result.es_cancelable %}
+                                <span class="badge bg-success"><i class="fas fa-check"></i> Sí</span>
+                                {% else %}
+                                <span class="badge bg-secondary"><i class="fas fa-times"></i> No</span>
+                                {% endif %}
+                            </dd>
+
+                            {% if result.validacion_efos %}
+                            <dt class="col-sm-4">Validación EFOS:</dt>
+                            <dd class="col-sm-8">{{ result.validacion_efos }}</dd>
+                            {% endif %}
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</div>
+</div>
+{% endblock %}

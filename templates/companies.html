@@ -19,14 +19,19 @@
     <form action="/companies/add" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
                 <label for="rfc" class="form-label">RFC</label>
                 <input type="text" class="form-control" name="rfc" id="rfc" required placeholder="Ej: ABC123456ABC">
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-5 mb-3">
                 <label for="name" class="form-label">Nombre / Razón Social</label>
                 <input type="text" class="form-control" name="name" id="name" required
                     placeholder="Nombre de la empresa">
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="postal_code" class="form-label">Código Postal</label>
+                <input type="text" class="form-control" name="postal_code" id="postal_code" placeholder="CP Fiscal"
+                    maxlength="5" pattern="\d{5}">
             </div>
         </div>
         <div class="row">

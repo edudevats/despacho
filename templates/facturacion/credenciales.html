@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Configurar Credenciales - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header bg-secondary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-key"></i> Configurar Credenciales de Finkok
+                    </h4>
+                    <small>{{ company.name }}</small>
+                </div>
+                <div class="card-body">
+                    {% if has_credentials %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Actualizando credenciales existentes. Deje la contraseña en blanco para mantener la actual.
+                    </div>
+                    {% endif %}
+
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.csrf_token }}
+
+                        <!-- Username -->
+                        <div class="mb-3">
+                            {{ form.username.label(class="form-label") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""),
+                                placeholder="usuario@finkok.com") }}
+                            </div>
+                            {% if form.username.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.username.errors[0] }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Password -->
+                        <div class="mb-3">
+                            {{ form.password.label(class="form-label") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                                placeholder="Contraseña o Token") }}
+                            </div>
+                            {% if form.password.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.password.errors[0] }}
+                            </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                <i class="fas fa-shield-alt"></i> La contraseña se almacenará cifrada
+                            </small>
+                        </div>
+
+                        <!-- Environment -->
+                        <div class="mb-4">
+                            {{ form.environment.label(class="form-label") }}
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="environment" id="env_test" value="TEST" {%
+                                    if form.environment.data=='TEST' or not form.environment.data %}checked{% endif %}>
+                                <label class="btn btn-outline-info" for="env_test">
+                                    <i class="fas fa-flask"></i> Pruebas
+                                </label>
+
+                                <input type="radio" class="btn-check" name="environment" id="env_prod"
+                                    value="PRODUCTION" {% if form.environment.data=='PRODUCTION' %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="env_prod">
+                                    <i class="fas fa-rocket"></i> Producción
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Security Notice -->
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Importante:</strong> Las credenciales se almacenan de forma segura con cifrado. Solo
+                            configure credenciales de PRUEBAS si está en desarrollo.
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}"
+                                class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Regresar
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i> Guardar Credenciales
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Help Section -->
+            <div class="card mt-4 border-0 bg-light">
+                <div class="card-body">
+                    <h6><i class="fas fa-question-circle text-primary"></i> ¿Cómo obtener mis credenciales?</h6>
+                    <p class="mb-2"><small>
+                            1. Ingrese a su cuenta de <a href="https://www.finkok.com" target="_blank">Finkok</a><br>
+                            2. Genere sus credenciales de API en la sección de configuración<br>
+                            3. Utilice el ambiente de PRUEBAS antes depasarlo a PRODUCCIÓN
+                        </small></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

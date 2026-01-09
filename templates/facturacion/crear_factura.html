@@ -1,0 +1,1136 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Factura - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-file-invoice text-success"></i>
+                Crear Nueva Factura
+            </h1>
+            <p class="text-muted">{{ company.name }} - {{ company.rfc }}</p>
+        </div>
+    </div>
+
+    <form method="POST" id="facturaForm" enctype="multipart/form-data">
+        {{ form_comprobante.hidden_tag() }}
+
+        <!-- Stepper Steps Visual -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="stepper-wrapper">
+                    <div class="stepper-item active" data-step="1">
+                        <div class="step-counter">1</div>
+                        <div class="step-name">FIEL y Datos Generales</div>
+                    </div>
+                    <div class="stepper-item" data-step="2">
+                        <div class="step-counter">2</div>
+                        <div class="step-name">Receptor</div>
+                    </div>
+                    <div class="stepper-item" data-step="3">
+                        <div class="step-counter">3</div>
+                        <div class="step-name">Conceptos</div>
+                    </div>
+                    <div class="stepper-item" data-step="4">
+                        <div class="step-counter">4</div>
+                        <div class="step-name">Crear y Timbrar</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 1: FIEL y Datos Generales -->
+        <div class="step-content" id="step1">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-certificate"></i> Paso 1: FIEL y Datos Generales</h5>
+                </div>
+                <div class="card-body">
+                    <!-- FIEL -->
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Proporcione su FIEL para firmar la factura
+                        <strong class="text-danger">* Todos los campos son obligatorios</strong>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label class="form-label">{{ form_comprobante.fiel_cer.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-certificate"></i></span>
+                                {{ form_comprobante.fiel_cer(class="form-control" + (" is-invalid" if
+                                form_comprobante.fiel_cer.errors else ""), required=true) }}
+                            </div>
+                            {% if form_comprobante.fiel_cer.errors %}
+                            <div class="invalid-feedback d-block">{{ form_comprobante.fiel_cer.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">{{ form_comprobante.fiel_key.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-key"></i></span>
+                                {{ form_comprobante.fiel_key(class="form-control" + (" is-invalid" if
+                                form_comprobante.fiel_key.errors else ""), required=true) }}
+                            </div>
+                            {% if form_comprobante.fiel_key.errors %}
+                            <div class="invalid-feedback d-block">{{ form_comprobante.fiel_key.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">{{ form_comprobante.fiel_password.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                {{ form_comprobante.fiel_password(class="form-control" + (" is-invalid" if
+                                form_comprobante.fiel_password.errors else ""), required=true) }}
+                            </div>
+                            {% if form_comprobante.fiel_password.errors %}
+                            <div class="invalid-feedback d-block">{{ form_comprobante.fiel_password.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- Datos del Comprobante -->
+                    <h6 class="mb-3"><i class="fas fa-file-alt"></i> Datos del Comprobante</h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            {{ form_comprobante.serie.label(class="form-label") }}
+                            {{ form_comprobante.serie(class="form-control", placeholder="A", id="serieInput") }}
+                            <small class="text-muted">Puede cambiar la serie según necesite</small>
+                        </div>
+                        <div class="col-md-3">
+                            {{ form_comprobante.folio.label(class="form-label") }}
+                            {{ form_comprobante.folio(class="form-control", placeholder="0000001", readonly=true) }}
+                            <small class="text-success"><i class="fas fa-magic"></i> Folio automático</small>
+                        </div>
+                        <div class="col-md-6">
+                            {{ form_comprobante.fecha.label(class="form-label") }}
+                            {{ form_comprobante.fecha(class="form-control", type="datetime-local") }}
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            {{ form_comprobante.lugar_expedicion.label(class="form-label") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-map-marker-alt"></i></span>
+                                {{ form_comprobante.lugar_expedicion(class="form-control" + (" is-invalid" if
+                                form_comprobante.lugar_expedicion.errors else ""), placeholder="12345") }}
+                            </div>
+                            {% if form_comprobante.lugar_expedicion.errors %}
+                            <div class="invalid-feedback d-block">{{ form_comprobante.lugar_expedicion.errors[0] }}
+                            </div>
+                            {% endif %}
+                            <small class="text-muted">Código postal de donde se emite</small>
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_comprobante.forma_pago.label(class="form-label") }}
+                            {{ form_comprobante.forma_pago(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form_comprobante.metodo_pago.label(class="form-label") }}
+                            {{ form_comprobante.metodo_pago(class="form-select") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Receptor -->
+        <div class="step-content d-none" id="step2">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-user"></i> Paso 2: Datos del Receptor</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Complete todos los datos del receptor
+                        <strong class="text-danger">* Todos los campos son obligatorios</strong>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ form_receptor.receptor_rfc.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-id-card"></i></span>
+                                {{ form_receptor.receptor_rfc(class="form-control" + (" is-invalid" if
+                                form_receptor.receptor_rfc.errors else ""), placeholder="XAXX010101000",
+                                oninput="this.value = this.value.toUpperCase()", required=true) }}
+                            </div>
+                            {% if form_receptor.receptor_rfc.errors %}
+                            <div class="invalid-feedback d-block">{{ form_receptor.receptor_rfc.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">{{ form_receptor.receptor_nombre.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            {{ form_receptor.receptor_nombre(class="form-control" + (" is-invalid" if
+                            form_receptor.receptor_nombre.errors else ""), placeholder="JUAN PÉREZ GARCÍA",
+                            required=true) }}
+                            {% if form_receptor.receptor_nombre.errors %}
+                            <div class="invalid-feedback d-block">{{ form_receptor.receptor_nombre.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <label class="form-label">{{ form_receptor.receptor_cp.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            {{ form_receptor.receptor_cp(class="form-control" + (" is-invalid" if
+                            form_receptor.receptor_cp.errors else ""), placeholder="12345", required=true) }}
+                            {% if form_receptor.receptor_cp.errors %}
+                            <div class="invalid-feedback d-block">{{ form_receptor.receptor_cp.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">{{ form_receptor.receptor_uso_cfdi.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            {{ form_receptor.receptor_uso_cfdi(class="form-select", required=true) }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">{{ form_receptor.receptor_regimen.label.text }} <span
+                                    class="text-danger">*</span></label>
+                            {{ form_receptor.receptor_regimen(class="form-select", required=true) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Conceptos (Productos/Servicios) -->
+        <div class="step-content d-none" id="step3">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-shopping-cart"></i> Paso 3: Conceptos/Productos</h5>
+                </div>
+                <div class="card-body">
+                    <button type="button" class="btn btn-primary mb-3" onclick="agregarConcepto()">
+                        <i class="fas fa-plus"></i> Agregar Producto/Servicio
+                    </button>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="conceptosTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th>Cantidad</th>
+                                    <th>Valor Unit.</th>
+                                    <th>IVA</th>
+                                    <th>Importe</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="conceptosBody">
+                                <tr class="text-muted">
+                                    <td colspan="6" class="text-center">
+                                        <i class="fas fa-inbox fa-3x mb-2"></i><br>
+                                        No hay conceptos agregados. Haga clic en "Agregar Producto/Servicio"
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-bold">
+                                    <td colspan="4" class=" text-end">Subtotal:</td>
+                                    <td id="subtotal">$0.00</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="fw-bold">
+                                    <td colspan="4" class="text-end">IVA:</td>
+                                    <td id="totalIVA">$0.00</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="fw-bold table-success">
+                                    <td colspan="4" class="text-end">Total:</td>
+                                    <td id="total">$0.00</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: Revisión -->
+        <div class="step-content d-none" id="step4">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-check"></i> Paso 4: Revisión Final</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Revise todos los datos antes de continuar
+                    </div>
+
+                    <div id="resumen">
+                        <!-- Se llenará con JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="card mt-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-secondary" id="prevBtn" onclick="nextPrev(-1)"
+                        style="display:none;">
+                        <i class="fas fa-arrow-left"></i> Anterior
+                    </button>
+                    <div></div>
+                    <button type="button" class="btn btn-success" id="nextBtn" onclick="nextPrev(1)">
+                        Siguiente <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden input para enviar conceptos como JSON -->
+        <input type="hidden" name="conceptos" id="conceptosJSON">
+        <input type="hidden" name="action" id="formAction">
+    </form>
+</div>
+
+<!-- Modal para agregar concepto -->
+<div class="modal fade" id="conceptoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-plus"></i> Agregar Producto/Servicio</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">Descripción *</label>
+                        <textarea class="form-control" id="modal_descripcion" rows="2" required></textarea>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Cantidad *</label>
+                        <input type="number" class="form-control" id="modal_cantidad" value="1" min="0.01" step="0.01"
+                            required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Valor Unitario *</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" id="modal_valor_unitario" min="0.01" step="0.01"
+                                required>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">IVA *</label>
+                        <select class="form-select" id="modal_tasa_iva">
+                            <option value="0.16" selected>16%</option>
+                            <option value="0.08">8%</option>
+                            <option value="0.00">0% (Exento)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Clave Producto/Servicio</label>
+                        <div style="position: relative;">
+                            <input type="text" class="form-control" id="modal_clave_prod_serv" value="01010101"
+                                maxlength="8" placeholder="Buscar producto...">
+                            <div id="productosAutocomplete" class="autocomplete-dropdown"></div>
+                        </div>
+                        <small class="text-muted">Catálogo SAT - Escriba para buscar</small>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Clave Unidad</label>
+                        <div style="position: relative;">
+                            <input type="text" class="form-control" id="modal_clave_unidad" value="E48"
+                                placeholder="Buscar unidad...">
+                            <div id="unidadesAutocomplete" class="autocomplete-dropdown"></div>
+                        </div>
+                        <small class="text-muted">E48 = Unidad de servicio - Escriba para buscar</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="guardarConcepto()">
+                    <i class="fas fa-save"></i> Agregar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Stepper styles */
+    .stepper-wrapper {
+        display: flex;
+        justify-content: space-between;
+        margin: 20px 0;
+    }
+
+    .stepper-item {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+    }
+
+    .stepper-item::before {
+        position: absolute;
+        content: "";
+        border-bottom: 2px solid #ccc;
+        width: 100%;
+        top: 20px;
+        left: -50%;
+        z-index: 2;
+    }
+
+    .stepper-item::after {
+        position: absolute;
+        content: "";
+        border-bottom: 2px solid #ccc;
+        width: 100%;
+        top: 20px;
+        left: 50%;
+        z-index: 2;
+    }
+
+    .stepper-item:first-child::before {
+        content: none;
+    }
+
+    .stepper-item:last-child::after {
+        content: none;
+    }
+
+    .stepper-item.active .step-counter {
+        background-color: #198754;
+        color: white;
+    }
+
+    .stepper-item.completed .step-counter {
+        background-color: #198754;
+        color: white;
+    }
+
+    .stepper-item.completed::after {
+        border-bottom-color: #198754;
+    }
+
+    .step-counter {
+        position: relative;
+        z-index: 5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #ccc;
+        margin-bottom: 6px;
+        font-weight: bold;
+    }
+
+    .step-name {
+        text-align: center;
+    }
+
+    /* Autocomplete dropdown styles */
+    .autocomplete-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #ddd;
+        border-top: none;
+        border-radius: 0 0 4px 4px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1050;
+        display: none;
+        margin-top: -1px;
+    }
+
+    .autocomplete-dropdown.show {
+        display: block;
+    }
+
+    .autocomplete-item {
+        padding: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s;
+    }
+
+    .autocomplete-item:last-child {
+        border-bottom: none;
+    }
+
+    .autocomplete-item:hover {
+        background-color: #f0f0f0;
+    }
+
+    .autocomplete-item.active {
+        background-color: #e8f5e9;
+    }
+
+    .autocomplete-code {
+        font-weight: bold;
+        color: #198754;
+        font-size: 0.9em;
+    }
+
+    .autocomplete-description {
+        color: #666;
+        font-size: 0.85em;
+        margin-top: 2px;
+    }
+
+    .autocomplete-loading {
+        padding: 10px;
+        text-align: center;
+        color: #999;
+        font-style: italic;
+    }
+
+    .autocomplete-no-results {
+        padding: 10px;
+        text-align: center;
+        color: #999;
+    }
+</style>
+
+<script>
+    // Conceptos array
+    let conceptos = [];
+    let currentStep = 1;
+
+    function agregarConcepto() {
+        // Limpiar modal
+        document.getElementById('modal_descripcion').value = '';
+        document.getElementById('modal_cantidad').value = 1;
+        document.getElementById('modal_valor_unitario').value = '';
+        document.getElementById('modal_tasa_iva').value = '0.16';
+
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('conceptoModal'));
+        modal.show();
+    }
+
+    function guardarConcepto() {
+        const descripcion = document.getElementById('modal_descripcion').value;
+        const cantidad = parseFloat(document.getElementById('modal_cantidad').value);
+        const valor_unitario = parseFloat(document.getElementById('modal_valor_unitario').value);
+        const tasa_iva = parseFloat(document.getElementById('modal_tasa_iva').value);
+        const clave_prod_serv = document.getElementById('modal_clave_prod_serv').value;
+        const clave_unidad = document.getElementById('modal_clave_unidad').value;
+
+        if (!descripcion || !cantidad || !valor_unitario) {
+            alert('Complete todos los campos obligatorios');
+            return;
+        }
+
+        const concepto = {
+            descripcion: descripcion,
+            cantidad: cantidad,
+            valor_unitario: valor_unitario,
+            descuento: 0,
+            tasa_iva: tasa_iva,
+            clave_prod_serv: clave_prod_serv,
+            clave_unidad: clave_unidad,
+            unidad: 'Servicio'
+        };
+
+        conceptos.push(concepto);
+        actualizarTablaConceptos();
+
+        // Cerrar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('conceptoModal'));
+        modal.hide();
+    }
+
+    function eliminarConcepto(index) {
+        conceptos.splice(index, 1);
+        actualizarTablaConceptos();
+    }
+
+    function actualizarTablaConceptos() {
+        const tbody = document.getElementById('conceptosBody');
+        tbody.innerHTML = '';
+
+        if (conceptos.length === 0) {
+            tbody.innerHTML = '<tr class="text-muted"><td colspan="6" class="text-center"><i class="fas fa-inbox fa-3x mb-2"></i><br>No hay conceptos agregados</td></tr>';
+        } else {
+            let subtotal = 0;
+            let totalIVA = 0;
+
+            conceptos.forEach((c, index) => {
+                const importe = c.cantidad * c.valor_unitario;
+                const iva = importe * c.tasa_iva;
+                subtotal += importe;
+                totalIVA += iva;
+
+                tbody.innerHTML += `
+                <tr>
+                    <td>${c.descripcion}</td>
+                    <td>${c.cantidad}</td>
+                    <td>$${c.valor_unitario.toFixed(2)}</td>
+                    <td>${(c.tasa_iva * 100).toFixed(0)}%</td>
+                    <td>$${importe.toFixed(2)}</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarConcepto(${index})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            });
+
+            document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
+            document.getElementById('totalIVA').textContent = `$${totalIVA.toFixed(2)}`;
+            document.getElementById('total').textContent = `$${(subtotal + totalIVA).toFixed(2)}`;
+        }
+    }
+
+    function nextPrev(n) {
+        const steps = document.querySelectorAll('.step-content');
+
+        // Validar paso actual antes de avanzar
+        if (n === 1 && !validarPaso(currentStep)) {
+            return;
+        }
+
+        // Ocultar paso actual
+        steps[currentStep - 1].classList.add('d-none');
+
+        // Actualizar step
+        currentStep += n;
+
+        // Mostrar nuevo paso
+        if (currentStep <= steps.length) {
+            steps[currentStep - 1].classList.remove('d-none');
+        }
+
+        // Actualizar stepper visual
+        actualizarStepper();
+
+        // Actualizar botones
+        document.getElementById('prevBtn').style.display = currentStep === 1 ? 'none' : 'inline-block';
+
+        if (currentStep === steps.length) {
+            // Último paso - mostrar botones de acción
+            mostrarResumen();
+            document.getElementById('nextBtn').style.display = 'none';
+        } else {
+            document.getElementById('nextBtn').innerHTML = 'Siguiente <i class="fas fa-arrow-right"></i>';
+            document.getElementById('nextBtn').style.display = 'inline-block';
+        }
+    }
+
+    function validarPaso(step) {
+        // Validación Paso 1: FIEL y Datos Generales
+        if (step === 1) {
+            const fielCer = document.querySelector('[name="fiel_cer"]');
+            const fielKey = document.querySelector('[name="fiel_key"]');
+            const fielPassword = document.querySelector('[name="fiel_password"]');
+
+            // Verificar que se haya seleccionado el archivo .cer
+            if (!fielCer || !fielCer.files || fielCer.files.length === 0) {
+                alert('❌ Debe seleccionar el certificado FIEL (.cer)');
+                return false;
+            }
+
+            // Verificar que se haya seleccionado el archivo .key
+            if (!fielKey || !fielKey.files || fielKey.files.length === 0) {
+                alert('❌ Debe seleccionar la llave privada FIEL (.key)');
+                return false;
+            }
+
+            // Verificar que se haya ingresado la contraseña
+            if (!fielPassword || !fielPassword.value || fielPassword.value.trim() === '') {
+                alert('❌ Debe ingresar la contraseña de la FIEL');
+                fielPassword.focus();
+                return false;
+            }
+
+            // Validar que el lugar de expedición esté completo
+            const lugarExpedicion = document.querySelector('[name="lugar_expedicion"]');
+            if (!lugarExpedicion || !lugarExpedicion.value || lugarExpedicion.value.length !== 5) {
+                alert('❌ Debe ingresar el código postal de expedición (5 dígitos)');
+                if (lugarExpedicion) lugarExpedicion.focus();
+                return false;
+            }
+        }
+
+        // Validación Paso 3: Conceptos
+        if (step === 3 && conceptos.length === 0) {
+            alert('❌ Debe agregar al menos un concepto');
+            return false;
+        }
+
+        return true;
+    }
+
+    function actualizarStepper() {
+        const items = document.querySelectorAll('.stepper-item');
+        items.forEach((item, index) => {
+            item.classList.remove('active', 'completed');
+            if (index + 1 < currentStep) {
+                item.classList.add('completed');
+            } else if (index + 1 === currentStep) {
+                item.classList.add('active');
+            }
+        });
+    }
+
+    function mostrarResumen() {
+        const resumen = document.getElementById('resumen');
+        const serie = document.querySelector('[name="serie"]').value;
+        const folio = document.querySelector('[name="folio"]').value;
+        const receptor_rfc = document.querySelector('[name="receptor_rfc"]').value;
+        const receptor_nombre = document.querySelector('[name="receptor_nombre"]').value;
+
+        resumen.innerHTML = `
+        <div class="card">
+            <div class="card-body">
+                <h6>Factura: ${serie || '-'}${folio || 'SN'}</h6>
+                <p><strong>Receptor:</strong> ${receptor_nombre} (${receptor_rfc})</p>
+                <p><strong>Conceptos:</strong> ${conceptos.length}</p>
+                <p><strong>Total:</strong> ${document.getElementById('total').textContent}</p>
+            </div>
+        </div>
+        
+        <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-success btn-lg" onclick="submitForm()">
+                <i class="fas fa-stamp"></i> Crear y Timbrar Factura
+            </button>
+        </div>
+    `;
+    }
+
+    function submitForm() {
+        // Guardar conceptos en campo oculto
+        document.getElementById('conceptosJSON').value = JSON.stringify(conceptos);
+
+        // Submit form
+        document.getElementById('facturaForm').submit();
+    }
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', function () {
+        actualizarStepper();
+
+        // ==================== AUTOCOMPLETADO DE CLIENTES ====================
+
+        let autocompleteTimeout;
+        const companyId = window.location.pathname.split('/')[2]; // Extraer company_id de la URL
+
+        // Crear contenedor para sugerencias
+        const autocompleteContainer = document.createElement('div');
+        autocompleteContainer.id = 'customerAutocomplete';
+        autocompleteContainer.style.cssText = `
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            width: 100%;
+        `;
+
+        // Función para buscar clientes
+        function searchCustomers(query) {
+            if (query.length < 2) {
+                hideAutocomplete();
+                return;
+            }
+
+            fetch(`/api/companies/${companyId}/customers/search?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(customers => {
+                    if (customers.length > 0) {
+                        showAutocomplete(customers);
+                    } else {
+                        hideAutocomplete();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error buscando clientes:', error);
+                    hideAutocomplete();
+                });
+        }
+
+        // Mostrar lista de sugerencias
+        function showAutocomplete(customers) {
+            autocompleteContainer.innerHTML = '';
+
+            customers.forEach(customer => {
+                const item = document.createElement('div');
+                item.style.cssText = `
+                    padding: 10px;
+                    cursor: pointer;
+                    border-bottom: 1px solid #eee;
+                `;
+                item.innerHTML = `
+                    <div style="font-weight: bold; color: #198754;">${customer.rfc}</div>
+                    <div style="font-size: 0.9em; color: #666;">${customer.nombre}</div>
+                `;
+
+                item.addEventListener('mouseenter', () => {
+                    item.style.backgroundColor = '#f0f0f0';
+                });
+
+                item.addEventListener('mouseleave', () => {
+                    item.style.backgroundColor = 'white';
+                });
+
+                item.addEventListener('click', () => {
+                    selectCustomer(customer);
+                });
+
+                autocompleteContainer.appendChild(item);
+            });
+
+            autocompleteContainer.style.display = 'block';
+        }
+
+        // Ocultar autocompletado
+        function hideAutocomplete() {
+            autocompleteContainer.style.display = 'none';
+        }
+
+        // Seleccionar un cliente y llenar campos
+        function selectCustomer(customer) {
+            // Llenar los campos del formulario
+            const rfcInput = document.querySelector('[name="receptor_rfc"]');
+            const nombreInput = document.querySelector('[name="receptor_nombre"]');
+            const cpInput = document.querySelector('[name="receptor_cp"]');
+            const regimenInput = document.querySelector('[name="receptor_regimen"]');
+
+            if (rfcInput) rfcInput.value = customer.rfc;
+            if (nombreInput) nombreInput.value = customer.nombre;
+            if (cpInput) cpInput.value = customer.codigo_postal;
+            if (regimenInput) {
+                regimenInput.value = customer.regimen_fiscal;
+                // Filtrar Usos CFDI según el nuevo régimen
+                if (typeof filtrarUsoCFDI === 'function') {
+                    filtrarUsoCFDI();
+                }
+            }
+
+            hideAutocomplete();
+
+            // Mostrar notificación visual
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #198754;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 4px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                z-index: 9999;
+            `;
+            notification.innerHTML = '<i class="fas fa-check-circle"></i> Datos del cliente cargados';
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Inicializar autocompletado en el campo RFC
+        const receptorRfcInput = document.querySelector('[name="receptor_rfc"]');
+        if (receptorRfcInput) {
+            // Agregar contenedor de autocompletado después del campo
+            const inputGroup = receptorRfcInput.closest('.input-group');
+            if (inputGroup) {
+                const wrapper = document.createElement('div');
+                wrapper.style.position = 'relative';
+                wrapper.style.width = '100%';
+
+                inputGroup.parentNode.insertBefore(wrapper, inputGroup);
+                wrapper.appendChild(inputGroup);
+                wrapper.appendChild(autocompleteContainer);
+            }
+
+            // Event listener con debounce
+            receptorRfcInput.addEventListener('input', function () {
+                const query = this.value.trim();
+
+                clearTimeout(autocompleteTimeout);
+                autocompleteTimeout = setTimeout(() => {
+                    searchCustomers(query);
+                }, 300); // Esperar 300ms después de que el usuario deje de escribir
+            });
+
+            // Ocultar al hacer clic fuera
+            document.addEventListener('click', function (e) {
+                if (!autocompleteContainer.contains(e.target) && e.target !== receptorRfcInput) {
+                    hideAutocomplete();
+                }
+            });
+        }
+
+        // Manejar cambio de serie
+        const serieInput = document.getElementById('serieInput');
+        if (serieInput) {
+            serieInput.addEventListener('change', function () {
+                const newSerie = this.value || 'A';
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('serie', newSerie);
+                window.location.href = currentUrl.toString();
+            });
+        }
+
+        // ==================== VALIDACIÓN DINÁMICA: RÉGIMEN VS USO CFDI ====================
+
+        const regimenSelect = document.querySelector('[name="receptor_regimen"]');
+        const usoSelect = document.querySelector('[name="receptor_uso_cfdi"]');
+
+        // Matriz de Usos válidos por Grupo de Regímenes
+        const reglasUso = {
+            '605': ['D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'S01', 'CP01', 'CN01'], // Asalariados: Solo Deducciones Personales y Especiales (NO G/I)
+            '616': ['S01', 'CP01'], // Sin Obligaciones: Solo Sin Efectos y Pagos
+            'morales': ['G01', 'G02', 'G03', 'I01', 'I02', 'I03', 'I04', 'I05', 'I06', 'I07', 'I08', 'S01', 'CP01'], // Morales: Gastos e Inversiones (NO D)
+            'fisicas_activas': ['G01', 'G02', 'G03', 'I01', 'I02', 'I03', 'I04', 'I05', 'I06', 'I07', 'I08', 'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'S01', 'CP01'] // Fisicas Actividad Empresarial/RESICO: Todo
+        };
+
+        // Identificar grupo de régimen
+        function getRegimenGroup(regimen) {
+            if (regimen === '605') return '605';
+            if (regimen === '616') return '616';
+
+            // Regímenes de Personas Morales (generalmente empiezan con 601, 603, 620-624, 628)
+            // Regímenes de Personas Físicas (612, 621, 625, 626) pueden usar G, I y D
+            // Usaremos una lista explicita para mayor seguridad
+
+            const morales = ['601', '603', '620', '622', '623', '624'];
+            const fisicas = ['606', '608', '610', '611', '612', '614', '615', '621', '625', '626'];
+
+            if (morales.includes(regimen)) return 'morales';
+            if (fisicas.includes(regimen)) return 'fisicas_activas';
+
+            return 'fisicas_activas'; // Default permisivo si no machea
+        }
+
+        function filtrarUsoCFDI() {
+            if (!regimenSelect || !usoSelect) return;
+
+            const regimen = regimenSelect.value;
+            const grupo = getRegimenGroup(regimen);
+            const usosPermitidos = reglasUso[grupo] || [];
+
+            const opciones = usoSelect.options;
+            let primeraOpciónVisible = null;
+            let valorActualValido = false;
+
+            for (let i = 0; i < opciones.length; i++) {
+                const opt = opciones[i];
+                const usoCodigo = opt.value;
+
+                // Verificar si el código (ej. G03) está en la lista permitida
+                if (usosPermitidos.includes(usoCodigo)) {
+                    opt.hidden = false;
+                    opt.disabled = false;
+                    if (!primeraOpciónVisible) primeraOpciónVisible = usoCodigo;
+                    if (usoSelect.value === usoCodigo) valorActualValido = true;
+                } else {
+                    opt.hidden = true;
+                    opt.disabled = true;
+                }
+            }
+
+            // Si el valor actual no es válido, cambiar al primero accesible
+            if (!valorActualValido && primeraOpciónVisible) {
+                usoSelect.value = primeraOpciónVisible;
+            } else if (!valorActualValido) {
+                // Fallback a S01 si nada machea (es el comodín universal)
+                usoSelect.value = 'S01';
+            }
+        }
+
+        // Listeners
+        if (regimenSelect) {
+            regimenSelect.addEventListener('change', filtrarUsoCFDI);
+            // Ejecutar al inicio para validar estado inicial
+            filtrarUsoCFDI();
+        }
+
+        // Listener para autocompletado (ya que cambia el valor programáticamente)
+        // Modificar selectCustomer para llamar filtrarUsoCFDI() después de setear valores
+
+        // ==================== AUTOCOMPLETE DE CATÁLOGOS SAT ====================
+
+        /**
+         * Crear autocomplete genérico para catálogos
+         */
+        function createCatalogAutocomplete(inputId, dropdownId, catalogType) {
+            const input = document.getElementById(inputId);
+            const dropdown = document.getElementById(dropdownId);
+            let debounceTimer;
+            let currentFocus = -1;
+
+            if (!input || !dropdown) return;
+
+            // Función de búsqueda con debounce
+            function searchCatalog(query) {
+                clearTimeout(debounceTimer);
+
+                if (query.length < 2) {
+                    hideDropdown();
+                    return;
+                }
+
+                // Mostrar loading
+                dropdown.innerHTML = '<div class="autocomplete-loading"><i class="fas fa-spinner fa-spin"></i> Buscando...</div>';
+                dropdown.classList.add('show');
+
+                debounceTimer = setTimeout(() => {
+                    fetch(`/api/catalogs/${catalogType}/search?q=${encodeURIComponent(query)}&limit=50`)
+                        .then(response => response.json())
+                        .then(items => {
+                            showResults(items);
+                        })
+                        .catch(error => {
+                            console.error('Error searching catalog:', error);
+                            dropdown.innerHTML = '<div class="autocomplete-no-results">Error al buscar</div>';
+                        });
+                }, 300); // 300ms debounce
+            }
+
+            // Mostrar resultados
+            function showResults(items) {
+                dropdown.innerHTML = '';
+
+                if (items.length === 0) {
+                    dropdown.innerHTML = '<div class="autocomplete-no-results">No se encontraron resultados</div>';
+                    dropdown.classList.add('show');
+                    return;
+                }
+
+                items.forEach((item, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-item';
+                    div.innerHTML = `
+                        <div class="autocomplete-code">${item.code}</div>
+                        <div class="autocomplete-description">${item.description}</div>
+                    `;
+
+                    div.addEventListener('click', () => {
+                        selectItem(item);
+                    });
+
+                    dropdown.appendChild(div);
+                });
+
+                dropdown.classList.add('show');
+                currentFocus = -1;
+            }
+
+            // Seleccionar item
+            function selectItem(item) {
+                input.value = item.code;
+                hideDropdown();
+
+                // Mostrar notificación temporal
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #198754;
+                    color: white;
+                    padding: 10px 15px;
+                    border-radius: 4px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    z-index: 9999;
+                    font-size: 0.9em;
+                `;
+                notification.innerHTML = `<i class="fas fa-check-circle"></i> ${item.code} seleccionado`;
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    notification.remove();
+                }, 2000);
+            }
+
+            // Ocultar dropdown
+            function hideDropdown() {
+                dropdown.classList.remove('show');
+                dropdown.innerHTML = '';
+                currentFocus = -1;
+            }
+
+            // Event listeners
+            input.addEventListener('input', function () {
+                searchCatalog(this.value);
+            });
+
+            input.addEventListener('keydown', function (e) {
+                const items = dropdown.querySelectorAll('.autocomplete-item');
+
+                if (e.keyCode === 40) { // Down arrow
+                    e.preventDefault();
+                    currentFocus++;
+                    addActive(items);
+                } else if (e.keyCode === 38) { // Up arrow
+                    e.preventDefault();
+                    currentFocus--;
+                    addActive(items);
+                } else if (e.keyCode === 13) { // Enter
+                    e.preventDefault();
+                    if (currentFocus > -1 && items[currentFocus]) {
+                        items[currentFocus].click();
+                    }
+                } else if (e.keyCode === 27) { // Escape
+                    hideDropdown();
+                }
+            });
+
+            // Añadir clase active al elemento seleccionado
+            function addActive(items) {
+                if (!items || items.length === 0) return;
+
+                removeActive(items);
+
+                if (currentFocus >= items.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = items.length - 1;
+
+                items[currentFocus].classList.add('active');
+                items[currentFocus].scrollIntoView({ block: 'nearest' });
+            }
+
+            function removeActive(items) {
+                items.forEach(item => item.classList.remove('active'));
+            }
+
+            // Cerrar dropdown al hacer click fuera
+            document.addEventListener('click', function (e) {
+                if (e.target !== input) {
+                    hideDropdown();
+                }
+            });
+        }
+
+        // Inicializar autocompletes para catálogos
+        createCatalogAutocomplete('modal_clave_prod_serv', 'productosAutocomplete', 'productos');
+        createCatalogAutocomplete('modal_clave_unidad', 'unidadesAutocomplete', 'unidades');
+
+    });
+</script>
+{% endblock %}

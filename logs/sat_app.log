@@ -341,3 +341,467 @@ WHERE product.company_id = ? AND product.active = 1 ORDER BY product.name]
 2026-01-04 11:58:54 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2026-01-04 11:59:02 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
 2026-01-04 11:59:32 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-05 16:05:42 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-05 16:26:04 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-05 16:26:20 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-06 00:32:23 - services.facturacion_service - INFO - [facturacion_service.py:217] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-06 00:32:25 - services.facturacion_service - ERROR - [facturacion_service.py:251] - Error al verificar lista 69B: 'charmap' codec can't decode byte 0x81 in position 4098: character maps to <undefined>
+2026-01-07 19:16:33 - utils.crypto - ERROR - [crypto.py:83] - Encryption failed: FERNET_KEY environment variable not set. Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+2026-01-07 19:16:33 - app - ERROR - [app.py:838] - Exception on /companies/2/facturacion/credenciales [POST]
+Traceback (most recent call last):
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "c:\desarrollo\sat\working\app.py", line 2002, in facturacion_credenciales
+    encrypted_password = encrypt_password(form.password.data)
+  File "c:\desarrollo\sat\working\utils\crypto.py", line 79, in encrypt_password
+    key = load_key()
+  File "c:\desarrollo\sat\working\utils\crypto.py", line 56, in load_key
+    raise CryptoKeyError(
+    ...<2 lines>...
+    )
+utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+2026-01-07 19:17:24 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 19:17:48 - utils.crypto - ERROR - [crypto.py:83] - Encryption failed: FERNET_KEY environment variable not set. Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+2026-01-07 19:17:48 - app - ERROR - [app.py:838] - Exception on /companies/2/facturacion/credenciales [POST]
+Traceback (most recent call last):
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask\app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\desarrollo\sat\working\.venv\Lib\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "c:\desarrollo\sat\working\app.py", line 2002, in facturacion_credenciales
+    encrypted_password = encrypt_password(form.password.data)
+  File "c:\desarrollo\sat\working\utils\crypto.py", line 79, in encrypt_password
+    key = load_key()
+  File "c:\desarrollo\sat\working\utils\crypto.py", line 56, in load_key
+    raise CryptoKeyError(
+    ...<2 lines>...
+    )
+utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+2026-01-07 19:19:56 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 19:20:46 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF session token is missing.
+2026-01-07 19:22:39 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 19:22:51 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF session token is missing.
+2026-01-07 20:02:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:04:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:18:23 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:37:06 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:48:29 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:48:59 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:55:44 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:55:46 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 21:55:46 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:00:26 - services.cfdi_generator - ERROR - [cfdi_generator.py:249] - Error al generar CFDI: Concepto.__init__() got an unexpected keyword argument 'importe'
+2026-01-07 22:00:26 - __main__ - ERROR - [app.py:2356] - Error al generar y timbrar: Concepto.__init__() got an unexpected keyword argument 'importe'
+2026-01-07 22:01:36 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:01:36 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:19:23 - services.cfdi_generator - ERROR - [cfdi_generator.py:251] - Error al generar CFDI: Impuestos.__init__() got an unexpected keyword argument 'total_impuestos_trasladados'
+2026-01-07 22:19:23 - __main__ - ERROR - [app.py:2356] - Error al generar y timbrar: Impuestos.__init__() got an unexpected keyword argument 'total_impuestos_trasladados'
+2026-01-07 22:20:02 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:20:02 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:22:22 - services.cfdi_generator - ERROR - [cfdi_generator.py:250] - Error al generar CFDI: Comprobante.__init__() got an unexpected keyword argument 'subtotal'
+2026-01-07 22:22:22 - __main__ - ERROR - [app.py:2356] - Error al generar y timbrar: Comprobante.__init__() got an unexpected keyword argument 'subtotal'
+2026-01-07 22:22:57 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:22:57 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:27:05 - services.cfdi_generator - ERROR - [cfdi_generator.py:248] - Error al generar CFDI: Comprobante.__init__() got an unexpected keyword argument 'impuestos'
+2026-01-07 22:27:05 - __main__ - ERROR - [app.py:2356] - Error al generar y timbrar: Comprobante.__init__() got an unexpected keyword argument 'impuestos'
+2026-01-07 22:27:35 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:27:35 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:29:30 - __main__ - ERROR - [app.py:2356] - Error al generar y timbrar: '(' was never closed (cfdi_generator.py, line 201)
+2026-01-07 22:35:25 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:35:26 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:35:26 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:36:06 - services.cfdi_generator - INFO - [cfdi_generator.py:227] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 22:36:06 - services.facturacion_service - INFO - [facturacion_service.py:104] - Iniciando timbrado de factura con Finkok
+2026-01-07 22:36:06 - services.facturacion_service - ERROR - [facturacion_service.py:142] - Error al timbrar factura: cfdi must be a CFDI object
+2026-01-07 22:38:24 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:38:26 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:38:26 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:39:10 - services.cfdi_generator - INFO - [cfdi_generator.py:227] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 22:39:10 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 22:39:10 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: name 'xml_content' is not defined
+2026-01-07 22:42:01 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:42:01 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:44:14 - services.cfdi_generator - INFO - [cfdi_generator.py:227] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 22:44:14 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 22:44:14 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: memoryview: a bytes-like object is required, not 'lxml.etree._Element'
+2026-01-07 22:44:52 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:44:52 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:45:50 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:45:51 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:45:51 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:47:13 - services.cfdi_generator - INFO - [cfdi_generator.py:230] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 22:47:13 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 22:47:13 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration.
+2026-01-07 22:50:04 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:50:05 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:50:05 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:50:08 - services.cfdi_generator - INFO - [cfdi_generator.py:230] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 22:50:08 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 22:50:08 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: accept PDF not supported
+2026-01-07 22:50:54 - services.cfdi_generator - INFO - [cfdi_generator.py:230] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 22:50:54 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 22:50:54 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: accept PDF not supported
+2026-01-07 22:53:01 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:53:01 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:59:05 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:59:05 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:59:23 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:59:23 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 22:59:42 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 22:59:43 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 23:00:15 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 23:00:15 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 23:01:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 23:01:22 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 23:03:53 - services.cfdi_generator - INFO - [cfdi_generator.py:230] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 23:03:53 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 23:03:54 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: 300 - El usuario o contraseña son inválidos
+2026-01-07 23:03:54 - services.cfdi_generator - INFO - [cfdi_generator.py:230] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 23:03:54 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 23:03:54 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: 300 - El usuario o contraseña son inválidos
+2026-01-07 23:06:29 - services.cfdi_generator - INFO - [cfdi_generator.py:230] - CFDI generado exitosamente. Total: 2900.00
+2026-01-07 23:06:29 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 23:06:29 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: 302 - Sello mal formado o inválido
+2026-01-07 23:10:54 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 23:10:55 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 23:10:55 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 23:45:43 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-07 23:45:44 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-07 23:55:54 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-07 23:55:54 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-07 23:55:55 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 00:00:49 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 00:00:49 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 00:00:52 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 00:16:23 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 00:16:23 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 00:16:23 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 12:19:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 12:19:46 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 12:19:46 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 12:20:58 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2026-01-08 12:20:58 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2026-01-08 12:20:58 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2026-01-08 12:22:24 - services.cfdi_generator - ERROR - [cfdi_generator.py:239] - Error al generar CFDI: Incorrect password, could not decrypt key
+2026-01-08 12:22:24 - __main__ - ERROR - [app.py:2413] - Error al generar y timbrar: Incorrect password, could not decrypt key
+2026-01-08 12:23:33 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 12:23:33 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 12:23:36 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 12:26:07 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 12:26:07 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 12:26:08 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 13:42:55 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 13:42:55 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 13:42:55 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 13:43:58 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 13:43:58 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 13:43:58 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 13:44:56 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 13:44:56 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 13:44:57 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 14:01:37 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:01:37 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:01:51 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:02:13 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:02:38 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:02:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:03:06 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:03:06 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:05:42 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 14:05:42 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 14:05:42 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 14:06:17 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:06:19 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:06:19 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:09:06 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 14:09:06 - services.facturacion_service - INFO - [facturacion_service.py:95] - Iniciando timbrado de factura con Finkok
+2026-01-08 14:09:07 - services.facturacion_service - ERROR - [facturacion_service.py:136] - Error al timbrar factura: CFDI40138 - El campo Nombre del emisor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.
+2026-01-08 14:50:40 - services.facturacion_service - INFO - [facturacion_service.py:160] - Consultando estado de CFDI
+2026-01-08 14:50:41 - services.facturacion_service - ERROR - [facturacion_service.py:193] - Error al consultar estado: 'dict' object has no attribute 'estado'
+2026-01-08 14:52:50 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:52:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:53:24 - services.facturacion_service - INFO - [facturacion_service.py:160] - Consultando estado de CFDI
+2026-01-08 14:53:24 - services.facturacion_service - ERROR - [facturacion_service.py:193] - Error al consultar estado: 'estado'
+2026-01-08 14:54:06 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:54:06 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:55:30 - services.facturacion_service - INFO - [facturacion_service.py:160] - Consultando estado de CFDI
+2026-01-08 14:55:30 - services.facturacion_service - INFO - [facturacion_service.py:180] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 14:55:30 - services.facturacion_service - INFO - [facturacion_service.py:181] - Respuesta SAT status content: {'CodigoEstatus': 'S - Comprobante obtenido satisfactoriamente.', 'EsCancelable': 'Cancelable con aceptación', 'Estado': 'Vigente', 'EstatusCancelacion': None, 'ValidacionEFOS': '200'}
+2026-01-08 14:55:30 - services.facturacion_service - INFO - [facturacion_service.py:192] - Estado consultado: Desconocido
+2026-01-08 14:56:52 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 14:56:52 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 14:57:15 - services.facturacion_service - INFO - [facturacion_service.py:160] - Consultando estado de CFDI
+2026-01-08 14:57:15 - services.facturacion_service - INFO - [facturacion_service.py:180] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 14:57:15 - services.facturacion_service - INFO - [facturacion_service.py:181] - Respuesta SAT status content: {'CodigoEstatus': 'S - Comprobante obtenido satisfactoriamente.', 'EsCancelable': 'Cancelable con aceptación', 'Estado': 'Vigente', 'EstatusCancelacion': None, 'ValidacionEFOS': '200'}
+2026-01-08 14:57:15 - services.facturacion_service - INFO - [facturacion_service.py:193] - Estado consultado: Vigente
+2026-01-08 15:18:27 - services.facturacion_service - INFO - [facturacion_service.py:215] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:18:29 - services.facturacion_service - ERROR - [facturacion_service.py:249] - Error al verificar lista 69B: 'charmap' codec can't decode byte 0x81 in position 4098: character maps to <undefined>
+2026-01-08 15:28:53 - services.facturacion_service - INFO - [facturacion_service.py:215] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:28:55 - services.facturacion_service - ERROR - [facturacion_service.py:249] - Error al verificar lista 69B: 'charmap' codec can't decode byte 0x81 in position 4098: character maps to <undefined>
+2026-01-08 15:28:56 - services.facturacion_service - INFO - [facturacion_service.py:215] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:28:56 - services.facturacion_service - INFO - [facturacion_service.py:215] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:28:58 - services.facturacion_service - ERROR - [facturacion_service.py:249] - Error al verificar lista 69B: 'charmap' codec can't decode byte 0x81 in position 4098: character maps to <undefined>
+2026-01-08 15:28:58 - services.facturacion_service - ERROR - [facturacion_service.py:249] - Error al verificar lista 69B: 'charmap' codec can't decode byte 0x81 in position 4098: character maps to <undefined>
+2026-01-08 15:28:59 - services.facturacion_service - INFO - [facturacion_service.py:215] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:29:02 - services.facturacion_service - ERROR - [facturacion_service.py:249] - Error al verificar lista 69B: 'charmap' codec can't decode byte 0x81 in position 4098: character maps to <undefined>
+2026-01-08 15:30:45 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:30:45 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:31:12 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:31:12 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:31:24 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:31:24 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:32:03 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:32:03 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:32:33 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:32:33 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:33:40 - services.facturacion_service - INFO - [facturacion_service.py:271] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:33:42 - services.facturacion_service - ERROR - [facturacion_service.py:305] - Error al verificar lista 69B: type object 'TaxpayerStatus' has no attribute 'NO_DEFINITIVO'
+2026-01-08 15:35:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:35:07 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:35:34 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 15:35:34 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 15:35:51 - services.facturacion_service - INFO - [facturacion_service.py:271] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:35:51 - services.facturacion_service - INFO - [facturacion_service.py:307] - RFC GQA170124FQA - Status: NO_ENCONTRADO
+2026-01-08 15:36:34 - services.facturacion_service - INFO - [facturacion_service.py:271] - Verificando RFC ATS220630TB1 en lista 69B
+2026-01-08 15:36:34 - services.facturacion_service - INFO - [facturacion_service.py:307] - RFC ATS220630TB1 - Status: NO_ENCONTRADO
+2026-01-08 15:39:06 - services.facturacion_service - INFO - [facturacion_service.py:271] - Verificando RFC GQA170124FQA en lista 69B
+2026-01-08 15:39:06 - services.facturacion_service - INFO - [facturacion_service.py:307] - RFC GQA170124FQA - Status: NO_ENCONTRADO
+2026-01-08 16:18:44 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 16:18:44 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 16:18:53 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 16:18:53 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 16:19:04 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 16:19:05 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 16:19:20 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 16:19:20 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 16:20:19 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 16:21:19 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 16:25:24 - services.facturacion_service - INFO - [facturacion_service.py:271] - Verificando RFC EKU9003173C9 en lista 69B
+2026-01-08 16:25:24 - services.facturacion_service - INFO - [facturacion_service.py:307] - RFC EKU9003173C9 - Status: NO_ENCONTRADO
+2026-01-08 16:28:30 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 16:28:30 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 16:28:31 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 17:00:06 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 17:00:06 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 17:00:07 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 17:01:56 - services.cfdi_generator - INFO - [cfdi_generator.py:235] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 17:01:56 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 17:01:56 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 17:20:56 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 17:20:56 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 17:22:59 - services.cfdi_generator - INFO - [cfdi_generator.py:239] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 17:22:59 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 17:22:59 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 17:33:48 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 17:33:50 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 17:33:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 17:34:49 - services.cfdi_generator - INFO - [cfdi_generator.py:239] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 17:34:49 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 17:34:49 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 17:34:49 - __main__ - INFO - [app.py:2514] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767915289_096ae542.xml
+2026-01-08 17:58:22 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 17:58:22 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:00:38 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:00:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:01:54 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:01:54 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:04:57 - services.cfdi_generator - INFO - [cfdi_generator.py:314] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 18:04:57 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 18:04:57 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 18:04:57 - __main__ - INFO - [app.py:2514] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767917097_e67aa6b5.xml
+2026-01-08 18:12:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:12:58 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:13:20 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:13:20 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:13:53 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:13:53 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:14:40 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:14:40 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:16:05 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:16:05 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:17:42 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:17:42 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:21:14 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:21:14 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:22:03 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:22:03 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:22:50 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:22:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:25:12 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:25:13 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:25:36 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:25:36 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:25:58 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:25:58 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:28:37 - services.cfdi_generator - INFO - [cfdi_generator.py:452] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 18:28:37 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 18:28:37 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 18:28:37 - __main__ - INFO - [app.py:2514] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767918517_d5a7fd92.xml
+2026-01-08 18:34:21 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:34:21 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:52:50 - services.cfdi_generator - INFO - [cfdi_generator.py:463] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 18:52:50 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 18:52:50 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration.
+2026-01-08 18:52:50 - __main__ - INFO - [app.py:2514] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767919970_d1d7c2e8.xml
+2026-01-08 18:54:03 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 18:54:03 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 18:56:50 - services.cfdi_generator - INFO - [cfdi_generator.py:465] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 18:56:50 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 18:56:50 - services.facturacion_service - ERROR - [facturacion_service.py:192] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 18:56:50 - __main__ - INFO - [app.py:2514] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767920210_e511304e.xml
+2026-01-08 19:04:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:04:07 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 19:04:46 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:04:46 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 19:13:02 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 19:13:02 - services.facturacion_service - INFO - [facturacion_service.py:153] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:13:02 - services.facturacion_service - INFO - [facturacion_service.py:173] - Recibiendo CFDI como objeto (modo recomendado)
+2026-01-08 19:13:02 - services.facturacion_service - ERROR - [facturacion_service.py:204] - Error al timbrar factura: cfdi must be a CFDI object
+2026-01-08 19:13:02 - __main__ - ERROR - [app.py:2518] - Error guardando XML fallido: write() argument must be str, not tuple
+2026-01-08 19:14:26 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:14:26 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 19:14:51 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:14:51 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 19:16:33 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 19:16:33 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:16:34 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 19:16:34 - __main__ - INFO - [app.py:2515] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767921394_284ec89c.xml
+2026-01-08 19:27:25 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 19:27:25 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:27:25 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 19:27:25 - __main__ - INFO - [app.py:2515] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767922045_84f137fb.xml
+2026-01-08 19:38:31 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:38:32 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:38:32 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 19:42:25 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:42:25 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:42:25 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 300 - El usuario o contraseña son inválidos
+2026-01-08 19:42:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:42:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 19:42:55 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 19:42:55 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:42:55 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 19:52:23 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 19:52:23 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:52:23 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 300 - El usuario o contraseña son inválidos
+2026-01-08 19:52:23 - __main__ - INFO - [app.py:2515] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767923543_40e2ab23.xml
+2026-01-08 19:53:56 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 19:53:56 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 19:53:57 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: CFDI40161 - La clave del campo UsoCFDI debe corresponder con el tipo de persona (física o moral) y el régimen correspondiente conforme al catálogo c_UsoCFDI.
+2026-01-08 19:53:57 - __main__ - INFO - [app.py:2515] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767923637_af0f32e4.xml
+2026-01-08 20:14:22 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 20:14:22 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 20:15:39 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 20:15:39 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 20:15:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 20:15:49 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 20:16:00 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 20:16:00 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:05:16 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF token has expired.
+2026-01-08 21:11:51 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 29000.00
+2026-01-08 21:11:51 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 21:11:52 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 721 - RFC emisor del comprobante no corresponde al de la cuenta.
+2026-01-08 21:11:52 - __main__ - INFO - [app.py:2517] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767928312_bac503ae.xml
+2026-01-08 21:15:13 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 29000.00
+2026-01-08 21:15:13 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 21:15:14 - satcfdi.pacs.finkok.Finkok - INFO - [finkok.py:173] - Comprobante timbrado satisfactoriamente
+2026-01-08 21:15:14 - services.facturacion_service - ERROR - [facturacion_service.py:189] - Error al timbrar factura: 'CFDI' object has no attribute 'complemento'
+2026-01-08 21:15:14 - __main__ - INFO - [app.py:2517] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767928514_af831008.xml
+2026-01-08 21:15:34 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:15:36 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:15:36 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:16:03 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:16:03 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:24:00 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-08 21:24:00 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 21:24:00 - satcfdi.pacs.finkok.Finkok - INFO - [finkok.py:173] - Comprobante timbrado satisfactoriamente
+2026-01-08 21:24:00 - services.facturacion_service - INFO - [facturacion_service.py:187] - Factura timbrada exitosamente. UUID: CCC18A26-B089-5F00-962F-978262B3EF8F
+2026-01-08 21:24:00 - __main__ - ERROR - [app.py:2534] - Error al generar y timbrar: write() argument must be str, not bytes
+2026-01-08 21:25:56 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:25:56 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:27:25 - services.cfdi_generator - INFO - [cfdi_generator.py:467] - CFDI generado y firmado exitosamente. Total: 29000.00
+2026-01-08 21:27:25 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 21:27:26 - services.facturacion_service - ERROR - [facturacion_service.py:191] - Error al timbrar factura: CFDI40162 - El campo ClaveProdServ, no contiene un valor del catálogo c_ClaveProdServ.
+2026-01-08 21:27:26 - __main__ - INFO - [app.py:2517] - XML rechazado por PAC guardado en: C:\desarrollo\sat\working\xml\fallidos\FAILED_TIMBRADO_1767929246_50da4c36.xml
+2026-01-08 21:47:25 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:47:25 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:47:37 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:47:37 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:49:34 - services.cfdi_generator - INFO - [cfdi_generator.py:468] - CFDI generado y firmado exitosamente. Total: 29000.00
+2026-01-08 21:49:34 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-08 21:49:35 - satcfdi.pacs.finkok.Finkok - INFO - [finkok.py:173] - Comprobante timbrado satisfactoriamente
+2026-01-08 21:49:35 - services.facturacion_service - INFO - [facturacion_service.py:187] - Factura timbrada exitosamente. UUID: C788BC3E-802E-54C8-AA4A-DA69E94BDD36
+2026-01-08 21:49:35 - __main__ - INFO - [app.py:2424] - XML timbrado guardado en: C:\desarrollo\sat\working\xml\EKU9003173C9\A0000001_C788BC3E-802E-54C8-AA4A-DA69E94BDD36.xml
+2026-01-08 21:49:35 - __main__ - INFO - [app.py:2460] - Contador de folio actualizado: Serie A, Folio 1
+2026-01-08 21:49:35 - __main__ - INFO - [app.py:2491] - Nuevo cliente creado: ABC970528UHA
+2026-01-08 21:54:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:54:07 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:54:18 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 21:54:18 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 21:57:10 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 21:57:10 - services.facturacion_service - ERROR - [facturacion_service.py:252] - Error al consultar estado: Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration.
+2026-01-08 22:00:22 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:00:22 - services.facturacion_service - ERROR - [facturacion_service.py:252] - Error al consultar estado: Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration.
+2026-01-08 22:00:28 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:00:28 - services.facturacion_service - ERROR - [facturacion_service.py:252] - Error al consultar estado: Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration.
+2026-01-08 22:00:46 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 22:00:46 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 22:01:49 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 22:01:49 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 22:02:07 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 22:02:07 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 22:02:37 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 22:02:37 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 22:03:47 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-08 22:03:47 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-08 22:05:14 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:05:15 - services.facturacion_service - INFO - [facturacion_service.py:237] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 22:05:15 - services.facturacion_service - INFO - [facturacion_service.py:238] - Respuesta SAT status content: {'CodigoEstatus': 'N - 602: Comprobante no encontrado.', 'EsCancelable': None, 'Estado': 'No Encontrado', 'EstatusCancelacion': None, 'ValidacionEFOS': None}
+2026-01-08 22:05:15 - services.facturacion_service - INFO - [facturacion_service.py:250] - Estado consultado: No Encontrado
+2026-01-08 22:05:21 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:05:22 - services.facturacion_service - INFO - [facturacion_service.py:237] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 22:05:22 - services.facturacion_service - INFO - [facturacion_service.py:238] - Respuesta SAT status content: {'CodigoEstatus': 'N - 602: Comprobante no encontrado.', 'EsCancelable': None, 'Estado': 'No Encontrado', 'EstatusCancelacion': None, 'ValidacionEFOS': None}
+2026-01-08 22:05:22 - services.facturacion_service - INFO - [facturacion_service.py:250] - Estado consultado: No Encontrado
+2026-01-08 22:05:24 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:05:24 - services.facturacion_service - INFO - [facturacion_service.py:237] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 22:05:24 - services.facturacion_service - INFO - [facturacion_service.py:238] - Respuesta SAT status content: {'CodigoEstatus': 'N - 602: Comprobante no encontrado.', 'EsCancelable': None, 'Estado': 'No Encontrado', 'EstatusCancelacion': None, 'ValidacionEFOS': None}
+2026-01-08 22:05:24 - services.facturacion_service - INFO - [facturacion_service.py:250] - Estado consultado: No Encontrado
+2026-01-08 22:10:13 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:10:13 - services.facturacion_service - INFO - [facturacion_service.py:237] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 22:10:13 - services.facturacion_service - INFO - [facturacion_service.py:238] - Respuesta SAT status content: {'CodigoEstatus': 'S - Comprobante obtenido satisfactoriamente.', 'EsCancelable': 'Cancelable sin aceptación', 'Estado': 'Vigente', 'EstatusCancelacion': None, 'ValidacionEFOS': '200'}
+2026-01-08 22:10:13 - services.facturacion_service - INFO - [facturacion_service.py:250] - Estado consultado: Vigente
+2026-01-08 22:12:30 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:12:30 - services.facturacion_service - INFO - [facturacion_service.py:237] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 22:12:30 - services.facturacion_service - INFO - [facturacion_service.py:238] - Respuesta SAT status content: {'CodigoEstatus': 'S - Comprobante obtenido satisfactoriamente.', 'EsCancelable': 'Cancelable sin aceptación', 'Estado': 'Vigente', 'EstatusCancelacion': None, 'ValidacionEFOS': '200'}
+2026-01-08 22:12:30 - services.facturacion_service - INFO - [facturacion_service.py:250] - Estado consultado: Vigente
+2026-01-08 22:12:32 - services.facturacion_service - INFO - [facturacion_service.py:215] - Consultando estado de CFDI
+2026-01-08 22:12:32 - services.facturacion_service - INFO - [facturacion_service.py:237] - Respuesta SAT status type: <class 'dict'>
+2026-01-08 22:12:32 - services.facturacion_service - INFO - [facturacion_service.py:238] - Respuesta SAT status content: {'CodigoEstatus': 'S - Comprobante obtenido satisfactoriamente.', 'EsCancelable': 'Cancelable sin aceptación', 'Estado': 'Vigente', 'EstatusCancelacion': None, 'ValidacionEFOS': '200'}
+2026-01-08 22:12:32 - services.facturacion_service - INFO - [facturacion_service.py:250] - Estado consultado: Vigente
+2026-01-09 12:26:13 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 12:26:14 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 12:31:42 - services.cfdi_generator - INFO - [cfdi_generator.py:468] - CFDI generado y firmado exitosamente. Total: 145000.00
+2026-01-09 12:31:42 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-09 12:31:43 - satcfdi.pacs.finkok.Finkok - INFO - [finkok.py:173] - Comprobante timbrado satisfactoriamente
+2026-01-09 12:31:43 - services.facturacion_service - INFO - [facturacion_service.py:187] - Factura timbrada exitosamente. UUID: 33D0494C-3DA4-5D47-9605-6D259C56E809
+2026-01-09 12:31:43 - __main__ - INFO - [app.py:2463] - XML timbrado guardado en: C:\desarrollo\sat\working\xml\EKU9003173C9\A0000002_33D0494C-3DA4-5D47-9605-6D259C56E809.xml
+2026-01-09 12:31:43 - __main__ - INFO - [app.py:2499] - Contador de folio actualizado: Serie A, Folio 2
+2026-01-09 12:31:43 - __main__ - INFO - [app.py:2519] - Cliente actualizado: ABC970528UHA

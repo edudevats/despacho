@@ -1,16 +1,24 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 import os
 import logging
+
+# Load environment variables FIRST (before importing config)
+from dotenv import load_dotenv
+load_dotenv()
+
 from config import Config
 from extensions import db, login_manager, migrate, mail, cache, csrf, init_extensions
-from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction, ProductBatch
-from forms import LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm, CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm
+from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer
+from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm, 
+                   CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm, 
+                   FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm,
+                   CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.sat_service import SATService, SATError
 from services.qr_service import QRService
 from sqlalchemy import func, extract
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +280,7 @@ def create_app(config_class=Config):
     def add_company():
         rfc = request.form['rfc']
         name = request.form['name']
+        postal_code = request.form.get('postal_code')
         logo = request.files.get('logo')
         
         logo_path = None
@@ -293,6 +302,7 @@ def create_app(config_class=Config):
         new_company = Company(
             rfc=rfc, 
             name=name,
+            postal_code=postal_code,
             logo_path=logo_path
         )
         db.session.add(new_company)
@@ -350,6 +360,7 @@ def create_app(config_class=Config):
         if request.method == 'POST':
             company.rfc = request.form['rfc']
             company.name = request.form['name']
+            company.postal_code = request.form.get('postal_code')
             
             # Manejar logo
             logo = request.files.get('logo')
@@ -1960,6 +1971,609 @@ def create_app(config_class=Config):
             'year': year
         })
 
+    # ==================== CUSTOMER API ROUTES ====================
+    
+    @app.route('/api/companies/<int:company_id>/customers/search')
+    @login_required
+    def api_search_customers(company_id):
+        """
+        Buscar clientes por RFC o nombre para autocompletado.
+        Query params: q (texto de búsqueda)
+        """
+        query_text = request.args.get('q', '').strip()
+        
+        if not query_text or len(query_text) < 2:
+            return jsonify([])
+        
+        # Buscar por RFC o nombre (case insensitive)
+        customers = Customer.query.filter(
+            Customer.company_id == company_id,
+            db.or_(
+                Customer.rfc.ilike(f'{query_text}%'),
+                Customer.nombre.ilike(f'%{query_text}%')
+            )
+        ).limit(10).all()
+        
+        results = []
+        for customer in customers:
+            results.append({
+                'rfc': customer.rfc,
+                'nombre': customer.nombre,
+                'codigo_postal': customer.codigo_postal,
+                'regimen_fiscal': customer.regimen_fiscal
+            })
+        
+        return jsonify(results)
+    
+    @app.route('/api/companies/<int:company_id>/customers/<rfc>')
+    @login_required
+    def api_get_customer(company_id, rfc):
+        """
+        Obtener datos completos de un cliente por RFC.
+        """
+        customer = Customer.query.filter_by(
+            company_id=company_id,
+            rfc=rfc.upper()
+        ).first()
+        
+        if not customer:
+            return jsonify({'error': 'Cliente no encontrado'}), 404
+        
+        return jsonify({
+            'rfc': customer.rfc,
+            'nombre': customer.nombre,
+            'codigo_postal': customer.codigo_postal,
+            'regimen_fiscal': customer.regimen_fiscal
+        })
+
+    # ==================== CATÁLOGOS SAT API ====================
+    
+    @app.route('/api/catalogs/<catalog_type>/search')
+    @login_required
+    def api_catalog_search(catalog_type):
+        """
+        Buscar en catálogos del SAT (Productos, Unidades, etc.)
+        """
+        from services.catalogs_service import CatalogsService
+        
+        query = request.args.get('q', '').strip()
+        limit = request.args.get('limit', 50, type=int)
+        
+        # Limitar a 100 para evitar sobrecarga
+        limit = min(limit, 100)
+        
+        try:
+            results = CatalogsService.search_catalog(catalog_type, query, limit)
+            return jsonify(results)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f'Error en búsqueda de catálogo {catalog_type}: {str(e)}')
+            return jsonify({'error': 'Error al buscar en catálogo'}), 500
+    
+    @app.route('/api/catalogs/<catalog_type>/<code>')
+    @login_required
+    def api_catalog_get(catalog_type, code):
+        """
+        Obtener un elemento específico de un catálogo
+        """
+        from services.catalogs_service import CatalogsService
+        
+        item = CatalogsService.get_catalog_item(catalog_type, code)
+        if not item:
+            return jsonify({'error': 'Elemento no encontrado'}), 404
+        
+        return jsonify(item)
+
+    # ==================== FACTURACIÓN ROUTES ====================
+    
+    @app.route('/facturacion')
+    @login_required
+    def facturacion_list():
+        """Lista de empresas para acceder al módulo de facturación"""
+        companies_list = Company.query.all()
+        return render_template('facturacion/facturacion_list.html', companies=companies_list)
+    
+    @app.route('/companies/<int:company_id>/facturacion')
+    @login_required
+    def facturacion_dashboard(company_id):
+        """Dashboard principal de facturación"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Check if Finkok credentials are configured
+        credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+        has_credentials = credentials is not None
+        environment = credentials.environment if credentials else None
+        
+        return render_template('facturacion/facturacion_dashboard.html',
+            company=company,
+            has_credentials=has_credentials,
+            environment=environment
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/credenciales', methods=['GET', 'POST'])
+    @login_required
+    def facturacion_credenciales(company_id):
+        """Configurar o actualizar credenciales de Finkok"""
+        company = Company.query.get_or_404(company_id)
+        credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+        
+        form = FinkokCredentialsForm()
+        
+        if request.method == 'POST' and form.validate_on_submit():
+            from utils.crypto import encrypt_password
+            
+            # Encrypt password
+            encrypted_password = encrypt_password(form.password.data)
+            
+            if credentials:
+                # Update existing
+                credentials.username = form.username.data
+                credentials.password_enc = encrypted_password
+                credentials.environment = form.environment.data
+                credentials.updated_at = datetime.utcnow()
+                message = 'Credenciales actualizadas correctamente'
+            else:
+                # Create new
+                credentials = FinkokCredentials(
+                    company_id=company_id,
+                    username=form.username.data,
+                    password_enc=encrypted_password,
+                    environment=form.environment.data
+                )
+                db.session.add(credentials)
+                message = 'Credenciales configuradas correctamente'
+            
+            try:
+                db.session.commit()
+                flash(message, 'success')
+                return redirect(url_for('facturacion_dashboard', company_id=company_id))
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f'Error guardando credenciales: {str(e)}')
+                flash('Error al guardar credenciales', 'error')
+        
+        # Pre-populate form with existing credentials
+        if credentials and request.method == 'GET':
+            form.username.data = credentials.username
+            form.environment.data = credentials.environment
+        
+        return render_template('facturacion/credenciales.html',
+                company=company,
+                form=form,
+                has_credentials=credentials is not None
+            )
+    
+    @app.route('/companies/<int:company_id>/facturacion/download/<file_type>')
+    @login_required
+    def facturacion_download_timbrado(company_id, file_type):
+        """Descargar archivo timbrado (XML o PDF)"""
+        from flask import session, send_file
+        
+        result = session.get('timbrado_result')
+        if not result or file_type not in result.get('files', {}):
+            flash('Archivo no encontrado', 'error')
+            return redirect(url_for('facturacion_timbrar', company_id=company_id))
+        
+        file_path = result['files'][file_type]
+        mimetype = 'application/xml' if file_type == 'xml' else 'application/pdf'
+        
+        return send_file(
+            file_path,
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=f"{result['uuid']}.{file_type}"
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/estado', methods=['GET', 'POST'])
+    @login_required
+    def facturacion_estado(company_id):
+        """Consultar estado de CFDI"""
+        import os
+        from datetime import datetime
+
+        company = Company.query.get_or_404(company_id)
+        form = ConsultarEstadoForm()
+        
+        # Listar facturas generadas por el sistema
+        facturas_generadas = []
+        xml_dir = os.path.join(os.getcwd(), 'xml', company.rfc)
+        
+        if os.path.exists(xml_dir):
+            try:
+                for filename in os.listdir(xml_dir):
+                    if filename.endswith('.xml'):
+                        file_path = os.path.join(xml_dir, filename)
+                        file_stat = os.stat(file_path)
+                        
+                        # Extraer UUID del nombre del archivo (formato: SERIEFOLIO_UUID.xml)
+                        uuid = None
+                        if '_' in filename:
+                            uuid = filename.split('_')[1].replace('.xml', '')
+                        
+                        facturas_generadas.append({
+                            'filename': filename,
+                            'uuid': uuid,
+                            'path': file_path,
+                            'size': file_stat.st_size,
+                            'created': datetime.fromtimestamp(file_stat.st_ctime)
+                        })
+                
+                # Ordenar por fecha de creación (más recientes primero)
+                facturas_generadas.sort(key=lambda x: x['created'], reverse=True)
+            except Exception as e:
+                logger.error(f'Error al listar facturas: {str(e)}')
+        
+        # Consultar estado (cuando se envía el form o se hace clic en "Checar Status")
+        result = None
+        if request.method == 'POST':
+            # Verificar si es consulta de factura generada
+            xml_filepath = request.form.get('xml_filepath')
+            
+            if xml_filepath and os.path.exists(xml_filepath):
+                try:
+                    from services.facturacion_service import FacturacionService
+                    
+                    with open(xml_filepath, 'r', encoding='utf-8') as f:
+                        xml_content = f.read()
+                    
+                    service = FacturacionService()
+                    result = service.consultar_estado(cfdi_xml=xml_content)
+                    
+                    if not result['success']:
+                        flash(f'Error al consultar: {result["message"]}', 'error')
+                        
+                except Exception as e:
+                    logger.error(f'Error al consultar estado: {str(e)}')
+                    flash(f'Error: {str(e)}', 'error')
+            
+            # Consulta manual (formulario tradicional)
+            elif form.validate_on_submit():
+                try:
+                    from services.facturacion_service import FacturacionService
+                    
+                    service = FacturacionService()
+                    
+                    if form.xml_file.data:
+                        xml_content = form.xml_file.data.read().decode('utf-8')
+                        result = service.consultar_estado(cfdi_xml=xml_content)
+                    elif form.uuid.data:
+                        if not all([form.rfc_emisor.data, form.rfc_receptor.data, form.total.data]):
+                            flash('Para consultar por UUID, debe proporcionar RFC emisor, RFC receptor y total', 'warning')
+                        else:
+                            result = service.consultar_estado(
+                                uuid=form.uuid.data,
+                                rfc_emisor=form.rfc_emisor.data,
+                                rfc_receptor=form.rfc_receptor.data,
+                                total=str(form.total.data)
+                            )
+                    
+                    if result and not result['success']:
+                        flash(f'Error al consultar: {result["message"]}', 'error')
+                        
+                except Exception as e:
+                    logger.error(f'Error al consultar estado: {str(e)}')
+                    flash(f'Error: {str(e)}', 'error')
+        
+        return render_template('facturacion/estado.html',
+            company=company,
+            form=form,
+            result=result,
+            facturas_generadas=facturas_generadas
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/lista69b', methods=['GET', 'POST'])
+    @login_required
+    def facturacion_lista69b(company_id):
+        """Verificar RFC en lista 69B"""
+        company = Company.query.get_or_404(company_id)
+        form = Lista69BForm()
+        
+        if request.method == 'POST' and form.validate_on_submit():
+            try:
+                from services.facturacion_service import FacturacionService
+                
+                service = FacturacionService()  # No requiere credenciales
+                result = service.verificar_lista_69b(form.rfc.data)
+                
+                if result['success']:
+                    return render_template('facturacion/lista69b.html',
+                        company=company,
+                        form=form,
+                        result=result
+                    )
+                else:
+                    flash(f'Error al consultar: {result["message"]}', 'error')
+                    
+            except Exception as e:
+                logger.error(f'Error en consulta lista 69B: {str(e)}')
+                flash(f'Error al verificar RFC: {str(e)}', 'error')
+        
+        return render_template('facturacion/lista69b.html',
+            company=company,
+            form=form
+        )
+    # ==================== GENERADOR DE CFDI ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/facturacion/crear', methods=['GET', 'POST'])
+    @login_required
+    def crear_factura(company_id):
+        """Generador de CFDI - Crear, generar XML y timbrar automáticamente"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Verificar que tenga credenciales Finkok
+        credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+        if not credentials:
+            flash('Debe configurar las credenciales de Finkok primero', 'warning')
+            return redirect(url_for('facturacion_credenciales', company_id=company_id))
+        
+        # Crear formularios
+        form_comprobante = CFDIComprobanteForm()
+        form_receptor = CFDIReceptorForm()
+        
+        # Si es POST, procesamos
+        if request.method == 'POST':
+            return generar_y_timbrar_cfdi(company, credentials, form_comprobante, form_receptor)
+        
+        # GET: Obtener serie y folio actual
+        # Si el usuario especifica una serie en la URL, usarla; sino, usar "A" por defecto
+        serie_param = request.args.get('serie', 'A')
+        
+        # Buscar el contador para esta serie
+        folio_counter = InvoiceFolioCounter.query.filter_by(
+            company_id=company_id,
+            serie=serie_param
+        ).first()
+        
+        if not folio_counter:
+            # Crear contador nuevo para esta serie
+            folio_counter = InvoiceFolioCounter(
+                company_id=company_id,
+                serie=serie_param,
+                current_folio=0
+            )
+            db.session.add(folio_counter)
+            db.session.commit()
+        
+        # El siguiente folio es el actual + 1
+        next_folio = folio_counter.current_folio + 1
+        
+        # Pre-poblar el formulario con serie y folio
+        form_comprobante.serie.data = serie_param
+        form_comprobante.folio.data = str(next_folio).zfill(7)  # Formato: 0000001
+        
+        # Pre-llenar lugar de expedición con CP de la empresa
+        if company.postal_code:
+            form_comprobante.lugar_expedicion.data = company.postal_code
+        
+        return render_template('facturacion/crear_factura.html',
+            company=company,
+            form_comprobante=form_comprobante,
+            form_receptor=form_receptor
+        )
+    
+    
+    def generar_y_timbrar_cfdi(company, credentials, form_comprobante, form_receptor):
+        """Generar XML, timbrar y guardar en carpeta xml/[RFC]/"""
+        try:
+            from services.cfdi_generator import CFDIGenerator
+            from services.facturacion_service import FacturacionService
+            from utils.crypto import decrypt_password
+            from werkzeug.utils import secure_filename
+            import json
+            import tempfile
+            
+            # Obtener conceptos
+            conceptos_json = request.form.get('conceptos')
+            if not conceptos_json:
+                flash('Debe agregar al menos un concepto', 'error')
+                return redirect(url_for('crear_factura', company_id=company.id))
+            
+            conceptos = json.loads(conceptos_json)
+            
+            # Procesar archivos FIEL
+            fiel_cer_file = form_comprobante.fiel_cer.data
+            fiel_key_file = form_comprobante.fiel_key.data
+            fiel_password = form_comprobante.fiel_password.data
+            
+            if not fiel_cer_file or not fiel_key_file or not fiel_password:
+                flash('Debe proporcionar certificado FIEL, llave privada y contraseña', 'error')
+                return redirect(url_for('crear_factura', company_id=company.id))
+            
+            # Guardar FIEL temporalmente
+            temp_dir = tempfile.gettempdir()
+            cer_filename = secure_filename(fiel_cer_file.filename)
+            key_filename = secure_filename(fiel_key_file.filename)
+            
+            cer_path = os.path.join(temp_dir, f"fiel_{company.id}_{cer_filename}")
+            key_path = os.path.join(temp_dir, f"fiel_{company.id}_{key_filename}")
+            
+            fiel_cer_file.save(cer_path)
+            fiel_key_file.save(key_path)
+            
+            try:
+                # Generar XML
+                generator = CFDIGenerator(
+                    certificado_path=cer_path,
+                    key_path=key_path,
+                    key_password=fiel_password
+                )
+                
+                # Validar
+                validacion = generator.validar_datos(
+                    receptor_rfc=form_receptor.receptor_rfc.data,
+                    receptor_cp=form_receptor.receptor_cp.data,
+                    receptor_regimen=form_receptor.receptor_regimen.data,
+                    receptor_uso_cfdi=form_receptor.receptor_uso_cfdi.data,
+                    lugar_expedicion=form_comprobante.lugar_expedicion.data,
+                    conceptos=conceptos
+                )
+                
+                if not validacion['valido']:
+                    for error in validacion['errores']:
+                        flash(error, 'error')
+                    return redirect(url_for('crear_factura', company_id=company.id))
+                
+                # Generar CFDI (retorna tupla: objeto firmado, XML string)
+                cfdi_firmado, xml_sin_timbrar = generator.crear_factura(
+                    serie=form_comprobante.serie.data,
+                    folio=form_comprobante.folio.data,
+                    fecha=form_comprobante.fecha.data,
+                    forma_pago=form_comprobante.forma_pago.data,
+                    metodo_pago=form_comprobante.metodo_pago.data,
+                    lugar_expedicion=form_comprobante.lugar_expedicion.data,
+                    receptor_rfc=form_receptor.receptor_rfc.data,
+                    receptor_nombre=form_receptor.receptor_nombre.data,
+                    receptor_uso_cfdi=form_receptor.receptor_uso_cfdi.data,
+                    receptor_regimen=form_receptor.receptor_regimen.data,
+                    receptor_cp=form_receptor.receptor_cp.data,
+                    conceptos=conceptos
+                )
+                
+                # Crear carpeta xml/RFC_EMPRESA/ si no existe
+                xml_base_dir = os.path.join(os.getcwd(), 'xml')
+                company_xml_dir = os.path.join(xml_base_dir, company.rfc)
+                os.makedirs(company_xml_dir, exist_ok=True)
+                
+                # Timbrar con Finkok - pasar el objeto CFDI directamente
+                password = decrypt_password(credentials.password_enc)
+                facturacion_service = FacturacionService(
+                    finkok_username=credentials.username,
+                    finkok_password=password,
+                    environment=credentials.environment
+                )
+                
+                # CRÍTICO: Pasar el objeto CFDI, no el string XML
+                result = facturacion_service.timbrar_factura(cfdi_firmado, accept='XML')
+                
+                if result['success']:
+                    # Guardar XMLs en carpeta
+                    uuid = result['uuid']
+                    serie = form_comprobante.serie.data or ''
+                    folio = form_comprobante.folio.data or 'SN'
+                    
+                    # Nombre del archivo
+                    filename_base = f"{serie}{folio}_{uuid}"
+                    
+                    # Guardar XML timbrado
+                    if 'xml' in result:
+                        xml_path = os.path.join(company_xml_dir, f"{filename_base}.xml")
+                        with open(xml_path, 'wb') as f:
+                            f.write(result['xml'])
+                        logger.info(f"XML timbrado guardado en: {xml_path}")
+                    
+                    # Guardar PDF
+                    if 'pdf' in result:
+                        pdf_path = os.path.join(company_xml_dir, f"{filename_base}.pdf")
+                        with open(pdf_path, 'wb') as f:
+                            f.write(result['pdf'])
+                        logger.info(f"PDF guardado en: {pdf_path}")
+                    
+                    # INCREMENTAR CONTADOR DE FOLIO
+                    # Obtener o crear el contador para esta serie
+                    folio_counter = InvoiceFolioCounter.query.filter_by(
+                        company_id=company.id,
+                        serie=serie
+                    ).first()
+                    
+                    if not folio_counter:
+                        # Crear contador si no existe
+                        folio_counter = InvoiceFolioCounter(
+                            company_id=company.id,
+                            serie=serie,
+                            current_folio=0
+                        )
+                        db.session.add(folio_counter)
+                    
+                    # Extraer el número del folio (remover ceros a la izquierda)
+                    try:
+                        folio_num = int(folio)
+                    except ValueError:
+                        folio_num = 1
+                    
+                    # Actualizar el contador solo si el folio usado es mayor o igual al actual
+                    if folio_num >= folio_counter.current_folio:
+                        folio_counter.current_folio = folio_num
+                        folio_counter.updated_at = datetime.now(timezone.utc)
+                        db.session.commit()
+                        logger.info(f"Contador de folio actualizado: Serie {serie}, Folio {folio_num}")
+                    
+                    # GUARDAR O ACTUALIZAR CLIENTE
+                    receptor_rfc = form_receptor.receptor_rfc.data.upper().strip()
+                    receptor_nombre = form_receptor.receptor_nombre.data.strip()
+                    receptor_cp = form_receptor.receptor_cp.data.strip()
+                    receptor_regimen = form_receptor.receptor_regimen.data
+                    
+                    # Buscar si el cliente ya existe
+                    existing_customer = Customer.query.filter_by(
+                        company_id=company.id,
+                        rfc=receptor_rfc
+                    ).first()
+                    
+                    if existing_customer:
+                        # Actualizar datos del cliente si han cambiado
+                        existing_customer.nombre = receptor_nombre
+                        existing_customer.codigo_postal = receptor_cp
+                        existing_customer.regimen_fiscal = receptor_regimen
+                        existing_customer.updated_at = datetime.utcnow()
+                        logger.info(f"Cliente actualizado: {receptor_rfc}")
+                    else:
+                        # Crear nuevo cliente
+                        new_customer = Customer(
+                            company_id=company.id,
+                            rfc=receptor_rfc,
+                            nombre=receptor_nombre,
+                            codigo_postal=receptor_cp,
+                            regimen_fiscal=receptor_regimen
+                        )
+                        db.session.add(new_customer)
+                        logger.info(f"Nuevo cliente creado: {receptor_rfc}")
+                    
+                    db.session.commit()
+                    
+                    flash(f'✅ ¡Factura creada y timbrada exitosamente! UUID: {uuid}', 'success')
+                    flash(f'📁 Archivos guardados en: xml/{company.rfc}/', 'info')
+                    
+                    return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                else:
+                    # --- Save Failed XML (Timbrado Error) ---
+                    try:
+                        import time
+                        import uuid as uuid_lib
+                        from lxml import etree
+                        
+                        timestamp = int(time.time())
+                        unique_id = uuid_lib.uuid4().hex[:8]
+                        filename = f"FAILED_TIMBRADO_{timestamp}_{unique_id}.xml"
+                        
+                        fallidos_dir = os.path.join(os.getcwd(), 'xml', 'fallidos')
+                        os.makedirs(fallidos_dir, exist_ok=True)
+                        filepath = os.path.join(fallidos_dir, filename)
+                        
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            f.write(xml_sin_timbrar)
+                            
+                        logger.info(f"XML rechazado por PAC guardado en: {filepath}")
+                        flash(f'El XML generado fue guardado en xml/fallidos para revisión.', 'warning')
+                        
+                    except Exception as save_err:
+                        logger.error(f"Error guardando XML fallido: {str(save_err)}")
+                    
+                    flash(f'Error al timbrar: {result["message"]}', 'error')
+                    return redirect(url_for('crear_factura', company_id=company.id))
+                    
+            finally:
+                # Limpiar archivos temporales
+                if os.path.exists(cer_path):
+                    os.remove(cer_path)
+                if os.path.exists(key_path):
+                    os.remove(key_path)
+                
+        except Exception as e:
+            logger.error(f'Error al generar y timbrar: {str(e)}')
+            flash(f'Error: {str(e)}', 'error')
+            return redirect(url_for('crear_factura', company_id=company.id))
+
     # Register CLI commands
     from cli import register_commands
     register_commands(app)
@@ -1968,4 +2582,4 @@ def create_app(config_class=Config):
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=False)
+    app.run(debug=True)

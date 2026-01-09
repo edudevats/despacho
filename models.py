@@ -26,6 +26,7 @@ class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rfc = db.Column(db.String(13), unique=True, nullable=False)
     name = db.Column(db.String(128), nullable=False)
+    postal_code = db.Column(db.String(5), nullable=True) # Código Postal (Lugar Expedición)
     logo_path = db.Column(db.String(512), nullable=True)  # Path to company logo
     fiel_cer_path = db.Column(db.String(256), nullable=True)
     fiel_key_path = db.Column(db.String(256), nullable=True)
@@ -280,6 +281,81 @@ class InventoryTransaction(db.Model):
     
     product = db.relationship('Product', backref=db.backref('transactions', lazy=True, order_by='InventoryTransaction.date.desc()'))
     batch = db.relationship('ProductBatch', backref=db.backref('transactions', lazy=True))
+
+
+class FinkokCredentials(db.Model):
+    """
+    Credenciales de Finkok para timbrado de facturas por empresa.
+    La contraseña se almacena cifrada.
+    """
+    __tablename__ = 'finkok_credentials'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False, unique=True)
+    
+    username = db.Column(db.String(120), nullable=False)
+    password_enc = db.Column(db.String(256), nullable=False)  # Encrypted password/token
+    environment = db.Column(db.String(10), default='TEST')  # TEST o PRODUCTION
+    
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    company = db.relationship('Company', backref=db.backref('finkok_credentials', uselist=False))
+    
+    def __repr__(self):
+        return f'<FinkokCredentials {self.username} - {self.environment}>'
+
+
+class InvoiceFolioCounter(db.Model):
+    """
+    Contador de folios por compañía y serie.
+    Permite rastrear el último folio usado para cada serie de facturas.
+    """
+    __tablename__ = 'invoice_folio_counter'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    serie = db.Column(db.String(25), nullable=False, default='A')  # Serie de factura
+    current_folio = db.Column(db.Integer, default=0)  # Último folio usado
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    company = db.relationship('Company', backref=db.backref('folio_counters', lazy=True))
+    
+    __table_args__ = (
+        db.UniqueConstraint('company_id', 'serie', name='unique_folio_per_company_serie'),
+    )
+    
+    def __repr__(self):
+        return f'<InvoiceFolioCounter Company:{self.company_id} Serie:{self.serie} Folio:{self.current_folio}>'
+
+
+class Customer(db.Model):
+    """
+    Clientes/Receptores de facturas.
+    Almacena datos básicos de clientes para facilitar la emisión de facturas.
+    """
+    __tablename__ = 'customer'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    rfc = db.Column(db.String(13), nullable=False, index=True)
+    nombre = db.Column(db.String(256), nullable=False)
+    codigo_postal = db.Column(db.String(5), nullable=False)
+    regimen_fiscal = db.Column(db.String(10), nullable=False)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    company = db.relationship('Company', backref=db.backref('customers', lazy=True))
+    
+    __table_args__ = (
+        db.UniqueConstraint('company_id', 'rfc', name='unique_customer_per_company'),
+    )
+    
+    def __repr__(self):
+        return f'<Customer {self.nombre} - {self.rfc}>'
 
 
 # Late import to avoid circular dependency if needed, or put at top if safe.

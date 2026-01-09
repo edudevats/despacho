@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Lista 69B - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="fas fa-list-alt"></i> Verificar RFC en Lista 69B
+                    </h4>
+                    <small>{{ company.name }}</small>
+                </div>
+                <div class="card-body">
+                    <!-- Info Alert -->
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        La lista 69B del SAT contiene contribuyentes que facturaron operaciones presuntamente
+                        inexistentes
+                    </div>
+
+                    <form method="POST">
+                        {{ form.csrf_token }}
+
+                        <div class="mb-4">
+                            {{ form.rfc.label(class="form-label") }}
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text"><i class="fas fa-id-card"></i></span>
+                                {{ form.rfc(class="form-control" + (" is-invalid" if form.rfc.errors else ""),
+                                placeholder="Ingrese el RFC a consultar",
+                                id="rfcInput",
+                                oninput="this.value = this.value.toUpperCase()") }}
+                            </div>
+                            {% if form.rfc.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.rfc.errors[0] }}
+                            </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                El RFC se convertirá automáticamente a mayúsculas
+                            </small>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}"
+                                class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Regresar
+                            </a>
+                            <button type="submit" class="btn btn-warning btn-lg text-dark">
+                                <i class="fas fa-search"></i> Verificar RFC
+                            </button>
+                        </div>
+                    </form>
+
+                    {% if result %}
+                    <!-- Results -->
+                    <hr class="my-4">
+                    <div class="result-section">
+                        <h5 class="mb-3"><i class="fas fa-clipboard-check"></i> Resultado de la Verificación</h5>
+
+                        <div class="card border-0 shadow-sm mb-3">
+                            <div class="card-body text-center py-4">
+                                <h3 class="mb-3">RFC: <strong>{{ result.rfc }}</strong></h3>
+
+                                {% if result.status == 'DEFINITIVO' %}
+                                <div class="status-badge mb-3">
+                                    <span class="badge bg-primary p-3 text-wrap" style="font-size: 1.2rem;">
+                                        <i class="fas fa-exclamation-triangle"></i> DEFINITIVO - EN LISTA 69B
+                                    </span>
+                                </div>
+                                <div class="alert alert-primary">
+                                    <i class="fas fa-info-circle"></i>
+                                    {{ result.descripcion }}
+                                </div>
+                                <div class="alert alert-warning">
+                                    <strong>Importante:</strong> Tener relaciones comerciales con este contribuyente
+                                    puede representar un riesgo fiscal
+                                </div>
+
+                                {% elif result.status == 'NO_DEFINITIVO' %}
+                                <div class="status-badge mb-3">
+                                    <span class="badge bg-success p-3 text-wrap" style="font-size: 1.2rem;">
+                                        <i class="fas fa-check-circle"></i> NO DEFINITIVO
+                                    </span>
+                                </div>
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle"></i>
+                                    {{ result.descripcion }}
+                                </div>
+
+                                {% elif result.status == 'NO_ENCONTRADO' %}
+                                <div class="status-badge mb-3">
+                                    <span class="badge bg-secondary p-3 text-wrap" style="font-size: 1.2rem;">
+                                        <i class="fas fa-question-circle"></i> NO ENCONTRADO
+                                    </span>
+                                </div>
+                                <div class="alert alert-secondary">
+                                    <i class="fas fa-question-circle"></i>
+                                    {{ result.descripcion }}
+                                </div>
+
+                                {% else %}
+                                <div class="status-badge mb-3">
+                                    <span class="badge bg-dark p-3 text-wrap" style="font-size: 1.2rem;">
+                                        <i class="fas fa-times-circle"></i> {{ result.status }}
+                                    </span>
+                                </div>
+                                <div class="alert alert-dark">
+                                    {{ result.descripcion }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Additional Info -->
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <h6 class="mb-2"><i class="fas fa-book"></i> ¿Qué significa esto?</h6>
+                                <ul class="mb-0 small">
+                                    <li><strong>DEFINITIVO:</strong> El SAT considera que el contribuyente emitió
+                                        comprobantes de operaciones presuntamente inexistentes</li>
+                                    <li><strong>NO DEFINITIVO:</strong> El RFC está activo y no presenta irregularidades
+                                        en la lista 69B</li>
+                                    <li><strong>NO ENCONTRADO:</strong> El RFC no existe en el padrón del SAT o está mal
+                                        escrito</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .status-badge {
+        animation: fadeInScale 0.5s ease-out;
+    }
+
+    @keyframes fadeInScale {
+        from {
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    #rfcInput {
+        font-weight: bold;
+        letter-spacing: 0.5px;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const rfcInput = document.getElementById('rfcInput');
+
+        if (rfcInput) {
+            // Real-time validation feedback
+            rfcInput.addEventListener('input', function () {
+                const rfc = this.value.toUpperCase();
+                const validPattern = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
+
+                if (rfc.length > 0) {
+                    if (validPattern.test(rfc)) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else if (rfc.length >= 12) {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                    }
+                } else {
+                    this.classList.remove('is-valid', 'is-invalid');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

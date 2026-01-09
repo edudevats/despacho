@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Facturación - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="mb-2">
+                <i class="fas fa-file-signature text-primary"></i>
+                Servicio de Facturación
+            </h1>
+            <h4 class="text-muted">{{ company.name }} - {{ company.rfc }}</h4>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="row mb-4">
+        <div class="col-12">
+            {% if has_credentials %}
+            <div class="alert alert-success d-flex align-items-center">
+                <i class="fas fa-check-circle fa-2x me-3"></i>
+                <div>
+                    <strong>Credenciales Configuradas</strong><br>
+                    <small>Ambiente: <span class="badge bg-{{ 'info' if environment == 'TEST' else 'success' }}">
+                            {{ 'Pruebas' if environment == 'TEST' else 'Producción' }}
+                        </span></small>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-warning d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                <div>
+                    <strong>Credenciales No Configuradas</strong><br>
+                    <small>Configure sus credenciales de Finkok para comenzar a timbrar facturas</small>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Hero Cards -->
+    <div class="row g-4">
+        <!-- Crear Factura -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center shadow h-100 hover-card">
+                <div class="card-body">
+                    <div class="icon-wrapper bg-success bg-gradient text-white rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                        style="width: 80px; height: 80px;">
+                        <i class="fas fa-plus-circle fa-2x"></i>
+                    </div>
+                    <h5 class="card-title">Crear Factura</h5>
+                    <p class="card-text text-muted">
+                        Generador de CFDI fácil
+                    </p>
+                    {% if has_credentials %}
+                    <a href="{{ url_for('crear_factura', company_id=company.id) }}" class="btn btn-success">
+                        <i class="fas fa-arrow-right"></i> Crear
+                    </a>
+                    {% else %}
+                    <button class="btn btn-secondary" disabled>
+                        <i class="fas fa-lock"></i> Requiere Finkok
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Consultar Estado -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center shadow h-100 hover-card">
+                <div class="card-body">
+                    <div class="icon-wrapper bg-info bg-gradient text-white rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                        style="width: 80px; height: 80px;">
+                        <i class="fas fa-search fa-2x"></i>
+                    </div>
+                    <h5 class="card-title">Consultar Estado</h5>
+                    <p class="card-text text-muted">
+                        Verifique el estado de un CFDI
+                    </p>
+                    <a href="{{ url_for('facturacion_estado', company_id=company.id) }}" class="btn btn-info">
+                        <i class="fas fa-arrow-right"></i> Consultar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista 69B -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center shadow h-100 hover-card">
+                <div class="card-body">
+                    <div class="icon-wrapper bg-warning bg-gradient text-white rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                        style="width: 80px; height: 80px;">
+                        <i class="fas fa-list-alt fa-2x"></i>
+                    </div>
+                    <h5 class="card-title">Lista 69B</h5>
+                    <p class="card-text text-muted">
+                        Verificar RFC en lista 69B
+                    </p>
+                    <a href="{{ url_for('facturacion_lista69b', company_id=company.id) }}" class="btn btn-warning">
+                        <i class="fas fa-arrow-right"></i> Verificar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuración -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center shadow h-100 hover-card">
+                <div class="card-body">
+                    <div class="icon-wrapper bg-secondary bg-gradient text-white rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                        style="width: 80px; height: 80px;">
+                        <i class="fas fa-cog fa-2x"></i>
+                    </div>
+                    <h5 class="card-title">Configuración</h5>
+                    <p class="card-text text-muted">
+                        Credenciales de Finkok
+                    </p>
+                    <a href="{{ url_for('facturacion_credenciales', company_id=company.id) }}"
+                        class="btn btn-secondary">
+                        <i class="fas fa-arrow-right"></i> Configurar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Section -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card border-0 bg-light">
+                <div class="card-body">
+                    <h5><i class="fas fa-info-circle text-primary"></i> Información del Servicio</h5>
+                    <ul class="list-unstyled mb-0 mt-3">
+                        <li class="mb-2"><i class="fas fa-check text-success"></i> <strong>Timbrado:</strong> Certifique
+                            sus CFDIs con el PAC Finkok</li>
+                        <li class="mb-2"><i class="fas fa-check text-success"></i> <strong>Consulta de Estado:</strong>
+                            Verificación directa con el SAT</li>
+                        <li class="mb-2"><i class="fas fa-check text-success"></i> <strong>Lista 69B:</strong>
+                            Validación de contribuyentes</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .hover-card {
+        transition: all 0.3s ease;
+    }
+
+    .hover-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175) !important;
+    }
+
+    .icon-wrapper {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.05);
+        }
+    }
+</style>
+{% endblock %}

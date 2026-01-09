@@ -1,0 +1,27 @@
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/nomina12 http://www.sat.gob.mx/sitio_internet/cfd/nomina/nomina12.xsd" Version="4.0" Serie="A" Folio="008301" Fecha="2025-12-08T11:34:43" Sello="C784mmLJ1SVWnRiQtnUncBbl8gFit3FHou58ycE4Cxbf0zrjybP6pmsRLWxPzLNp9YRnXonGSNme2BYeEnpnyceqq+PjajrCzx6bBgPoB12Po23aMFYLm4X6otDDC3TQJ2AUlxMaymkBsutRXixhDNObvNpOn8JFiWo0ye4NUQcuigba0pJ1tzg4bjviN5aZf8ycZKUAl7Z+B/mHBU6ZWSyZMp4iKyAvjnd1gH/VLhO8JepDuK8nJVYSeHicPirn9n3vSPT88fprv3RF6gUNPUPZafxtSV0lAv3XjgMzXgkw74pETTSE5r94QphtRgLOptdWpjfXptqIAFvq9U++PA==" NoCertificado="30001000000500003416" Certificado="MIIFsDCCA5igAwIBAgIUMzAwMDEwMDAwMDA1MDAwMDM0MTYw..." SubTotal="1002.16" Descuento="288.68" Moneda="MXN" Total="713.48" TipoDeComprobante="N" Exportacion="01" MetodoPago="PUE" LugarExpedicion="58000">
+<cfdi:Emisor Nombre="ESCUELA KEMPER URGATE" RegimenFiscal="601" Rfc="EKU9003173C9"/>
+<cfdi:Receptor Rfc="MASO451221PM4" Nombre="MARIA OLIVIA MARTINEZ SAGAZ" DomicilioFiscalReceptor="80290" RegimenFiscalReceptor="605" UsoCFDI="CN01"/>
+<cfdi:Conceptos>
+<cfdi:Concepto ClaveProdServ="84111505" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago de nómina" ValorUnitario="1002.16" Importe="1002.16" Descuento="288.68" ObjetoImp="01"/>
+</cfdi:Conceptos>
+<cfdi:Complemento>
+<nomina12:Nomina Version="1.2" TipoNomina="O" FechaPago="2021-12-02" FechaInicialPago="2021-01-01" FechaFinalPago="2021-08-31" NumDiasPagados="15.000" TotalPercepciones="1002.15" TotalDeducciones="288.68" TotalOtrosPagos="0.01">
+<nomina12:Emisor RegistroPatronal="EKU9003173C9" RfcPatronOrigen="UOC810515RZ1"/>
+<nomina12:Receptor Curp="MELH450218MSLNPL03" NumEmpleado="4318" PeriodicidadPago="04" ClaveEntFed="MEX" Banco="072" TipoContrato="08" TipoJornada="01" TipoRegimen="02" Sindicalizado="No" NumSeguridadSocial="12345678901" FechaInicioRelLaboral="2021-01-01" Antigüedad="P34W" RiesgoPuesto="1" SalarioDiarioIntegrado="100.00">
+<nomina12:SubContratacion RfcLabora="IIA040805DZ4" PorcentajeTiempo="100.000"/>
+</nomina12:Receptor>
+<nomina12:Percepciones TotalSueldos="1002.15" TotalGravado="1002.15" TotalExento="0.00">
+<nomina12:Percepcion TipoPercepcion="038" Clave="021" Concepto="Otros ingresos por salarios" ImporteGravado="1002.15" ImporteExento="0.00"/>
+</nomina12:Percepciones>
+<nomina12:Deducciones TotalOtrasDeducciones="0.00" TotalImpuestosRetenidos="288.68">
+<nomina12:Deduccion TipoDeduccion="002" Clave="002" Concepto="ISPT" Importe="288.68"/>
+</nomina12:Deducciones>
+<nomina12:OtrosPagos>
+<nomina12:OtroPago TipoOtroPago="002" Clave="001" Concepto="Subsidio causado" Importe="0.01">
+<nomina12:SubsidioAlEmpleo SubsidioCausado="123.45"/>
+</nomina12:OtroPago>
+</nomina12:OtrosPagos>
+
+</nomina12:Nomina>
+</cfdi:Complemento>
+</cfdi:Comprobante>
