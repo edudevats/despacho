@@ -14,6 +14,7 @@ from wtforms.validators import (
 from flask_wtf.file import FileAllowed
 import re
 from datetime import datetime
+from utils.timezone_helper import now_mexico
 
 
 # Custom Validators
@@ -279,7 +280,7 @@ class BatchForm(FlaskForm):
         DataRequired(),
         NumberRange(min=1, message='La cantidad debe ser mayor a 0')
     ])
-    acquisition_date = DateField('Fecha de Adquisición', default=datetime.utcnow)
+    acquisition_date = DateField('Fecha de Adquisición', default=now_mexico)
 
 
 # Facturación Forms
@@ -364,8 +365,8 @@ class CFDIComprobanteForm(FlaskForm):
     # Datos del comprobante
     serie = StringField('Serie', validators=[Optional(), Length(max=25)])
     folio = StringField('Folio', validators=[Optional(), Length(max=40)])
-    fecha = DateTimeField('Fecha de Emisión', format='%Y-%m-%d %H:%M:%S', 
-                         default=datetime.utcnow, validators=[DataRequired()])
+    fecha = DateTimeField('Fecha de Emisión', format='%Y-%m-%dT%H:%M:%S', 
+                         default=now_mexico, validators=[DataRequired()])
     lugar_expedicion = StringField('Lugar de Expedición (CP)', validators=[
         DataRequired(message='El código postal de expedición es requerido'),
         Length(min=5, max=5, message='Debe ser un código postal de 5 dígitos'),

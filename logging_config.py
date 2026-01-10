@@ -10,6 +10,8 @@ import os
 from datetime import datetime
 
 
+from utils.timezone_helper import now_mexico
+
 def setup_logging(app):
     """
     Configure logging for the Flask application.
@@ -111,7 +113,7 @@ class AuditLogger:
             **kwargs: Additional context to log
         """
         context = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': now_mexico().isoformat(),
             'action': action,
             'user_id': user_id,
             **kwargs

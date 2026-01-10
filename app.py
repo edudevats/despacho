@@ -1125,7 +1125,7 @@ def create_app(config_class=Config):
             pending_invoices=pending_invoices,
             accredited_invoices=accredited_invoices,
             selected_invoice_id=selected_invoice_id,
-            current_year=datetime.now().year
+            current_year=now_mexico().year
         )
 
     @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/acreditar', methods=['POST'])
@@ -2142,7 +2142,7 @@ def create_app(config_class=Config):
                 credentials.username = form.username.data
                 credentials.password_enc = encrypted_password
                 credentials.environment = form.environment.data
-                credentials.updated_at = datetime.utcnow()
+                credentials.updated_at = now_mexico()
                 message = 'Credenciales actualizadas correctamente'
             else:
                 # Create new
@@ -2525,7 +2525,7 @@ def create_app(config_class=Config):
                     # Actualizar el contador solo si el folio usado es mayor o igual al actual
                     if folio_num >= folio_counter.current_folio:
                         folio_counter.current_folio = folio_num
-                        folio_counter.updated_at = datetime.now(timezone.utc)
+                        folio_counter.updated_at = now_mexico()
                         db.session.commit()
                         logger.info(f"Contador de folio actualizado: Serie {serie}, Folio {folio_num}")
                     
@@ -2546,7 +2546,7 @@ def create_app(config_class=Config):
                         existing_customer.nombre = receptor_nombre
                         existing_customer.codigo_postal = receptor_cp
                         existing_customer.regimen_fiscal = receptor_regimen
-                        existing_customer.updated_at = datetime.utcnow()
+                        existing_customer.updated_at = now_mexico()
                         logger.info(f"Cliente actualizado: {receptor_rfc}")
                     else:
                         # Crear nuevo cliente

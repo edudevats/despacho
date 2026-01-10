@@ -14,6 +14,15 @@ if os.path.exists(_env_file):
 # If .env doesn't exist, load_dotenv won't be called
 # Environment variables can still come from system/server configuration
 
+# Force timezone configuration globally
+import time
+os.environ['TZ'] = 'America/Mexico_City'
+try:
+    time.tzset()
+except AttributeError:
+    # time.tzset() is only available on Unix
+    pass
+
 
 class Config:
     """Base configuration"""
