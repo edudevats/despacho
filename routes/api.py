@@ -4,6 +4,7 @@ API routes - JSON endpoints for AJAX and integrations.
 
 import logging
 from datetime import datetime
+from utils.timezone_helper import now_mexico
 from flask import Blueprint, jsonify, request
 from flask_login import login_required
 from sqlalchemy import func, extract
@@ -26,7 +27,7 @@ def company_stats(company_id):
     year = request.args.get('year', type=int)
     
     if not month or not year:
-        today = datetime.now()
+        today = now_mexico()
         month = today.month
         year = today.year
     
@@ -62,7 +63,7 @@ def company_monthly_stats(company_id):
     """Get all monthly statistics for a company in one call."""
     company = Company.query.get_or_404(company_id)
     
-    year = request.args.get('year', type=int) or datetime.now().year
+    year = request.args.get('year', type=int) or now_mexico().year
     
     # Optimized single query for all months
     stats = db.session.query(
@@ -120,5 +121,5 @@ def health_check():
     return jsonify({
         'status': 'healthy' if db_status == 'healthy' else 'degraded',
         'database': db_status,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': now_mexico().isoformat()
     })

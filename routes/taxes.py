@@ -4,6 +4,7 @@ Tax management routes - Dashboard, payments, calculations.
 
 import logging
 from datetime import datetime
+from utils.timezone_helper import now_mexico
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from sqlalchemy import func, extract
@@ -29,7 +30,7 @@ def taxes_dashboard(company_id):
     """Dashboard de Impuestos con IVA, ISR y resumen anual."""
     company = Company.query.get_or_404(company_id)
     
-    today = datetime.now()
+    today = now_mexico()
     current_year = today.year
     
     # Calculate monthly tax data
@@ -191,7 +192,7 @@ def record_tax_payment(company_id):
             tax_type=tax_type,
             amount=amount,
             notes=notes,
-            payment_date=datetime.now()
+            payment_date=now_mexico()
         )
         
         db.session.add(payment)

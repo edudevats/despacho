@@ -7,6 +7,7 @@ import re
 import logging
 import tempfile
 from datetime import datetime, timedelta
+from utils.timezone_helper import now_mexico
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from extensions import db
@@ -117,9 +118,9 @@ def sync_company(company_id):
         if last_invoice_date:
             start_date = last_invoice_date.strftime('%Y-%m-%d')
         else:
-            start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            start_date = (now_mexico() - timedelta(days=30)).strftime('%Y-%m-%d')
         
-        end_date = datetime.now().strftime('%Y-%m-%d')
+        end_date = now_mexico().strftime('%Y-%m-%d')
         return render_template('sync.html', company=company, start_date=start_date, end_date=end_date)
     
     # POST - Process sync

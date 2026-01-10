@@ -19,6 +19,9 @@ class Config:
     """Base configuration"""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
+    # Timezone - Mexico City
+    TIMEZONE = 'America/Mexico_City'
+    
     # Database
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///sat_app.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False

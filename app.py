@@ -19,6 +19,7 @@ from services.sat_service import SATService, SATError
 from services.qr_service import QRService
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta, timezone
+from utils.timezone_helper import now_mexico, to_mexico_time
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,7 @@ def create_app(config_class=Config):
         expenses = expenses_query.scalar() or 0
         
         # Calculate monthly statistics (all 12 months of current year)
-        today = datetime.now()
+        today = now_mexico()
         current_year = today.year
         current_month = today.month
         monthly_data = []
@@ -414,9 +415,9 @@ def create_app(config_class=Config):
                 start_date = last_invoice_date.strftime('%Y-%m-%d')
             else:
                 # Default to 30 days ago
-                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                start_date = (now_mexico() - timedelta(days=30)).strftime('%Y-%m-%d')
                 
-            end_date = datetime.now().strftime('%Y-%m-%d')
+            end_date = now_mexico().strftime('%Y-%m-%d')
             
             return render_template('sync.html', company=company, start_date=start_date, end_date=end_date)
         
@@ -802,7 +803,7 @@ def create_app(config_class=Config):
         company = Company.query.get_or_404(company_id)
         
         # Obtener año seleccionado desde query parameter, por defecto el año actual
-        today = datetime.now()
+        today = now_mexico()
         try:
             selected_year = int(request.args.get('year', today.year))
         except (ValueError, TypeError):
@@ -1156,7 +1157,7 @@ def create_app(config_class=Config):
             invoice.ppd_acreditado = True
             invoice.ppd_mes_acreditado = mes
             invoice.ppd_anio_acreditado = anio
-            invoice.ppd_fecha_acreditacion = datetime.now()
+            invoice.ppd_fecha_acreditacion = now_mexico()
             
             # 2. Create Movement
             # Set date to the 1st of the accredited month/year so it appears in that month's reports
@@ -1390,7 +1391,7 @@ def create_app(config_class=Config):
         if product.company_id != company_id:
             return redirect(url_for('inventory_list', company_id=company_id))
             
-        today = datetime.now().date()
+        today = now_mexico().date()
         batches = ProductBatch.query.filter_by(product_id=product_id).order_by(ProductBatch.expiration_date).all()
         
         return render_template('inventory/batches.html', 
@@ -1457,7 +1458,7 @@ def create_app(config_class=Config):
         """Dashboard de Impuestos con IVA, ISR y resumen anual"""
         company = Company.query.get_or_404(company_id)
         
-        today = datetime.now()
+        today = now_mexico()
         current_year = today.year
         
         # Calculate monthly tax data
@@ -1616,7 +1617,7 @@ def create_app(config_class=Config):
                 tax_type=tax_type,
                 amount=amount,
                 notes=notes,
-                payment_date=datetime.now()
+                payment_date=now_mexico()
             )
             
             db.session.add(payment)
@@ -1645,7 +1646,7 @@ def create_app(config_class=Config):
         """Dashboard de Análisis de Ventas con comparación año a año"""
         company = Company.query.get_or_404(company_id)
         
-        today = datetime.now()
+        today = now_mexico()
         
         # Get year parameters from query string, default to current and previous year
         current_year = request.args.get('current_year', type=int, default=today.year)
@@ -1975,7 +1976,7 @@ def create_app(config_class=Config):
         year = request.args.get('year', type=int)
         
         if not month or not year:
-            today = datetime.now()
+            today = now_mexico()
             month = today.month
             year = today.year
         

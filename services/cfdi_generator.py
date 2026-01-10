@@ -13,6 +13,7 @@ import os
 import time
 import uuid
 from lxml import etree
+from utils.timezone_helper import now_mexico
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ class CFDIGenerator:
                 raise ValueError("Debe proporcionar al menos un concepto")
             
             if not fecha:
-                fecha = datetime.now()
+                fecha = now_mexico()
             
             # Obtener firmante
             signer = self._get_signer()

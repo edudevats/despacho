@@ -46,6 +46,7 @@ psutil==6.0.0
 
 # Timezone handling
 pytz==2025.2
+backports.zoneinfo==0.2.1;python_version<"3.9"  # For Python < 3.9 timezone support
 
 # Additional utilities
 requests==2.32.3
