@@ -280,3 +280,5 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-01-08 22:00:28 - services.facturacion_service - ERROR - [facturacion_service.py:252] - Error al consultar estado: Unicode strings with encoding declaration are not supported. Please use bytes input or XML fragments without declaration.
 2026-01-09 18:30:10 - utils.crypto - ERROR - [crypto.py:106] - Decryption failed: Invalid token (wrong key or corrupted data)
 2026-01-09 18:30:32 - utils.crypto - ERROR - [crypto.py:106] - Decryption failed: Invalid token (wrong key or corrupted data)
+2026-01-10 02:22:57 - utils.crypto - ERROR - [crypto.py:106] - Decryption failed: Invalid token (wrong key or corrupted data)
+2026-01-10 02:22:57 - __main__ - ERROR - [app.py:2642] - Error al generar y timbrar: 

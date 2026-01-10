@@ -2057,6 +2057,44 @@ def create_app(config_class=Config):
             'regimen_fiscal': customer.regimen_fiscal
         })
 
+    # ==================== PRODUCTS API ROUTES ====================
+    
+    @app.route('/api/companies/<int:company_id>/products/search')
+    @login_required
+    def api_search_products(company_id):
+        """
+        Buscar productos por SKU, nombre o descripción para autocompletado.
+        Query params: q (texto de búsqueda)
+        """
+        query_text = request.args.get('q', '').strip()
+        
+        if not query_text or len(query_text) < 2:
+            return jsonify([])
+        
+        # Buscar por SKU, nombre o descripción (case insensitive)
+        products = Product.query.filter(
+            Product.company_id == company_id,
+            Product.active == True,
+            db.or_(
+                Product.sku.ilike(f'{query_text}%'),
+                Product.name.ilike(f'%{query_text}%'),
+                Product.description.ilike(f'%{query_text}%')
+            )
+        ).limit(10).all()
+        
+        results = []
+        for product in products:
+            results.append({
+                'id': product.id,
+                'sku': product.sku or '',
+                'name': product.name,
+                'description': product.description or '',
+                'selling_price': float(product.selling_price) if product.selling_price else 0.0,
+                'unit_measure': product.unit_measure or 'Servicio'
+            })
+        
+        return jsonify(results)
+
     # ==================== CATÁLOGOS SAT API ====================
     
     @app.route('/api/catalogs/<catalog_type>/search')
@@ -2324,6 +2362,152 @@ def create_app(config_class=Config):
             company=company,
             form=form
         )
+    
+    # ==================== PRODUCTOS/SERVICIOS ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/facturacion/productos')
+    @login_required
+    def facturacion_productos(company_id):
+        """Lista de productos/servicios para facturación"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Obtener parámetro de búsqueda
+        search_query = request.args.get('q', '').strip()
+        
+        # Query base
+        query = Product.query.filter_by(company_id=company_id)
+        
+        # Aplicar búsqueda si existe
+        if search_query:
+            query = query.filter(
+                db.or_(
+                    Product.sku.ilike(f'%{search_query}%'),
+                    Product.name.ilike(f'%{search_query}%'),
+                    Product.description.ilike(f'%{search_query}%')
+                )
+            )
+        
+        # Ordenar por nombre
+        products = query.order_by(Product.active.desc(), Product.name).all()
+        
+        return render_template('facturacion/productos_list.html',
+            company=company,
+            products=products,
+            search_query=search_query
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/productos/nuevo', methods=['GET', 'POST'])
+    @login_required
+    def facturacion_producto_nuevo(company_id):
+        """Crear nuevo producto/servicio"""
+        company = Company.query.get_or_404(company_id)
+        form = ProductForm()
+        
+        if request.method == 'POST' and form.validate_on_submit():
+            try:
+                # Crear nuevo producto
+                product = Product(
+                    company_id=company_id,
+                    sku=form.sku.data,
+                    name=form.name.data,
+                    description=form.description.data,
+                    cost_price=form.cost_price.data or 0.0,
+                    selling_price=form.selling_price.data or 0.0,
+                    current_stock=form.initial_stock.data or 0,
+                    min_stock_level=form.min_stock_level.data or 0,
+                    unit_measure=form.unit_measure.data,
+                    sanitary_registration=form.sanitary_registration.data,
+                    is_controlled=form.is_controlled.data,
+                    active_ingredient=form.active_ingredient.data,
+                    presentation=form.presentation.data,
+                    therapeutic_group=form.therapeutic_group.data,
+                    active=True
+                )
+                
+                db.session.add(product)
+                db.session.commit()
+                
+                flash(f'Producto "{product.name}" creado exitosamente', 'success')
+                return redirect(url_for('facturacion_productos', company_id=company_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f'Error creando producto: {str(e)}')
+                flash('Error al crear producto', 'error')
+        
+        return render_template('facturacion/producto_form.html',
+            company=company,
+            form=form,
+            title='Nuevo Producto/Servicio',
+            action='crear'
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/productos/<int:product_id>/editar', methods=['GET', 'POST'])
+    @login_required
+    def facturacion_producto_editar(company_id, product_id):
+        """Editar producto/servicio existente"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        # Verificar que el producto pertenece a la empresa
+        if product.company_id != company_id:
+            flash('Producto no encontrado', 'error')
+            return redirect(url_for('facturacion_productos', company_id=company_id))
+        
+        form = ProductForm(obj=product)
+        
+        if request.method == 'POST' and form.validate_on_submit():
+            try:
+                # Actualizar producto
+                form.populate_obj(product)
+                product.current_stock = form.initial_stock.data or product.current_stock
+                
+                db.session.commit()
+                
+                flash(f'Producto "{product.name}" actualizado exitosamente', 'success')
+                return redirect(url_for('facturacion_productos', company_id=company_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f'Error actualizando producto: {str(e)}')
+                flash('Error al actualizar producto', 'error')
+        
+        # Pre-poblar campo de stock inicial con el stock actual para edición
+        if request.method == 'GET':
+            form.initial_stock.data = product.current_stock
+        
+        return render_template('facturacion/producto_form.html',
+            company=company,
+            form=form,
+            product=product,
+            title=f'Editar: {product.name}',
+            action='editar'
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/productos/<int:product_id>/toggle', methods=['POST'])
+    @login_required
+    def facturacion_producto_toggle(company_id, product_id):
+        """Activar/Desactivar producto (soft delete)"""
+        product = Product.query.get_or_404(product_id)
+        
+        # Verificar que el producto pertenece a la empresa
+        if product.company_id != company_id:
+            flash('Producto no encontrado', 'error')
+            return redirect(url_for('facturacion_productos', company_id=company_id))
+        
+        try:
+            product.active = not product.active
+            db.session.commit()
+            
+            status = 'activado' if product.active else 'desactivado'
+            flash(f'Producto "{product.name}" {status}', 'success')
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f'Error al cambiar estado de producto: {str(e)}')
+            flash('Error al cambiar estado del producto', 'error')
+        
+        return redirect(url_for('facturacion_productos', company_id=company_id))
+    
     # ==================== GENERADOR DE CFDI ROUTES ====================
     
     @app.route('/companies/<int:company_id>/facturacion/crear', methods=['GET', 'POST'])

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="mb-2">
+                <i class="fas fa-{{ 'plus' if action == 'crear' else 'edit' }} text-primary"></i>
+                {{ title }}
+            </h1>
+            <p class="text-muted">{{ company.name }} - {{ company.rfc }}</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 col-md-10 mx-auto">
+            <div class="card shadow">
+                <div class="card-body">
+                    <form method="POST" novalidate>
+                        {{ form.hidden_tag() }}
+
+                        <!-- Información Básica -->
+                        <h5 class="mb-3"><i class="fas fa-info-circle text-primary"></i> Información Básica</h5>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">{{ form.sku.label.text }}</label>
+                                {{ form.sku(class="form-control" + (" is-invalid" if form.sku.errors else ""),
+                                placeholder="PROD001") }}
+                                {% if form.sku.errors %}
+                                <div class="invalid-feedback">{{ form.sku.errors[0] }}</div>
+                                {% endif %}
+                                <small class="text-muted">Código interno (opcional)</small>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">{{ form.name.label.text }} <span
+                                        class="text-danger">*</span></label>
+                                {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""),
+                                placeholder="Nombre del producto o servicio", required=true) }}
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback">{{ form.name.errors[0] }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">{{ form.description.label.text }}</label>
+                            {{ form.description(class="form-control", rows=3, placeholder="Descripción detallada del
+                            producto o servicio") }}
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Precios -->
+                        <h5 class="mb-3"><i class="fas fa-dollar-sign text-success"></i> Precios e Inventario</h5>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">{{ form.cost_price.label.text }}</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.cost_price(class="form-control", step="0.01", min="0", placeholder="0.00")
+                                    }}
+                                </div>
+                                <small class="text-muted">Costo de adquisición</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">{{ form.selling_price.label.text }}</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.selling_price(class="form-control", step="0.01", min="0",
+                                    placeholder="0.00") }}
+                                </div>
+                                <small class="text-muted">Precio de venta</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">{{ form.unit_measure.label.text }}</label>
+                                {{ form.unit_measure(class="form-select") }}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.initial_stock.label.text }}</label>
+                                {{ form.initial_stock(class="form-control", min="0", placeholder="0") }}
+                                <small class="text-muted">Cantidad actual en inventario</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ form.min_stock_level.label.text }}</label>
+                                {{ form.min_stock_level(class="form-control", min="0", placeholder="0") }}
+                                <small class="text-muted">Alerta cuando llegue a este nivel</small>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- COFEPRIS (Opcional - Colapsable) -->
+                        <div class="mb-3">
+                            <h5 class="mb-3">
+                                <a class="text-decoration-none" data-bs-toggle="collapse" href="#cofeprisSection"
+                                    role="button" aria-expanded="false">
+                                    <i class="fas fa-pills text-info"></i> Información COFEPRIS
+                                    <small class="text-muted">(Opcional - Solo para productos médicos)</small>
+                                    <i class="fas fa-chevron-down float-end mt-1"></i>
+                                </a>
+                            </h5>
+
+                            <div class="collapse" id="cofeprisSection">
+                                <div class="card card-body bg-light">
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            {{ form.is_controlled(class="form-check-input") }}
+                                            <label class="form-check-label">
+                                                {{ form.is_controlled.label.text }}
+                                                <small class="text-muted d-block">Marque si es medicamento controlado
+                                                    (Fracción I, II, III)</small>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">{{ form.sanitary_registration.label.text
+                                                }}</label>
+                                            {{ form.sanitary_registration(class="form-control", placeholder="Ej: 123456
+                                            SSA") }}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">{{ form.active_ingredient.label.text }}</label>
+                                            {{ form.active_ingredient(class="form-control", placeholder="Ej:
+                                            Paracetamol") }}
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">{{ form.presentation.label.text }}</label>
+                                            {{ form.presentation(class="form-control", placeholder="Ej: Tabletas,
+                                            Jarabe") }}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">{{ form.therapeutic_group.label.text }}</label>
+                                            {{ form.therapeutic_group(class="form-control", placeholder="Ej:
+                                            Analgésicos") }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Buttons -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('facturacion_productos', company_id=company.id) }}"
+                                class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save"></i> Guardar Producto
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Help Section -->
+            <div class="card border-0 bg-light mt-3">
+                <div class="card-body">
+                    <h6><i class="fas fa-question-circle text-info"></i> Ayuda</h6>
+                    <ul class="small mb-0">
+                        <li>Los productos activos estarán disponibles en el autocompletado al crear facturas</li>
+                        <li>El SKU es opcional y sirve para identificar el producto internamente</li>
+                        <li>El precio de costo es para referencia, el precio de venta se usará en las facturas</li>
+                        <li>Los campos COFEPRIS son opcionales, solo para industria médica/farmacéutica</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

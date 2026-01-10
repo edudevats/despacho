@@ -306,6 +306,26 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <!-- Búsqueda de Producto/Servicio Existente -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-search"></i> Buscar Producto/Servicio Existente
+                        </label>
+                        <div style="position: relative;">
+                            <input type="text" class="form-control" id="productSearchInput"
+                                placeholder="Escriba SKU, nombre o descripción del producto...">
+                            <div id="productSearchAutocomplete" class="autocomplete-dropdown"></div>
+                        </div>
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i> Empiece a escribir para buscar en sus productos
+                            guardados, o llene manualmente abajo
+                        </small>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <label class="form-label">Descripción *</label>
@@ -1205,6 +1225,164 @@
         // Inicializar autocompletes para catálogos
         createCatalogAutocomplete('modal_clave_prod_serv', 'productosAutocomplete', 'productos');
         createCatalogAutocomplete('modal_clave_unidad', 'unidadesAutocomplete', 'unidades');
+
+        // ==================== AUTOCOMPLETE DE PRODUCTOS GUARDADOS ====================
+
+        let productSearchTimeout;
+        const productSearchInput = document.getElementById('productSearchInput');
+        const productSearchDropdown = document.getElementById('productSearchAutocomplete');
+
+        if (productSearchInput && productSearchDropdown) {
+            // Función para buscar productos
+            function searchProducts(query) {
+                if (query.length < 2) {
+                    productSearchDropdown.classList.remove('show');
+                    productSearchDropdown.innerHTML = '';
+                    return;
+                }
+
+                // Mostrar loading
+                productSearchDropdown.innerHTML = '<div class="autocomplete-loading"><i class="fas fa-spinner fa-spin"></i> Buscando productos...</div>';
+                productSearchDropdown.classList.add('show');
+
+                fetch(`/api/companies/${companyId}/products/search?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(products => {
+                        showProductResults(products);
+                    })
+                    .catch(error => {
+                        console.error('Error buscando productos:', error);
+                        productSearchDropdown.innerHTML = '<div class="autocomplete-no-results">Error al buscar</div>';
+                    });
+            }
+
+            // Mostrar resultados
+            function showProductResults(products) {
+                productSearchDropdown.innerHTML = '';
+
+                if (products.length === 0) {
+                    productSearchDropdown.innerHTML = '<div class="autocomplete-no-results">No se encontraron productos. Llene manualmente los campos abajo.</div>';
+                    productSearchDropdown.classList.add('show');
+                    return;
+                }
+
+                products.forEach(product => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-item';
+
+                    const sku = product.sku ? `<strong>[${product.sku}]</strong> ` : '';
+                    const price = product.selling_price > 0 ? ` - $${product.selling_price.toFixed(2)}` : '';
+
+                    div.innerHTML = `
+                        <div class="autocomplete-code">${sku}${product.name}${price}</div>
+                        <div class="autocomplete-description">${product.description || 'Sin descripción'}</div>
+                    `;
+
+                    div.addEventListener('click', () => {
+                        fillProductData(product);
+                    });
+
+                    productSearchDropdown.appendChild(div);
+                });
+
+                productSearchDropdown.classList.add('show');
+            }
+
+            // Rellenar campos del modal con el producto seleccionado
+            function fillProductData(product) {
+                // Llenar campos
+                document.getElementById('modal_descripcion').value = product.name + (product.description ? '\n' + product.description : '');
+                document.getElementById('modal_valor_unitario').value = product.selling_price.toFixed(2);
+
+                // Limpiar campo de búsqueda
+                productSearchInput.value = '';
+                productSearchDropdown.classList.remove('show');
+                productSearchDropdown.innerHTML = '';
+
+                // Mostrar notificación
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #198754;
+                    color: white;
+                    padding: 10px 15px;
+                    border-radius: 4px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    z-index: 9999;
+                    font-size: 0.9em;
+                `;
+                notification.innerHTML = `<i class="fas fa-check-circle"></i> Producto "${product.name}" cargado`;
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    notification.remove();
+                }, 2000);
+
+                // Enfocar el campo de cantidad para que el usuario pueda seguir sin usar el ratón
+                document.getElementById('modal_cantidad').focus();
+            }
+
+            // Event listeners
+            productSearchInput.addEventListener('input', function () {
+                const query = this.value.trim();
+
+                clearTimeout(productSearchTimeout);
+                productSearchTimeout = setTimeout(() => {
+                    searchProducts(query);
+                }, 300); // 300ms debounce
+            });
+
+            // Cerrar dropdown al hacer clic fuera
+            document.addEventListener('click', function (e) {
+                if (e.target !== productSearchInput && !productSearchDropdown.contains(e.target)) {
+                    productSearchDropdown.classList.remove('show');
+                    productSearchDropdown.innerHTML = '';
+                }
+            });
+
+            // Keyboard navigation
+            productSearchInput.addEventListener('keydown', function (e) {
+                const items = productSearchDropdown.querySelectorAll('.autocomplete-item');
+                let currentFocus = Array.from(items).findIndex(item => item.classList.contains('active'));
+
+                if (e.keyCode === 40) { // Down arrow
+                    e.preventDefault();
+                    currentFocus++;
+                    if (currentFocus >= items.length) currentFocus = 0;
+                    setActiveItem(items, currentFocus);
+                } else if (e.keyCode === 38) { // Up arrow
+                    e.preventDefault();
+                    currentFocus--;
+                    if (currentFocus < 0) currentFocus = items.length - 1;
+                    setActiveItem(items, currentFocus);
+                } else if (e.keyCode === 13) { // Enter
+                    e.preventDefault();
+                    if (currentFocus > -1 && items[currentFocus]) {
+                        items[currentFocus].click();
+                    }
+                } else if (e.keyCode === 27) { // Escape
+                    productSearchDropdown.classList.remove('show');
+                    productSearchDropdown.innerHTML = '';
+                }
+            });
+
+            function setActiveItem(items, index) {
+                items.forEach(item => item.classList.remove('active'));
+                if (items[index]) {
+                    items[index].classList.add('active');
+                    items[index].scrollIntoView({ block: 'nearest' });
+                }
+            }
+
+            // Limpiar búsqueda cuando se abre el modal
+            document.getElementById('conceptoModal').addEventListener('show.bs.modal', function () {
+                productSearchInput.value = '';
+                productSearchDropdown.classList.remove('show');
+                productSearchDropdown.innerHTML = '';
+            });
+        }
 
     });
 </script>

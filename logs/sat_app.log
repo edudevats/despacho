@@ -880,3 +880,20 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-01-09 19:46:35 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
 2026-01-10 01:47:22 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-01-10 01:47:22 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-10 02:11:29 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-01-10 02:11:30 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-01-10 02:11:30 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-10 02:14:12 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-01-10 02:14:12 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-10 02:22:57 - services.cfdi_generator - INFO - [cfdi_generator.py:469] - CFDI generado y firmado exitosamente. Total: 3549.60
+2026-01-10 02:22:57 - utils.crypto - ERROR - [crypto.py:106] - Decryption failed: Invalid token (wrong key or corrupted data)
+2026-01-10 02:22:57 - __main__ - ERROR - [app.py:2642] - Error al generar y timbrar: 
+2026-01-10 02:25:56 - services.cfdi_generator - INFO - [cfdi_generator.py:469] - CFDI generado y firmado exitosamente. Total: 2900.00
+2026-01-10 02:25:56 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-10 02:25:56 - satcfdi.pacs.finkok.Finkok - INFO - [finkok.py:173] - Comprobante timbrado satisfactoriamente
+2026-01-10 02:25:56 - services.facturacion_service - INFO - [facturacion_service.py:187] - Factura timbrada exitosamente. UUID: 88C6CA64-CDB9-53D8-B75B-E0886730A838
+2026-01-10 02:25:56 - __main__ - INFO - [app.py:2532] - XML timbrado guardado en: c:\desarrollo\sat\working\xml\EKU9003173C9\A0000005_88C6CA64-CDB9-53D8-B75B-E0886730A838.xml
+2026-01-10 02:25:56 - __main__ - INFO - [app.py:2568] - Contador de folio actualizado: Serie A, Folio 5
+2026-01-10 02:25:56 - __main__ - INFO - [app.py:2588] - Cliente actualizado: MASO451221PM4
+2026-01-10 02:29:41 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-01-10 02:29:41 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
