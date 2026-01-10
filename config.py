@@ -2,8 +2,17 @@ import os
 from datetime import timedelta
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file in project root ONLY
+# Get the directory where config.py is located (project root)
+_config_dir = os.path.dirname(os.path.abspath(__file__))
+_env_file = os.path.join(_config_dir, '.env')
+
+# Load .env with explicit path to prevent searching parent directories
+# dotenv_path parameter ensures it loads ONLY from the specified file
+if os.path.exists(_env_file):
+    load_dotenv(dotenv_path=_env_file, override=False)
+# If .env doesn't exist, load_dotenv won't be called
+# Environment variables can still come from system/server configuration
 
 
 class Config:
@@ -14,8 +23,10 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///sat_app.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # Upload folder
-    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
+    # Upload folder - use absolute path based on config.py location
+    # This ensures correct path even in WSGI context
+    PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+    UPLOAD_FOLDER = os.path.join(PROJECT_ROOT, 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload
     
     # Flask-WTF (CSRF Protection)

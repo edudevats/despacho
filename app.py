@@ -22,6 +22,10 @@ from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
+# Define project root directory (absolute path to the directory containing app.py)
+# This ensures correct paths even in WSGI context where os.getcwd() returns wrong directory
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
 
 def get_or_create_supplier(company_id, rfc, business_name):
     """
@@ -797,69 +801,69 @@ def create_app(config_class=Config):
         """Dashboard financiero principal de la empresa"""
         company = Company.query.get_or_404(company_id)
         
-        # Fecha actual
+        # Obtener año seleccionado desde query parameter, por defecto el año actual
         today = datetime.now()
+        try:
+            selected_year = int(request.args.get('year', today.year))
+        except (ValueError, TypeError):
+            selected_year = today.year
+        
         current_month = today.month
         current_year = today.year
         
-        # Totales del mes actual
+        # Totales del mes actual del año seleccionado
         month_income = db.session.query(func.sum(Movement.amount)).filter(
             Movement.company_id == company_id,
             Movement.type == 'INCOME',
             extract('month', Movement.date) == current_month,
-            extract('year', Movement.date) == current_year
+            extract('year', Movement.date) == selected_year
         ).scalar() or 0
         
         month_expense = db.session.query(func.sum(Movement.amount)).filter(
             Movement.company_id == company_id,
             Movement.type == 'EXPENSE',
             extract('month', Movement.date) == current_month,
-            extract('year', Movement.date) == current_year
+            extract('year', Movement.date) == selected_year
         ).scalar() or 0
         
-        # Totales históricos
+        # Totales del año seleccionado
         total_income = db.session.query(func.sum(Movement.amount)).filter(
             Movement.company_id == company_id,
-            Movement.type == 'INCOME'
+            Movement.type == 'INCOME',
+            extract('year', Movement.date) == selected_year
         ).scalar() or 0
         
         total_expense = db.session.query(func.sum(Movement.amount)).filter(
             Movement.company_id == company_id,
-            Movement.type == 'EXPENSE'
+            Movement.type == 'EXPENSE',
+            extract('year', Movement.date) == selected_year
         ).scalar() or 0
         
-        # Tendencia últimos 6 meses
+        # Tendencia de los 12 meses del año seleccionado
         monthly_trend = []
-        for i in range(5, -1, -1):
-            month = today.month - i
-            year = today.year
-            
-            if month <= 0:
-                month += 12
-                year -= 1
-            
+        for month in range(1, 13):  # Enero a Diciembre
             income = db.session.query(func.sum(Movement.amount)).filter(
                 Movement.company_id == company_id,
                 Movement.type == 'INCOME',
                 extract('month', Movement.date) == month,
-                extract('year', Movement.date) == year
+                extract('year', Movement.date) == selected_year
             ).scalar() or 0
             
             expense = db.session.query(func.sum(Movement.amount)).filter(
                 Movement.company_id == company_id,
                 Movement.type == 'EXPENSE',
                 extract('month', Movement.date) == month,
-                extract('year', Movement.date) == year
+                extract('year', Movement.date) == selected_year
             ).scalar() or 0
             
-            month_name = datetime(year, month, 1).strftime('%B')
+            month_name = datetime(selected_year, month, 1).strftime('%B')
             monthly_trend.append({
                 'month': month_name,
                 'income': float(income),
                 'expense': float(expense)
             })
         
-        # Distribución por categoría (solo egresos)
+        # Distribución por categoría (solo egresos del año seleccionado)
         category_distribution = db.session.query(
             Category.name,
             Category.color,
@@ -867,21 +871,44 @@ def create_app(config_class=Config):
         ).join(Movement).filter(
             Movement.company_id == company_id,
             Movement.type == 'EXPENSE',
-            Category.active == True
+            Category.active == True,
+            extract('year', Movement.date) == selected_year
         ).group_by(Category.id).order_by(func.sum(Movement.amount).desc()).limit(8).all()
         
-        # Últimas 10 facturas
-        recent_invoices = Invoice.query.filter_by(company_id=company_id).order_by(
-            Invoice.date.desc()
-        ).limit(10).all()
+        # Últimas 10 facturas del año seleccionado
+        recent_invoices = Invoice.query.filter(
+            Invoice.company_id == company_id,
+            extract('year', Invoice.date) == selected_year
+        ).order_by(Invoice.date.desc()).limit(10).all()
         
-        # Top 5 proveedores
-        top_suppliers = Supplier.query.filter_by(
-            company_id=company_id,
-            active=True
-        ).order_by(Supplier.total_invoiced.desc()).limit(5).all()
+        # Top 5 proveedores del año seleccionado
+        # Calculamos basándonos en facturas del año
+        from sqlalchemy import and_
         
-        # Calculate Inventory Value (Cost Price)
+        top_suppliers_query = db.session.query(
+            Supplier,
+            func.sum(Invoice.total).label('year_total'),
+            func.count(Invoice.id).label('year_count')
+        ).join(
+            Invoice,
+            and_(
+                Invoice.receiver_rfc == Supplier.rfc,
+                Invoice.company_id == company_id,
+                extract('year', Invoice.date) == selected_year
+            )
+        ).filter(
+            Supplier.company_id == company_id,
+            Supplier.active == True
+        ).group_by(Supplier.id).order_by(func.sum(Invoice.total).desc()).limit(5).all()
+        
+        # Formatear datos de proveedores
+        top_suppliers = []
+        for supplier, year_total, year_count in top_suppliers_query:
+            supplier.total_invoiced = year_total or 0
+            supplier.invoice_count = year_count or 0
+            top_suppliers.append(supplier)
+        
+        # Calculate Inventory Value (Cost Price) - siempre valor actual
         inventory_value = db.session.query(
             func.sum(Product.current_stock * Product.cost_price)
         ).filter(
@@ -891,6 +918,9 @@ def create_app(config_class=Config):
         
         return render_template('dashboard/company_dashboard.html',
             company=company,
+            selected_year=selected_year,
+            current_year=current_year,
+            current_month=today.strftime('%B'),
             month_income=month_income,
             month_expense=month_expense,
             month_balance=month_income - month_expense,
@@ -2177,7 +2207,7 @@ def create_app(config_class=Config):
         
         # Listar facturas generadas por el sistema
         facturas_generadas = []
-        xml_dir = os.path.join(os.getcwd(), 'xml', company.rfc)
+        xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
         
         if os.path.exists(xml_dir):
             try:
@@ -2431,7 +2461,7 @@ def create_app(config_class=Config):
                 )
                 
                 # Crear carpeta xml/RFC_EMPRESA/ si no existe
-                xml_base_dir = os.path.join(os.getcwd(), 'xml')
+                xml_base_dir = os.path.join(PROJECT_ROOT, 'xml')
                 company_xml_dir = os.path.join(xml_base_dir, company.rfc)
                 os.makedirs(company_xml_dir, exist_ok=True)
                 
@@ -2546,7 +2576,7 @@ def create_app(config_class=Config):
                         unique_id = uuid_lib.uuid4().hex[:8]
                         filename = f"FAILED_TIMBRADO_{timestamp}_{unique_id}.xml"
                         
-                        fallidos_dir = os.path.join(os.getcwd(), 'xml', 'fallidos')
+                        fallidos_dir = os.path.join(PROJECT_ROOT, 'xml', 'fallidos')
                         os.makedirs(fallidos_dir, exist_ok=True)
                         filepath = os.path.join(fallidos_dir, filename)
                         

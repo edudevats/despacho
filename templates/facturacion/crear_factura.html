@@ -513,13 +513,40 @@
     // Conceptos array
     let conceptos = [];
     let currentStep = 1;
+    let editingIndex = -1; // Track if we're editing an existing concept
 
     function agregarConcepto() {
+        editingIndex = -1; // Reset editing mode
         // Limpiar modal
         document.getElementById('modal_descripcion').value = '';
         document.getElementById('modal_cantidad').value = 1;
         document.getElementById('modal_valor_unitario').value = '';
         document.getElementById('modal_tasa_iva').value = '0.16';
+        document.getElementById('modal_clave_prod_serv').value = '01010101';
+        document.getElementById('modal_clave_unidad').value = 'E48';
+
+        // Update modal title
+        document.querySelector('#conceptoModal .modal-title').innerHTML = '<i class="fas fa-plus"></i> Agregar Producto/Servicio';
+
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('conceptoModal'));
+        modal.show();
+    }
+
+    function editarConcepto(index) {
+        editingIndex = index; // Set editing mode
+        const concepto = conceptos[index];
+
+        // Populate modal with existing data
+        document.getElementById('modal_descripcion').value = concepto.descripcion;
+        document.getElementById('modal_cantidad').value = concepto.cantidad;
+        document.getElementById('modal_valor_unitario').value = concepto.valor_unitario;
+        document.getElementById('modal_tasa_iva').value = concepto.tasa_iva;
+        document.getElementById('modal_clave_prod_serv').value = concepto.clave_prod_serv || '01010101';
+        document.getElementById('modal_clave_unidad').value = concepto.clave_unidad || 'E48';
+
+        // Update modal title
+        document.querySelector('#conceptoModal .modal-title').innerHTML = '<i class="fas fa-edit"></i> Editar Producto/Servicio';
 
         // Mostrar modal
         const modal = new bootstrap.Modal(document.getElementById('conceptoModal'));
@@ -550,7 +577,15 @@
             unidad: 'Servicio'
         };
 
-        conceptos.push(concepto);
+        if (editingIndex >= 0) {
+            // Update existing concept
+            conceptos[editingIndex] = concepto;
+            editingIndex = -1; // Reset editing mode
+        } else {
+            // Add new concept
+            conceptos.push(concepto);
+        }
+
         actualizarTablaConceptos();
 
         // Cerrar modal
@@ -587,7 +622,10 @@
                     <td>${(c.tasa_iva * 100).toFixed(0)}%</td>
                     <td>$${importe.toFixed(2)}</td>
                     <td>
-                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarConcepto(${index})">
+                        <button type="button" class="btn btn-sm btn-primary me-1" onclick="editarConcepto(${index})" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="eliminarConcepto(${index})" title="Borrar">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -733,6 +771,7 @@
 
         let autocompleteTimeout;
         const companyId = window.location.pathname.split('/')[2]; // Extraer company_id de la URL
+        let activeAutocompleteInput = null; // Track which input is currently active
 
         // Crear contenedor para sugerencias
         const autocompleteContainer = document.createElement('div');
@@ -745,9 +784,9 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             max-height: 200px;
             overflow-y: auto;
-            z-index: 1000;
+            z-index: 1050;
             display: none;
-            width: 100%;
+            min-width: 300px;
         `;
 
         // Función para buscar clientes
@@ -803,12 +842,29 @@
                 autocompleteContainer.appendChild(item);
             });
 
+            // Position dropdown relative to active input
+            if (activeAutocompleteInput) {
+                positionAutocomplete(activeAutocompleteInput);
+            }
+
             autocompleteContainer.style.display = 'block';
+        }
+
+        // Position autocomplete dropdown
+        function positionAutocomplete(inputElement) {
+            const rect = inputElement.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+
+            autocompleteContainer.style.top = (rect.bottom + scrollTop) + 'px';
+            autocompleteContainer.style.left = (rect.left + scrollLeft) + 'px';
+            autocompleteContainer.style.width = rect.width + 'px';
         }
 
         // Ocultar autocompletado
         function hideAutocomplete() {
             autocompleteContainer.style.display = 'none';
+            activeAutocompleteInput = null;
         }
 
         // Seleccionar un cliente y llenar campos
@@ -853,24 +909,14 @@
             }, 3000);
         }
 
-        // Inicializar autocompletado en el campo RFC
-        const receptorRfcInput = document.querySelector('[name="receptor_rfc"]');
-        if (receptorRfcInput) {
-            // Agregar contenedor de autocompletado después del campo
-            const inputGroup = receptorRfcInput.closest('.input-group');
-            if (inputGroup) {
-                const wrapper = document.createElement('div');
-                wrapper.style.position = 'relative';
-                wrapper.style.width = '100%';
-
-                inputGroup.parentNode.insertBefore(wrapper, inputGroup);
-                wrapper.appendChild(inputGroup);
-                wrapper.appendChild(autocompleteContainer);
-            }
+        // Setup autocomplete for an input field
+        function setupAutocompleteInput(inputElement) {
+            if (!inputElement) return;
 
             // Event listener con debounce
-            receptorRfcInput.addEventListener('input', function () {
+            inputElement.addEventListener('input', function () {
                 const query = this.value.trim();
+                activeAutocompleteInput = this;
 
                 clearTimeout(autocompleteTimeout);
                 autocompleteTimeout = setTimeout(() => {
@@ -878,13 +924,42 @@
                 }, 300); // Esperar 300ms después de que el usuario deje de escribir
             });
 
-            // Ocultar al hacer clic fuera
-            document.addEventListener('click', function (e) {
-                if (!autocompleteContainer.contains(e.target) && e.target !== receptorRfcInput) {
-                    hideAutocomplete();
+            // Show autocomplete on focus if there's text
+            inputElement.addEventListener('focus', function () {
+                activeAutocompleteInput = this;
+                const query = this.value.trim();
+                if (query.length >= 2) {
+                    searchCustomers(query);
                 }
             });
         }
+
+        // Inicializar autocompletado en el campo RFC
+        const receptorRfcInput = document.querySelector('[name="receptor_rfc"]');
+        setupAutocompleteInput(receptorRfcInput);
+
+        // Inicializar autocompletado en el campo Nombre
+        const receptorNombreInput = document.querySelector('[name="receptor_nombre"]');
+        setupAutocompleteInput(receptorNombreInput);
+
+        // Append autocomplete container to body for better positioning
+        document.body.appendChild(autocompleteContainer);
+
+        // Ocultar al hacer clic fuera
+        document.addEventListener('click', function (e) {
+            if (!autocompleteContainer.contains(e.target) &&
+                e.target !== receptorRfcInput &&
+                e.target !== receptorNombreInput) {
+                hideAutocomplete();
+            }
+        });
+
+        // Hide on scroll to avoid positioning issues
+        window.addEventListener('scroll', function () {
+            if (autocompleteContainer.style.display === 'block') {
+                hideAutocomplete();
+            }
+        });
 
         // Manejar cambio de serie
         const serieInput = document.getElementById('serieInput');

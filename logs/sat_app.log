@@ -805,3 +805,28 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-01-09 12:31:43 - __main__ - INFO - [app.py:2463] - XML timbrado guardado en: C:\desarrollo\sat\working\xml\EKU9003173C9\A0000002_33D0494C-3DA4-5D47-9605-6D259C56E809.xml
 2026-01-09 12:31:43 - __main__ - INFO - [app.py:2499] - Contador de folio actualizado: Serie A, Folio 2
 2026-01-09 12:31:43 - __main__ - INFO - [app.py:2519] - Cliente actualizado: ABC970528UHA
+2026-01-09 13:42:27 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 13:42:27 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 16:54:19 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 16:54:19 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 17:05:44 - services.cfdi_generator - INFO - [cfdi_generator.py:468] - CFDI generado y firmado exitosamente. Total: 13728.60
+2026-01-09 17:05:44 - services.facturacion_service - INFO - [facturacion_service.py:151] - Iniciando timbrado de factura con Finkok
+2026-01-09 17:05:45 - satcfdi.pacs.finkok.Finkok - INFO - [finkok.py:173] - Comprobante timbrado satisfactoriamente
+2026-01-09 17:05:45 - services.facturacion_service - INFO - [facturacion_service.py:187] - Factura timbrada exitosamente. UUID: 84DC09A8-4863-57E3-A3AB-C45EF0864952
+2026-01-09 17:05:45 - __main__ - INFO - [app.py:2489] - XML timbrado guardado en: C:\desarrollo\sat\working\xml\EKU9003173C9\A0000003_84DC09A8-4863-57E3-A3AB-C45EF0864952.xml
+2026-01-09 17:05:45 - __main__ - INFO - [app.py:2525] - Contador de folio actualizado: Serie A, Folio 3
+2026-01-09 17:05:45 - __main__ - INFO - [app.py:2545] - Cliente actualizado: ABC970528UHA
+2026-01-09 17:33:30 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 17:33:30 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 17:33:42 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 17:33:42 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 17:34:02 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 17:34:02 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 17:59:32 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 17:59:32 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 18:00:40 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 18:00:40 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 18:05:47 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 18:05:47 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-01-09 18:08:47 - app - INFO - [logging_config.py:75] - Logging configured: level=INFO
+2026-01-09 18:08:47 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!

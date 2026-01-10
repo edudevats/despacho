@@ -489,8 +489,9 @@ class CFDIGenerator:
                     unique_id = uuid.uuid4().hex[:8]
                     filename = f"FAILED_{timestamp}_{unique_id}.xml"
                     
-                    # Ensure directory exists
-                    fallidos_dir = os.path.join(os.getcwd(), 'xml', 'fallidos')
+                    # Get project root (go up one level from services/ to project root)
+                    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    fallidos_dir = os.path.join(project_root, 'xml', 'fallidos')
                     os.makedirs(fallidos_dir, exist_ok=True)
                     
                     filepath = os.path.join(fallidos_dir, filename)

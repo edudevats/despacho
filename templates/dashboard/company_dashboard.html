@@ -6,24 +6,35 @@
 <div class="container-fluid mt-4">
     <!-- Header -->
     <div class="row mb-4">
-        <div class="col-md-8">
+        <div class="col-md-6">
             <h2>{{ company.name }}</h2>
             <p class="text-muted">{{ company.rfc }}</p>
         </div>
-        <div class="col-md-4 text-end">
-            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-primary me-2">
-                <!-- Inventory Link -->
-                <i class="fas fa-boxes"></i> Inventario
-            </a>
-            <a href="{{ url_for('taxes_dashboard', company_id=company.id) }}" class="btn btn-info me-2">
-                <i class="fas fa-calculator"></i> Impuestos
-            </a>
-            <a href="{{ url_for('ppd_list', company_id=company.id) }}" class="btn btn-warning me-2">
-                <i class="fas fa-hourglass-half"></i> Facturas PPD
-            </a>
-            <a href="{{ url_for('companies') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left"></i> Volver
-            </a>
+        <div class="col-md-6 text-end">
+            <div class="mb-3">
+                <label for="yearSelector" class="form-label me-2"><strong>Año Fiscal:</strong></label>
+                <select id="yearSelector" class="form-select d-inline-block w-auto" onchange="changeYear(this.value)">
+                    {% for year in range(2020, current_year + 1) %}
+                    <option value="{{ year }}" {% if year==selected_year %}selected{% endif %}>
+                        {{ year }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-sm btn-primary me-2">
+                    <i class="fas fa-boxes"></i> Inventario
+                </a>
+                <a href="{{ url_for('taxes_dashboard', company_id=company.id) }}" class="btn btn-sm btn-info me-2">
+                    <i class="fas fa-calculator"></i> Impuestos
+                </a>
+                <a href="{{ url_for('ppd_list', company_id=company.id) }}" class="btn btn-sm btn-warning me-2">
+                    <i class="fas fa-hourglass-half"></i> Facturas PPD
+                </a>
+                <a href="{{ url_for('companies') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </a>
+            </div>
         </div>
     </div>
 
@@ -34,13 +45,14 @@
                 <div class="card-body">
                     <h6 class="text-muted">Valor Inventario (Costo)</h6>
                     <h2 class="text-primary">${{ inventory_value|format_currency }}</h2>
+                    <small class="text-muted">Valor Actual</small>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card border-success">
                 <div class="card-body">
-                    <h6 class="text-muted">Ingresos del Mes</h6>
+                    <h6 class="text-muted">Ingresos de {{ current_month }} {{ selected_year }}</h6>
                     <h2 class="text-success">${{ month_income|format_currency }}</h2>
                 </div>
             </div>
@@ -48,7 +60,7 @@
         <div class="col-md-3">
             <div class="card border-danger">
                 <div class="card-body">
-                    <h6 class="text-muted">Egresos del Mes</h6>
+                    <h6 class="text-muted">Egresos de {{ current_month }} {{ selected_year }}</h6>
                     <h2 class="text-danger">${{ month_expense|format_currency }}</h2>
                 </div>
             </div>
@@ -56,7 +68,7 @@
         <div class="col-md-3">
             <div class="card border-primary">
                 <div class="card-body">
-                    <h6 class="text-muted">Balance del Mes</h6>
+                    <h6 class="text-muted">Balance de {{ current_month }} {{ selected_year }}</h6>
                     <h2 class="{% if month_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
                         ${{ month_balance|format_currency }}
                     </h2>
@@ -70,7 +82,7 @@
         <div class="col-md-8">
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5>Tendencia (Últimos 6 Meses)</h5>
+                    <h5>Tendencia Mensual {{ selected_year }}</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="trendChart" height="80"></canvas>
@@ -82,7 +94,7 @@
         <div class="col-md-4">
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5>Egresos por Categoría</h5>
+                    <h5>Egresos por Categoría {{ selected_year }}</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="categoryChart"></canvas>
@@ -96,11 +108,12 @@
         <div class="col-md-6">
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5>Top 5 Proveedores</h5>
+                    <h5>Top 5 Proveedores {{ selected_year }}</h5>
                     <a href="{{ url_for('suppliers', company_id=company.id) }}"
                         class="btn btn-sm btn-outline-primary float-end">Ver Todos</a>
                 </div>
                 <div class="card-body">
+                    {% if top_suppliers %}
                     <div class="list-group list-group-flush">
                         {% for supplier in top_suppliers %}
                         <a href="{{ url_for('supplier_detail', company_id=company.id, supplier_id=supplier.id) }}"
@@ -119,6 +132,9 @@
                         </a>
                         {% endfor %}
                     </div>
+                    {% else %}
+                    <p class="text-muted text-center">No hay proveedores en {{ selected_year }}</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -127,11 +143,12 @@
         <div class="col-md-6">
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5>Últimas Facturas</h5>
+                    <h5>Últimas Facturas {{ selected_year }}</h5>
                     <a href="{{ url_for('search_invoices', company_id=company.id) }}"
                         class="btn btn-sm btn-outline-primary float-end">Buscar</a>
                 </div>
                 <div class="card-body">
+                    {% if recent_invoices %}
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
@@ -163,6 +180,9 @@
                             </tbody>
                         </table>
                     </div>
+                    {% else %}
+                    <p class="text-muted text-center">No hay facturas en {{ selected_year }}</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -171,6 +191,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+    // Función para cambiar el año
+    function changeYear(year) {
+        window.location.href = "{{ url_for('company_dashboard', company_id=company.id) }}?year=" + year;
+    }
+
     // Tendencia Mensual
     const trendCtx = document.getElementById('trendChart').getContext('2d');
     new Chart(trendCtx, {
