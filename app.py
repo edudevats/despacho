@@ -69,7 +69,7 @@ def update_supplier_stats(supplier_id):
     Args:
         supplier_id: ID del proveedor
     """
-    supplier = Supplier.query.get(supplier_id)
+    supplier = db.session.get(Supplier, supplier_id)
     if not supplier:
         return
     
@@ -173,47 +173,58 @@ def create_app(config_class=Config):
         company_id = request.args.get('company_id', type=int)
         selected_company = None
         if company_id:
-            selected_company = Company.query.get(company_id)
+            selected_company = db.session.get(Company, company_id)
         
-        # Base queries
-        income_query = db.session.query(db.func.sum(Movement.amount)).filter(Movement.type == 'INCOME')
-        expenses_query = db.session.query(db.func.sum(Movement.amount)).filter(Movement.type == 'EXPENSE')
+        # Get current year for filtering
+        today = now_mexico()
+        current_year = today.year
+        
+        # Get selected year from query parameter, default to current year
+        selected_year = request.args.get('year', type=int, default=current_year)
+        
+        # Base queries - filter by selected year
+        income_query = db.session.query(db.func.sum(Movement.amount)).filter(
+            Movement.type == 'INCOME',
+            extract('year', Movement.date) == selected_year
+        )
+        expenses_query = db.session.query(db.func.sum(Movement.amount)).filter(
+            Movement.type == 'EXPENSE',
+            extract('year', Movement.date) == selected_year
+        )
         
         # Apply company filter if selected
         if company_id:
             income_query = income_query.filter(Movement.company_id == company_id)
             expenses_query = expenses_query.filter(Movement.company_id == company_id)
         
-        # Calculate totals
+        # Calculate totals for current year
         income = income_query.scalar() or 0
         expenses = expenses_query.scalar() or 0
         
-        # Calculate monthly statistics (all 12 months of current year)
-        today = now_mexico()
-        current_year = today.year
+        # Calculate monthly statistics for selected year
         current_month = today.month
         monthly_data = []
         month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
         
-        # Calculate all 12 months for the current year
+        # Calculate all 12 months for the selected year
         for month_num in range(1, 13):
-            # Only include months up to current month
-            if month_num > current_month:
+            # Only include months up to current month if viewing current year
+            if selected_year == current_year and month_num > current_month:
                 continue
                 
             # Income for this month
             month_income_query = db.session.query(func.sum(Movement.amount)).filter(
                 Movement.type == 'INCOME',
                 extract('month', Movement.date) == month_num,
-                extract('year', Movement.date) == current_year
+                extract('year', Movement.date) == selected_year
             )
             
             # Expenses for this month
             month_expense_query = db.session.query(func.sum(Movement.amount)).filter(
                 Movement.type == 'EXPENSE',
                 extract('month', Movement.date) == month_num,
-                extract('year', Movement.date) == current_year
+                extract('year', Movement.date) == selected_year
             )
             
             # Apply company filter
@@ -231,15 +242,14 @@ def create_app(config_class=Config):
                 'balance': float(month_income - month_expense)
             })
         
-        # Calculate annual statistics (current year)
-        current_year = today.year
+        # Calculate annual statistics for selected year
         annual_income_query = db.session.query(func.sum(Movement.amount)).filter(
             Movement.type == 'INCOME',
-            extract('year', Movement.date) == current_year
+            extract('year', Movement.date) == selected_year
         )
         annual_expense_query = db.session.query(func.sum(Movement.amount)).filter(
             Movement.type == 'EXPENSE',
-            extract('year', Movement.date) == current_year
+            extract('year', Movement.date) == selected_year
         )
         
         if company_id:
@@ -259,6 +269,18 @@ def create_app(config_class=Config):
             
         inventory_value = inventory_query.scalar() or 0
         
+        # Get available years from movements
+        years_query = db.session.query(
+            extract('year', Movement.date).label('year')
+        ).distinct().order_by(extract('year', Movement.date).desc())
+        
+        if company_id:
+            years_query = years_query.filter(Movement.company_id == company_id)
+        
+        available_years = [int(year[0]) for year in years_query.all() if year[0]]
+        if not available_years:
+            available_years = [current_year]
+        
         return render_template('dashboard.html',
             companies=companies,
             selected_company=selected_company,
@@ -266,8 +288,11 @@ def create_app(config_class=Config):
             expenses=expenses,
             inventory_value=inventory_value,
             monthly_data=monthly_data,
+            selected_year=selected_year,
+            available_years=available_years,
+            current_year=current_year,
             annual_stats={
-                'year': current_year,
+                'year': selected_year,
                 'income': float(annual_income),
                 'expenses': float(annual_expense),
                 'balance': float(annual_income - annual_expense)

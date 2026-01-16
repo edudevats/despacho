@@ -282,3 +282,5 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-01-09 18:30:32 - utils.crypto - ERROR - [crypto.py:106] - Decryption failed: Invalid token (wrong key or corrupted data)
 2026-01-10 02:22:57 - utils.crypto - ERROR - [crypto.py:106] - Decryption failed: Invalid token (wrong key or corrupted data)
 2026-01-10 02:22:57 - __main__ - ERROR - [app.py:2642] - Error al generar y timbrar: 
+2026-01-14 18:11:17 - __main__ - ERROR - [app.py:658] - SAT error for company GQA170124FQA: Code=5002, Message=Se agotaron las solicitudes de por vida para estos parámetros, Raw=EstadoSolicitud: 5
+2026-01-14 18:11:40 - __main__ - ERROR - [app.py:658] - SAT error for company GQA170124FQA: Code=5002, Message=Se agotaron las solicitudes de por vida para estos parámetros, Raw=EstadoSolicitud: 5

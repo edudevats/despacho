@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Moneda="MXN" NoCertificado="00001000000720622636" Folio="4405363" LugarExpedicion="53220" Exportacion="01" Certificado="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" MetodoPago="PUE" FormaPago="04" SubTotal="1434.53" Descuento="11.60" Total="1479.60" TipoDeComprobante="I" Sello="RRDnoqSS9MMrcUo7bqMnwvwqTimNW9cxajGwo0tQIoFHC8njPEtzZQfjVUUmOSbqcIeq2Ypp6e83piiwLzvyGdPb33qcYPw86lBYZs2VNOeNu/w7rX8XT0GGW9bHyNK8rbs7dMECP+hEtPI3vtztCxQi8I8gw/y8OUch6b0ZVAbgFL4WOkkwwDT/sowwzhYNXJRDoqEtR3WDFUiRTkeP3l+eQ68nVvEqo3CFXixLcAXT6aYmRdYYLfZbWAdE1lbTaCg+KugDruSHla15mZEOnqzejamcqsDMPqajKy8jZmpZagvH5A0D3atZhjIGLJqkYzAAFdQ4QrQzY0ZZpb6USQ==" Fecha="2026-01-06T09:35:58" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cfdi:Emisor Rfc="GZA9104307K6" Nombre="GRUPO ZORRO ABARROTERO" RegimenFiscal="601" />
+  <cfdi:Receptor Rfc="GQA170124FQA" Nombre="GRUPO QUIRURGICO DE ALTA ESPECIALIDAD EN CIRUGIA PLASTICA" UsoCFDI="G03" DomicilioFiscalReceptor="54050" RegimenFiscalReceptor="626" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="47131807" NoIdentificacion="0302080" Cantidad="1.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="CLORALEX 6-3.75LT (BLANQ)" ValorUnitario="50.78" Importe="50.78" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="50.78" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="8.12" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="52151500" NoIdentificacion="2500004" Cantidad="2.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="VASO CONVERMEX TERMICO NO.108 40-25 PZ" ValorUnitario="10.09" Importe="20.17" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="20.17" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="3.23" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="52151504" NoIdentificacion="2670024" Cantidad="6.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="VASO FUN &amp; FUN PLASTICO NO 8 20-50 PZ Promocion" ValorUnitario="17.53" Importe="105.18" ObjetoImp="02" Descuento="10.52">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="94.66" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="15.15" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50192405" NoIdentificacion="6622309" Cantidad="8.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="GELATINA DANY MANDARINA 48/125 GR (DANON" ValorUnitario="6.74" Importe="53.92" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="53.92" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50192405" NoIdentificacion="6622312" Cantidad="8.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="GELATINA DANY PI?A 48/125 GR (DANONE)" ValorUnitario="6.74" Importe="53.92" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="53.92" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50192405" NoIdentificacion="6622314" Cantidad="8.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="GELATINA DANY FRESA 48/125 GR (DANONE)" ValorUnitario="6.74" Importe="53.92" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="53.92" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50192405" NoIdentificacion="6622310" Cantidad="16.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="GELATINA DANY LIMON 48/125 GR (DANONE) Promocion" ValorUnitario="6.74" Importe="107.83" ObjetoImp="02" Descuento="1.08">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="106.76" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50202601" NoIdentificacion="7553009" Cantidad="54.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="BOING MANZANA 27-250 ML (JUGO)" ValorUnitario="7.94" Importe="428.60" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="428.60" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50161800" NoIdentificacion="9983393" Cantidad="5.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="MALVAVISCO CUBIERTO C/CHOC. 20/50 PZS DE" ValorUnitario="75.42" Importe="377.08" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="407.25" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+          <cfdi:Traslado Base="377.08" Impuesto="003" TipoFactor="Tasa" TasaOCuota="0.080000" Importe="30.17" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50161500" NoIdentificacion="5500302" Cantidad="2.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="AZUCAR ZULKA MORENA 10-2KG" ValorUnitario="50.00" Importe="100.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="100.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50201714" NoIdentificacion="9002607" Cantidad="1.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="COFFEE MATE BOLSA 8-800 GR (POLV)" ValorUnitario="83.13" Importe="83.13" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="83.13" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="56.67">
+    <cfdi:Traslados>
+      <cfdi:Traslado Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" Base="1287.50" />
+      <cfdi:Traslado Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="26.50" Base="165.61" />
+      <cfdi:Traslado Impuesto="003" TipoFactor="Tasa" TasaOCuota="0.080000" Importe="30.17" Base="377.08" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="F2BB8389-04D0-4D56-A925-9B9D2C511190" FechaTimbrado="2026-01-06T09:36:02" RfcProvCertif="INT020124V62" SelloCFD="RRDnoqSS9MMrcUo7bqMnwvwqTimNW9cxajGwo0tQIoFHC8njPEtzZQfjVUUmOSbqcIeq2Ypp6e83piiwLzvyGdPb33qcYPw86lBYZs2VNOeNu/w7rX8XT0GGW9bHyNK8rbs7dMECP+hEtPI3vtztCxQi8I8gw/y8OUch6b0ZVAbgFL4WOkkwwDT/sowwzhYNXJRDoqEtR3WDFUiRTkeP3l+eQ68nVvEqo3CFXixLcAXT6aYmRdYYLfZbWAdE1lbTaCg+KugDruSHla15mZEOnqzejamcqsDMPqajKy8jZmpZagvH5A0D3atZhjIGLJqkYzAAFdQ4QrQzY0ZZpb6USQ==" NoCertificadoSAT="00001000000708361008" SelloSAT="Vf680csPs2bVLvW4GZzTN9/A03PVahT/9wdiVvUojFq8AEkzFzZnBzJnPKI30DqUmqOZOsNWfJKyJ820rl3SM+xVSDPDDLGYRdYRrVzXal/iuIn/eWpBQw6wf12XXImuc7vRvbn1Vba90FzYniPYddwP/ylUc+uR74nJ1u0yM+P6r1z9jtTvABLyaw+RKrHveHYS7c7j3co+Xx/IWHbgtag743Jl7i2FaGl0D0xCc3Wu8QaTh23gDJHue6apRm3d8hvYMqUu6QS1xfPAhQ2XcmjbwtF4LfyOMxYT+stUJz+CW/PuGUCpBRd5ux6mWS2cLtaloRfcAgwd4i0v3/d4Rg==" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>

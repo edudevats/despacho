@@ -513,6 +513,19 @@ class SATService:
                 version = version.code
             elif version is not None:
                 version = str(version)
+            
+            # Extract regimen fiscal fields and convert Code objects to strings
+            regimen_fiscal_emisor = emisor.get('RegimenFiscal')
+            if regimen_fiscal_emisor is not None and hasattr(regimen_fiscal_emisor, 'code'):
+                regimen_fiscal_emisor = regimen_fiscal_emisor.code
+            elif regimen_fiscal_emisor is not None:
+                regimen_fiscal_emisor = str(regimen_fiscal_emisor)
+            
+            regimen_fiscal_receptor = receptor.get('RegimenFiscalReceptor')
+            if regimen_fiscal_receptor is not None and hasattr(regimen_fiscal_receptor, 'code'):
+                regimen_fiscal_receptor = regimen_fiscal_receptor.code
+            elif regimen_fiscal_receptor is not None:
+                regimen_fiscal_receptor = str(regimen_fiscal_receptor)
 
             return {
                 'uuid': uuid,
@@ -549,10 +562,10 @@ class SATService:
                 'certificado': cfdi.get('Certificado'),
                 
                 # Emisor
-                'regimen_fiscal_emisor': emisor.get('RegimenFiscal'),
+                'regimen_fiscal_emisor': regimen_fiscal_emisor,
                 
                 # Receptor
-                'regimen_fiscal_receptor': receptor.get('RegimenFiscalReceptor'),
+                'regimen_fiscal_receptor': regimen_fiscal_receptor,
                 'domicilio_fiscal_receptor': receptor.get('DomicilioFiscalReceptor'),
                 
                 # TimbreFiscalDigital

@@ -15,7 +15,16 @@ For PythonAnywhere:
 
 import sys
 import os
+import time
 from dotenv import load_dotenv
+
+# Set timezone to Mexico City
+os.environ['TZ'] = 'America/Mexico_City'
+try:
+    time.tzset()
+except AttributeError:
+    # time.tzset() is only available on Unix
+    pass
 
 # Add your project directory to the sys.path
 # For PythonAnywhere, this should be the absolute path to your project
