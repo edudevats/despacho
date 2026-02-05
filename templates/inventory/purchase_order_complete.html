@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Completar Orden #{{ order.id }} - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>
+                <i class="fas fa-check-circle text-success"></i>
+                Confirmar y Completar - Orden #{{ order.id }}
+            </h2>
+            <p class="text-muted">Proveedor: {{ order.supplier.business_name }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <span class="badge bg-success fs-6">Fase 3: Confirmacion</span>
+        </div>
+    </div>
+
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Atencion:</strong> Al completar la orden, el inventario sera actualizado automaticamente
+        con las cantidades recibidas. Esta accion no se puede deshacer.
+    </div>
+
+    <!-- Resumen de Discrepancias -->
+    {% set has_discrepancies = order.details|selectattr('difference', 'ne', 0)|list|length > 0 %}
+    {% if has_discrepancies %}
+    <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle"></i>
+        <strong>Se detectaron diferencias:</strong> Algunos productos tienen cantidades diferentes a las solicitadas.
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Resumen de Recepcion</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th class="text-center">Solicitado</th>
+                            <th class="text-center">Recibido</th>
+                            <th>Lote</th>
+                            <th>Caducidad</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for detail in order.details %}
+                        <tr class="{{ 'table-danger' if detail.difference < 0 else ('table-warning' if detail.difference > 0 else 'table-success') }}">
+                            <td>
+                                <strong>{{ detail.product.name }}</strong>
+                                {% if detail.product.sku %}
+                                <br><small class="text-muted">{{ detail.product.sku }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">{{ detail.quantity_requested }}</td>
+                            <td class="text-center fw-bold">{{ detail.quantity_received }}</td>
+                            <td>
+                                {% if detail.batch_number %}
+                                <code>{{ detail.batch_number }}</code>
+                                {% else %}
+                                <span class="text-muted">--</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if detail.expiration_date %}
+                                {{ detail.expiration_date.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                <span class="text-muted">--</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if detail.difference == 0 %}
+                                <span class="badge bg-success"><i class="fas fa-check"></i> Completo</span>
+                                {% elif detail.difference < 0 %}
+                                <span class="badge bg-danger"><i class="fas fa-times"></i> Faltante</span>
+                                {% else %}
+                                <span class="badge bg-info"><i class="fas fa-plus"></i> Excedente</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-success mb-4">
+        <div class="card-body text-center">
+            <h4>Al completar esta orden:</h4>
+            <ul class="list-unstyled mb-0">
+                <li><i class="fas fa-check text-success"></i> Se actualizara el stock de cada producto</li>
+                <li><i class="fas fa-check text-success"></i> Se crearan los lotes con numero y caducidad</li>
+                <li><i class="fas fa-check text-success"></i> Se registraran las transacciones de inventario</li>
+                <li><i class="fas fa-check text-success"></i> La orden quedara cerrada permanentemente</li>
+            </ul>
+        </div>
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Volver a Editar Cantidades
+            </a>
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-check-circle"></i> Completar Orden y Actualizar Inventario
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

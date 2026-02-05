@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Orden #{{ order.id }} - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>
+                <i class="fas fa-clipboard-list text-primary"></i>
+                Orden de Compra #{{ order.id }}
+            </h2>
+            <p class="text-muted">Proveedor: {{ order.supplier.business_name }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <span class="badge bg-{{ 'secondary' if order.status == 'DRAFT' else 'info' }} fs-6">
+                {{ 'Borrador' if order.status == 'DRAFT' else 'Enviada' }}
+            </span>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Lista de Productos en la Orden -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Productos en la Orden</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th class="text-end">Costo Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for detail in order.details %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ detail.product.name }}</strong>
+                                        {% if detail.product.sku %}
+                                        <br><small class="text-muted">SKU: {{ detail.product.sku }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ detail.quantity_requested }}</td>
+                                    <td class="text-end">${{ detail.unit_cost|format_currency }}</td>
+                                    <td class="text-end fw-bold">${{ (detail.quantity_requested * detail.unit_cost)|format_currency }}</td>
+                                    <td class="text-center">
+                                        <form method="POST" style="display: inline;">
+                                            <input type="hidden" name="action" value="remove_product">
+                                            <input type="hidden" name="detail_id" value="{{ detail.id }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                                        No hay productos agregados.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            {% if order.details %}
+                            <tfoot class="table-light">
+                                <tr class="fw-bold">
+                                    <td colspan="3" class="text-end">Total Estimado:</td>
+                                    <td class="text-end text-success">${{ order.estimated_total|format_currency }}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botones de Accion -->
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('inventory_list', company_id=company.id, tab='orders') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </a>
+                {% if order.details %}
+                <form method="POST">
+                    <input type="hidden" name="action" value="send_order">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-paper-plane"></i> Enviar Orden
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Agregar Producto -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-plus"></i> Agregar Producto</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add_product">
+
+                        <div class="mb-3">
+                            <label class="form-label">Producto</label>
+                            <select name="product_id" class="form-select" required>
+                                <option value="">-- Seleccionar --</option>
+                                {% for product in products %}
+                                <option value="{{ product.id }}" data-cost="{{ product.cost_price }}">
+                                    {{ product.name }} {% if product.sku %}({{ product.sku }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Cantidad</label>
+                            <input type="number" name="quantity" class="form-control" value="1" min="1" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Costo Unitario</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" name="unit_cost" class="form-control" step="0.01" min="0" value="0" id="unitCostInput">
+                            </div>
+                            <small class="text-muted">Costo de compra para esta orden</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-plus"></i> Agregar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-fill cost when product is selected
+document.querySelector('select[name="product_id"]').addEventListener('change', function() {
+    const option = this.options[this.selectedIndex];
+    const cost = option.getAttribute('data-cost') || 0;
+    document.getElementById('unitCostInput').value = parseFloat(cost).toFixed(2);
+});
+</script>
+{% endblock %}

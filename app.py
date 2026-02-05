@@ -8,11 +8,17 @@ load_dotenv()
 
 from config import Config
 from extensions import db, login_manager, migrate, mail, cache, csrf, init_extensions
-from models import Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product, InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer
-from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm, 
-                   CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm, 
+from models import (Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product,
+                    InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer,
+                    Laboratory, Service, PurchaseOrder, PurchaseOrderDetail, InvoiceTemplate, InvoiceTemplateItem,
+                    UserCompanyAccess)
+from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm,
+                   CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm,
                    FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm,
-                   CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm)
+                   CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm,
+                   LaboratoryForm, ServiceForm, SupplierManualForm, PurchaseOrderForm, InvoiceTemplateForm,
+                   UserForm, UserCompanyAccessForm)
+from functools import wraps
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.sat_service import SATService, SATError
@@ -118,6 +124,18 @@ def create_app(config_class=Config):
     def load_user(user_id):
         return db.session.get(User, int(user_id))
 
+    # Admin required decorator
+    def admin_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('login'))
+            if not current_user.is_admin:
+                flash('Acceso denegado. Se requieren permisos de administrador.', 'error')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+
     @app.route('/login', methods=['GET', 'POST'])
     def login():
         if request.method == 'POST':
@@ -162,6 +180,145 @@ def create_app(config_class=Config):
             return redirect(url_for('index'))
             
         return render_template('change_password.html')
+
+    # ==================== USER MANAGEMENT ROUTES ====================
+
+    @app.route('/admin/users')
+    @admin_required
+    def admin_users():
+        """List all users"""
+        users = User.query.order_by(User.username).all()
+        return render_template('admin/users.html', users=users)
+
+    @app.route('/admin/users/add', methods=['GET', 'POST'])
+    @admin_required
+    def admin_add_user():
+        """Create new user"""
+        form = UserForm()
+        companies = Company.query.order_by(Company.name).all()
+
+        if form.validate_on_submit():
+            # Check if username exists
+            if User.query.filter_by(username=form.username.data).first():
+                flash('El nombre de usuario ya existe.', 'error')
+                return render_template('admin/user_form.html', form=form, companies=companies, action='crear')
+
+            # Check if email exists (if provided)
+            if form.email.data and User.query.filter_by(email=form.email.data).first():
+                flash('El email ya está registrado.', 'error')
+                return render_template('admin/user_form.html', form=form, companies=companies, action='crear')
+
+            # Create user
+            user = User(
+                username=form.username.data,
+                email=form.email.data or None,
+                password_hash=generate_password_hash(form.password.data) if form.password.data else generate_password_hash('changeme'),
+                is_active=form.is_active.data,
+                is_admin=form.is_admin.data
+            )
+            db.session.add(user)
+            db.session.flush()  # Get user.id
+
+            # Process company access
+            for company in companies:
+                if request.form.get(f'company_{company.id}'):
+                    access = UserCompanyAccess(
+                        user_id=user.id,
+                        company_id=company.id,
+                        perm_dashboard=request.form.get(f'perm_dashboard_{company.id}') == 'on',
+                        perm_sync=request.form.get(f'perm_sync_{company.id}') == 'on',
+                        perm_inventory=request.form.get(f'perm_inventory_{company.id}') == 'on',
+                        perm_invoices=request.form.get(f'perm_invoices_{company.id}') == 'on',
+                        perm_ppd=request.form.get(f'perm_ppd_{company.id}') == 'on',
+                        perm_taxes=request.form.get(f'perm_taxes_{company.id}') == 'on',
+                        perm_sales=request.form.get(f'perm_sales_{company.id}') == 'on',
+                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on'
+                    )
+                    db.session.add(access)
+
+            db.session.commit()
+            flash(f'Usuario "{user.username}" creado correctamente.', 'success')
+            return redirect(url_for('admin_users'))
+
+        # Set defaults for new user
+        form.is_active.data = True
+        return render_template('admin/user_form.html', form=form, companies=companies, action='crear')
+
+    @app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+    @admin_required
+    def admin_edit_user(user_id):
+        """Edit user"""
+        user = User.query.get_or_404(user_id)
+        form = UserForm(obj=user)
+        companies = Company.query.order_by(Company.name).all()
+
+        # Get current access for this user
+        user_access = {access.company_id: access for access in user.company_access}
+
+        if form.validate_on_submit():
+            # Check if username exists (excluding current user)
+            existing = User.query.filter_by(username=form.username.data).first()
+            if existing and existing.id != user_id:
+                flash('El nombre de usuario ya existe.', 'error')
+                return render_template('admin/user_form.html', form=form, user=user, companies=companies, user_access=user_access, action='editar')
+
+            # Check if email exists (if provided, excluding current user)
+            if form.email.data:
+                existing = User.query.filter_by(email=form.email.data).first()
+                if existing and existing.id != user_id:
+                    flash('El email ya está registrado.', 'error')
+                    return render_template('admin/user_form.html', form=form, user=user, companies=companies, user_access=user_access, action='editar')
+
+            # Update user
+            user.username = form.username.data
+            user.email = form.email.data or None
+            if form.password.data:
+                user.password_hash = generate_password_hash(form.password.data)
+            user.is_active = form.is_active.data
+            user.is_admin = form.is_admin.data
+
+            # Clear existing access
+            UserCompanyAccess.query.filter_by(user_id=user_id).delete()
+
+            # Process company access
+            for company in companies:
+                if request.form.get(f'company_{company.id}'):
+                    access = UserCompanyAccess(
+                        user_id=user.id,
+                        company_id=company.id,
+                        perm_dashboard=request.form.get(f'perm_dashboard_{company.id}') == 'on',
+                        perm_sync=request.form.get(f'perm_sync_{company.id}') == 'on',
+                        perm_inventory=request.form.get(f'perm_inventory_{company.id}') == 'on',
+                        perm_invoices=request.form.get(f'perm_invoices_{company.id}') == 'on',
+                        perm_ppd=request.form.get(f'perm_ppd_{company.id}') == 'on',
+                        perm_taxes=request.form.get(f'perm_taxes_{company.id}') == 'on',
+                        perm_sales=request.form.get(f'perm_sales_{company.id}') == 'on',
+                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on'
+                    )
+                    db.session.add(access)
+
+            db.session.commit()
+            flash(f'Usuario "{user.username}" actualizado correctamente.', 'success')
+            return redirect(url_for('admin_users'))
+
+        return render_template('admin/user_form.html', form=form, user=user, companies=companies, user_access=user_access, action='editar')
+
+    @app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+    @admin_required
+    def admin_delete_user(user_id):
+        """Delete user"""
+        user = User.query.get_or_404(user_id)
+
+        # Prevent deleting yourself
+        if user.id == current_user.id:
+            flash('No puedes eliminar tu propio usuario.', 'error')
+            return redirect(url_for('admin_users'))
+
+        username = user.username
+        db.session.delete(user)
+        db.session.commit()
+        flash(f'Usuario "{username}" eliminado.', 'success')
+        return redirect(url_for('admin_users'))
 
     @app.route('/')
     @login_required
@@ -1260,19 +1417,43 @@ def create_app(config_class=Config):
     @app.route('/companies/<int:company_id>/inventory')
     @login_required
     def inventory_list(company_id):
-        """Listado de productos e inventario"""
+        """Listado de productos e inventario con tabs"""
         company = Company.query.get_or_404(company_id)
+
+        # Obtener el tab activo desde URL params
+        active_tab = request.args.get('tab', 'products')
+
+        # Cargar productos
         products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
-        
-        # Calculate total inventory value (Cost Price * Stock)
         total_inventory_value = sum(p.current_stock * p.cost_price for p in products)
         total_items = sum(p.current_stock for p in products)
-        
-        return render_template('inventory/list.html', 
-                               company=company, 
+
+        # Cargar laboratorios
+        laboratories = Laboratory.query.filter_by(company_id=company_id).order_by(Laboratory.name).all()
+
+        # Cargar proveedores
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+
+        # Cargar ordenes de compra
+        purchase_orders = PurchaseOrder.query.filter_by(company_id=company_id).order_by(PurchaseOrder.created_at.desc()).all()
+
+        # Cargar servicios
+        services = Service.query.filter_by(company_id=company_id).order_by(Service.name).all()
+
+        # Cargar plantillas de factura
+        invoice_templates = InvoiceTemplate.query.filter_by(company_id=company_id).order_by(InvoiceTemplate.name).all()
+
+        return render_template('inventory/list.html',
+                               company=company,
                                products=products,
                                total_inventory_value=total_inventory_value,
-                               total_items=total_items)
+                               total_items=total_items,
+                               laboratories=laboratories,
+                               suppliers=suppliers,
+                               purchase_orders=purchase_orders,
+                               services=services,
+                               invoice_templates=invoice_templates,
+                               active_tab=active_tab)
 
     @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
     @login_required
@@ -1280,7 +1461,14 @@ def create_app(config_class=Config):
         """Agregar nuevo producto"""
         company = Company.query.get_or_404(company_id)
         form = ProductForm()
-        
+
+        # Cargar opciones de laboratorios y proveedores
+        laboratories = Laboratory.query.filter_by(company_id=company_id, active=True).order_by(Laboratory.name).all()
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+
+        form.laboratory_id.choices = [(0, '-- Sin laboratorio --')] + [(l.id, l.name) for l in laboratories]
+        form.preferred_supplier_id.choices = [(0, '-- Sin proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+
         if form.validate_on_submit():
             new_product = Product(
                 company_id=company_id,
@@ -1289,37 +1477,24 @@ def create_app(config_class=Config):
                 description=form.description.data,
                 cost_price=form.cost_price.data or 0,
                 selling_price=form.selling_price.data or 0,
-                current_stock=form.initial_stock.data or 0,
+                profit_margin=form.profit_margin.data or 0,
+                laboratory_id=form.laboratory_id.data if form.laboratory_id.data != 0 else None,
+                preferred_supplier_id=form.preferred_supplier_id.data if form.preferred_supplier_id.data != 0 else None,
+                current_stock=0,  # Stock starts at 0, only increases through purchase orders
                 min_stock_level=form.min_stock_level.data or 0,
                 # COFEPRIS Fields
-                sanitary_registration=form.sanitary_registration.data,
                 is_controlled=form.is_controlled.data,
                 active_ingredient=form.active_ingredient.data,
                 presentation=form.presentation.data,
                 therapeutic_group=form.therapeutic_group.data,
                 unit_measure=form.unit_measure.data
             )
-            
+
             db.session.add(new_product)
-            db.session.flush() # Get ID
-            
-            # Record initial stock as transaction if > 0
-            if new_product.current_stock > 0:
-                transaction = InventoryTransaction(
-                    product_id=new_product.id,
-                    type='IN',
-                    quantity=new_product.current_stock,
-                    previous_stock=0,
-                    new_stock=new_product.current_stock,
-                    reference='Initial Stock',
-                    notes='Inventario inicial al crear producto'
-                )
-                db.session.add(transaction)
-            
             db.session.commit()
             flash(f'Producto "{new_product.name}" agregado correctamente.', 'success')
             return redirect(url_for('inventory_list', company_id=company_id))
-            
+
         return render_template('inventory/add.html', company=company, form=form)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/edit', methods=['GET', 'POST'])
@@ -1328,19 +1503,41 @@ def create_app(config_class=Config):
         """Editar producto"""
         company = Company.query.get_or_404(company_id)
         product = Product.query.get_or_404(product_id)
-        
+
         if product.company_id != company_id:
             flash('Producto no encontrado.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id))
-            
+
         form = ProductForm(obj=product)
-        
+
+        # Cargar opciones de laboratorios y proveedores
+        laboratories = Laboratory.query.filter_by(company_id=company_id, active=True).order_by(Laboratory.name).all()
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+
+        form.laboratory_id.choices = [(0, '-- Sin laboratorio --')] + [(l.id, l.name) for l in laboratories]
+        form.preferred_supplier_id.choices = [(0, '-- Sin proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+
         if form.validate_on_submit():
-            form.populate_obj(product)
+            product.name = form.name.data
+            product.sku = form.sku.data
+            product.description = form.description.data
+            product.cost_price = form.cost_price.data or 0
+            product.selling_price = form.selling_price.data or 0
+            product.profit_margin = form.profit_margin.data or 0
+            product.laboratory_id = form.laboratory_id.data if form.laboratory_id.data != 0 else None
+            product.preferred_supplier_id = form.preferred_supplier_id.data if form.preferred_supplier_id.data != 0 else None
+            product.min_stock_level = form.min_stock_level.data or 0
+            product.sanitary_registration = form.sanitary_registration.data
+            product.is_controlled = form.is_controlled.data
+            product.active_ingredient = form.active_ingredient.data
+            product.presentation = form.presentation.data
+            product.therapeutic_group = form.therapeutic_group.data
+            product.unit_measure = form.unit_measure.data
+
             db.session.commit()
             flash(f'Producto "{product.name}" actualizado.', 'success')
             return redirect(url_for('inventory_list', company_id=company_id))
-            
+
         return render_template('inventory/edit.html', company=company, product=product, form=form)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/adjust', methods=['GET', 'POST'])
@@ -1474,7 +1671,456 @@ def create_app(config_class=Config):
             
         return render_template('inventory/receive_batch.html', company=company, product=product, form=form)
 
-    
+    # ==================== LABORATORY ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/add', methods=['GET', 'POST'])
+    @login_required
+    def add_laboratory(company_id):
+        """Agregar nuevo laboratorio"""
+        company = Company.query.get_or_404(company_id)
+        form = LaboratoryForm()
+
+        if form.validate_on_submit():
+            laboratory = Laboratory(
+                company_id=company_id,
+                name=form.name.data,
+                sanitary_registration=form.sanitary_registration.data
+            )
+            db.session.add(laboratory)
+            db.session.commit()
+            flash(f'Laboratorio "{laboratory.name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        return render_template('inventory/laboratory_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_laboratory(company_id, laboratory_id):
+        """Editar laboratorio"""
+        company = Company.query.get_or_404(company_id)
+        laboratory = Laboratory.query.get_or_404(laboratory_id)
+
+        if laboratory.company_id != company_id:
+            flash('Laboratorio no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        form = LaboratoryForm(obj=laboratory)
+
+        if form.validate_on_submit():
+            form.populate_obj(laboratory)
+            db.session.commit()
+            flash(f'Laboratorio "{laboratory.name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        return render_template('inventory/laboratory_form.html', company=company, form=form, laboratory=laboratory, action='editar')
+
+    # ==================== SERVICE ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/services/add', methods=['GET', 'POST'])
+    @login_required
+    def add_service(company_id):
+        """Agregar nuevo servicio"""
+        company = Company.query.get_or_404(company_id)
+        form = ServiceForm()
+
+        if form.validate_on_submit():
+            service = Service(
+                company_id=company_id,
+                name=form.name.data,
+                description=form.description.data,
+                price=form.price.data or 0,
+                sat_key=form.sat_key.data or '01010101',
+                sat_unit_key=form.sat_unit_key.data or 'E48'
+            )
+            db.session.add(service)
+            db.session.commit()
+            flash(f'Servicio "{service.name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='services'))
+
+        return render_template('inventory/service_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/services/<int:service_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_service(company_id, service_id):
+        """Editar servicio"""
+        company = Company.query.get_or_404(company_id)
+        service = Service.query.get_or_404(service_id)
+
+        if service.company_id != company_id:
+            flash('Servicio no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='services'))
+
+        form = ServiceForm(obj=service)
+
+        if form.validate_on_submit():
+            form.populate_obj(service)
+            db.session.commit()
+            flash(f'Servicio "{service.name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='services'))
+
+        return render_template('inventory/service_form.html', company=company, form=form, service=service, action='editar')
+
+    # ==================== SUPPLIER MANUAL ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/suppliers/add', methods=['GET', 'POST'])
+    @login_required
+    def add_supplier_manual(company_id):
+        """Agregar proveedor manualmente"""
+        company = Company.query.get_or_404(company_id)
+        form = SupplierManualForm()
+
+        if form.validate_on_submit():
+            # Verificar si ya existe
+            existing = Supplier.query.filter_by(company_id=company_id, rfc=form.rfc.data.upper()).first()
+            if existing:
+                flash(f'Ya existe un proveedor con RFC {form.rfc.data.upper()}.', 'warning')
+                return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+            supplier = Supplier(
+                company_id=company_id,
+                rfc=form.rfc.data.upper(),
+                business_name=form.business_name.data,
+                commercial_name=form.commercial_name.data,
+                contact_name=form.contact_name.data,
+                email=form.email.data,
+                phone=form.phone.data,
+                address=form.address.data,
+                payment_terms=form.payment_terms.data,
+                notes=form.notes.data,
+                is_medication_supplier=form.is_medication_supplier.data,
+                sanitary_registration=form.sanitary_registration.data
+            )
+            db.session.add(supplier)
+            db.session.commit()
+            flash(f'Proveedor "{supplier.business_name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+        return render_template('inventory/supplier_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/suppliers/<int:supplier_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_supplier_inventory(company_id, supplier_id):
+        """Editar proveedor desde inventario"""
+        company = Company.query.get_or_404(company_id)
+        supplier = Supplier.query.get_or_404(supplier_id)
+
+        if supplier.company_id != company_id:
+            flash('Proveedor no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+        form = SupplierManualForm(obj=supplier)
+
+        if form.validate_on_submit():
+            supplier.business_name = form.business_name.data
+            supplier.commercial_name = form.commercial_name.data
+            supplier.contact_name = form.contact_name.data
+            supplier.email = form.email.data
+            supplier.phone = form.phone.data
+            supplier.address = form.address.data
+            supplier.payment_terms = form.payment_terms.data
+            supplier.notes = form.notes.data
+            supplier.is_medication_supplier = form.is_medication_supplier.data
+            supplier.sanitary_registration = form.sanitary_registration.data
+            db.session.commit()
+            flash(f'Proveedor "{supplier.business_name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+        return render_template('inventory/supplier_form.html', company=company, form=form, supplier=supplier, action='editar')
+
+    # ==================== PURCHASE ORDER ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/orders/add', methods=['GET', 'POST'])
+    @login_required
+    def add_purchase_order(company_id):
+        """Crear nueva orden de compra"""
+        company = Company.query.get_or_404(company_id)
+        form = PurchaseOrderForm()
+
+        # Cargar proveedores para el select
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        form.supplier_id.choices = [(0, '-- Seleccionar Proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+
+        if form.validate_on_submit():
+            order = PurchaseOrder(
+                company_id=company_id,
+                supplier_id=form.supplier_id.data,
+                status='DRAFT',
+                notes=form.notes.data
+            )
+            db.session.add(order)
+            db.session.commit()
+            flash('Orden de compra creada. Agregue los productos.', 'success')
+            return redirect(url_for('edit_purchase_order', company_id=company_id, order_id=order.id))
+
+        return render_template('inventory/purchase_order_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_purchase_order(company_id, order_id):
+        """Editar orden de compra (agregar/quitar productos)"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        if order.status not in ['DRAFT', 'SENT']:
+            flash('Esta orden no se puede editar.', 'warning')
+            return redirect(url_for('view_purchase_order', company_id=company_id, order_id=order_id))
+
+        # Cargar productos disponibles
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+
+            if action == 'add_product':
+                product_id = int(request.form.get('product_id'))
+                quantity = int(request.form.get('quantity', 1))
+                unit_cost = float(request.form.get('unit_cost', 0))
+
+                detail = PurchaseOrderDetail(
+                    order_id=order.id,
+                    product_id=product_id,
+                    quantity_requested=quantity,
+                    unit_cost=unit_cost
+                )
+                db.session.add(detail)
+
+            elif action == 'remove_product':
+                detail_id = int(request.form.get('detail_id'))
+                detail = PurchaseOrderDetail.query.get(detail_id)
+                if detail and detail.order_id == order.id:
+                    db.session.delete(detail)
+
+            elif action == 'send_order':
+                order.status = 'SENT'
+                order.sent_at = now_mexico()
+                flash('Orden enviada correctamente.', 'success')
+
+            # Recalcular total estimado
+            order.estimated_total = sum(d.quantity_requested * d.unit_cost for d in order.details)
+            db.session.commit()
+
+            if action == 'send_order':
+                return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        return render_template('inventory/purchase_order_edit.html', company=company, order=order, products=products)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/view')
+    @login_required
+    def view_purchase_order(company_id, order_id):
+        """Ver detalles de orden de compra"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        return render_template('inventory/purchase_order_view.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/review', methods=['GET', 'POST'])
+    @login_required
+    def review_purchase_order(company_id, order_id):
+        """Revisar/recibir orden de compra (Fase 2)"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        if order.status not in ['SENT', 'IN_REVIEW']:
+            flash('Esta orden no puede ser revisada en este momento.', 'warning')
+            return redirect(url_for('view_purchase_order', company_id=company_id, order_id=order_id))
+
+        if request.method == 'POST':
+            # Actualizar cantidades recibidas y datos de lote
+            for detail in order.details:
+                received = request.form.get(f'received_{detail.id}')
+                batch_number = request.form.get(f'batch_{detail.id}')
+                expiration_str = request.form.get(f'expiration_{detail.id}')
+
+                if received is not None:
+                    detail.quantity_received = int(received)
+                detail.batch_number = batch_number if batch_number else None
+                if expiration_str:
+                    detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                else:
+                    detail.expiration_date = None
+
+            order.status = 'IN_REVIEW'
+            order.received_at = now_mexico()
+            db.session.commit()
+            flash('Datos de recepcion actualizados.', 'success')
+            return redirect(url_for('complete_purchase_order', company_id=company_id, order_id=order_id))
+
+        return render_template('inventory/purchase_order_review.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/complete', methods=['GET', 'POST'])
+    @login_required
+    def complete_purchase_order(company_id, order_id):
+        """Completar orden de compra (Fase 3) - Ajustar inventario"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        if order.status != 'IN_REVIEW':
+            flash('Esta orden no puede ser completada en este momento.', 'warning')
+            return redirect(url_for('view_purchase_order', company_id=company_id, order_id=order_id))
+
+        if request.method == 'POST':
+            # Actualizar inventario con las cantidades recibidas
+            for detail in order.details:
+                if detail.quantity_received > 0:
+                    product = detail.product
+                    previous_stock = product.current_stock
+                    batch_id = None
+
+                    # Crear lote si hay informacion de lote
+                    if detail.batch_number:
+                        batch = ProductBatch(
+                            product_id=product.id,
+                            batch_number=detail.batch_number,
+                            expiration_date=detail.expiration_date,
+                            initial_stock=detail.quantity_received,
+                            current_stock=detail.quantity_received,
+                            acquisition_date=now_mexico().date()
+                        )
+                        db.session.add(batch)
+                        db.session.flush()  # Get batch.id
+                        batch_id = batch.id
+
+                    # Crear transaccion de inventario
+                    transaction = InventoryTransaction(
+                        product_id=product.id,
+                        batch_id=batch_id,
+                        type='IN',
+                        quantity=detail.quantity_received,
+                        previous_stock=previous_stock,
+                        new_stock=previous_stock + detail.quantity_received,
+                        reference=f'Orden Compra #{order.id}',
+                        notes=f'Recepcion de orden de compra' + (f' - Lote: {detail.batch_number}' if detail.batch_number else '')
+                    )
+                    db.session.add(transaction)
+
+                    # Actualizar stock del producto
+                    product.current_stock += detail.quantity_received
+
+            order.status = 'COMPLETED'
+            order.completed_at = now_mexico()
+            db.session.commit()
+            flash('Orden completada. El inventario ha sido actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        return render_template('inventory/purchase_order_complete.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/delete', methods=['POST'])
+    @login_required
+    def delete_purchase_order(company_id, order_id):
+        """Eliminar orden de compra"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        # Eliminar los detalles de la orden primero
+        PurchaseOrderDetail.query.filter_by(purchase_order_id=order_id).delete()
+
+        # Eliminar la orden
+        db.session.delete(order)
+        db.session.commit()
+
+        flash(f'Orden #{order_id} eliminada correctamente.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+    # ==================== INVOICE TEMPLATE ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/templates/add', methods=['GET', 'POST'])
+    @login_required
+    def add_invoice_template(company_id):
+        """Crear nueva plantilla de factura"""
+        company = Company.query.get_or_404(company_id)
+        form = InvoiceTemplateForm()
+
+        if form.validate_on_submit():
+            template = InvoiceTemplate(
+                company_id=company_id,
+                name=form.name.data,
+                description=form.description.data
+            )
+            db.session.add(template)
+            db.session.commit()
+            flash('Plantilla creada. Agregue los items.', 'success')
+            return redirect(url_for('edit_invoice_template', company_id=company_id, template_id=template.id))
+
+        return render_template('inventory/template_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/templates/<int:template_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_invoice_template(company_id, template_id):
+        """Editar plantilla de factura (agregar/quitar items)"""
+        company = Company.query.get_or_404(company_id)
+        template = InvoiceTemplate.query.get_or_404(template_id)
+
+        if template.company_id != company_id:
+            flash('Plantilla no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='templates'))
+
+        # Cargar productos y servicios
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        services = Service.query.filter_by(company_id=company_id, active=True).order_by(Service.name).all()
+
+        form = InvoiceTemplateForm(obj=template)
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+
+            if action == 'update_info':
+                template.name = form.name.data
+                template.description = form.description.data
+
+            elif action == 'add_product':
+                product_id = int(request.form.get('product_id'))
+                quantity = float(request.form.get('quantity', 1))
+                item = InvoiceTemplateItem(
+                    template_id=template.id,
+                    item_type='PRODUCT',
+                    product_id=product_id,
+                    quantity=quantity
+                )
+                db.session.add(item)
+
+            elif action == 'add_service':
+                service_id = int(request.form.get('service_id'))
+                quantity = float(request.form.get('quantity', 1))
+                item = InvoiceTemplateItem(
+                    template_id=template.id,
+                    item_type='SERVICE',
+                    service_id=service_id,
+                    quantity=quantity
+                )
+                db.session.add(item)
+
+            elif action == 'remove_item':
+                item_id = int(request.form.get('item_id'))
+                item = InvoiceTemplateItem.query.get(item_id)
+                if item and item.template_id == template.id:
+                    db.session.delete(item)
+
+            db.session.commit()
+            flash('Plantilla actualizada.', 'success')
+
+        return render_template('inventory/template_edit.html', company=company, template=template,
+                             products=products, services=services, form=form)
+
     # ==================== AX MANAGMENT ROUTES ====================
 
     @app.route('/companies/<int:company_id>/taxes')
@@ -2114,11 +2760,41 @@ def create_app(config_class=Config):
                 'sku': product.sku or '',
                 'name': product.name,
                 'description': product.description or '',
-                'selling_price': float(product.selling_price) if product.selling_price else 0.0,
+                'selling_price': float(product.calculated_selling_price),
                 'unit_measure': product.unit_measure or 'Servicio'
             })
-        
+
         return jsonify(results)
+
+    # ==================== TEMPLATES API ROUTES ====================
+
+    @app.route('/api/companies/<int:company_id>/templates/<int:template_id>/items')
+    @login_required
+    def api_template_items(company_id, template_id):
+        """
+        Get items from an invoice template for loading into factura form.
+        """
+        template = InvoiceTemplate.query.filter_by(
+            id=template_id,
+            company_id=company_id,
+            active=True
+        ).first()
+
+        if not template:
+            return jsonify({'error': 'Plantilla no encontrada'}), 404
+
+        items = []
+        for item in template.items:
+            items.append({
+                'type': item.item_type,
+                'name': item.item_name,
+                'quantity': item.quantity,
+                'price': item.item_price,
+                'product_id': item.product_id,
+                'service_id': item.service_id
+            })
+
+        return jsonify(items)
 
     # ==================== CATÁLOGOS SAT API ====================
     
@@ -2387,152 +3063,7 @@ def create_app(config_class=Config):
             company=company,
             form=form
         )
-    
-    # ==================== PRODUCTOS/SERVICIOS ROUTES ====================
-    
-    @app.route('/companies/<int:company_id>/facturacion/productos')
-    @login_required
-    def facturacion_productos(company_id):
-        """Lista de productos/servicios para facturación"""
-        company = Company.query.get_or_404(company_id)
-        
-        # Obtener parámetro de búsqueda
-        search_query = request.args.get('q', '').strip()
-        
-        # Query base
-        query = Product.query.filter_by(company_id=company_id)
-        
-        # Aplicar búsqueda si existe
-        if search_query:
-            query = query.filter(
-                db.or_(
-                    Product.sku.ilike(f'%{search_query}%'),
-                    Product.name.ilike(f'%{search_query}%'),
-                    Product.description.ilike(f'%{search_query}%')
-                )
-            )
-        
-        # Ordenar por nombre
-        products = query.order_by(Product.active.desc(), Product.name).all()
-        
-        return render_template('facturacion/productos_list.html',
-            company=company,
-            products=products,
-            search_query=search_query
-        )
-    
-    @app.route('/companies/<int:company_id>/facturacion/productos/nuevo', methods=['GET', 'POST'])
-    @login_required
-    def facturacion_producto_nuevo(company_id):
-        """Crear nuevo producto/servicio"""
-        company = Company.query.get_or_404(company_id)
-        form = ProductForm()
-        
-        if request.method == 'POST' and form.validate_on_submit():
-            try:
-                # Crear nuevo producto
-                product = Product(
-                    company_id=company_id,
-                    sku=form.sku.data,
-                    name=form.name.data,
-                    description=form.description.data,
-                    cost_price=form.cost_price.data or 0.0,
-                    selling_price=form.selling_price.data or 0.0,
-                    current_stock=form.initial_stock.data or 0,
-                    min_stock_level=form.min_stock_level.data or 0,
-                    unit_measure=form.unit_measure.data,
-                    sanitary_registration=form.sanitary_registration.data,
-                    is_controlled=form.is_controlled.data,
-                    active_ingredient=form.active_ingredient.data,
-                    presentation=form.presentation.data,
-                    therapeutic_group=form.therapeutic_group.data,
-                    active=True
-                )
-                
-                db.session.add(product)
-                db.session.commit()
-                
-                flash(f'Producto "{product.name}" creado exitosamente', 'success')
-                return redirect(url_for('facturacion_productos', company_id=company_id))
-                
-            except Exception as e:
-                db.session.rollback()
-                logger.error(f'Error creando producto: {str(e)}')
-                flash('Error al crear producto', 'error')
-        
-        return render_template('facturacion/producto_form.html',
-            company=company,
-            form=form,
-            title='Nuevo Producto/Servicio',
-            action='crear'
-        )
-    
-    @app.route('/companies/<int:company_id>/facturacion/productos/<int:product_id>/editar', methods=['GET', 'POST'])
-    @login_required
-    def facturacion_producto_editar(company_id, product_id):
-        """Editar producto/servicio existente"""
-        company = Company.query.get_or_404(company_id)
-        product = Product.query.get_or_404(product_id)
-        
-        # Verificar que el producto pertenece a la empresa
-        if product.company_id != company_id:
-            flash('Producto no encontrado', 'error')
-            return redirect(url_for('facturacion_productos', company_id=company_id))
-        
-        form = ProductForm(obj=product)
-        
-        if request.method == 'POST' and form.validate_on_submit():
-            try:
-                # Actualizar producto
-                form.populate_obj(product)
-                product.current_stock = form.initial_stock.data or product.current_stock
-                
-                db.session.commit()
-                
-                flash(f'Producto "{product.name}" actualizado exitosamente', 'success')
-                return redirect(url_for('facturacion_productos', company_id=company_id))
-                
-            except Exception as e:
-                db.session.rollback()
-                logger.error(f'Error actualizando producto: {str(e)}')
-                flash('Error al actualizar producto', 'error')
-        
-        # Pre-poblar campo de stock inicial con el stock actual para edición
-        if request.method == 'GET':
-            form.initial_stock.data = product.current_stock
-        
-        return render_template('facturacion/producto_form.html',
-            company=company,
-            form=form,
-            product=product,
-            title=f'Editar: {product.name}',
-            action='editar'
-        )
-    
-    @app.route('/companies/<int:company_id>/facturacion/productos/<int:product_id>/toggle', methods=['POST'])
-    @login_required
-    def facturacion_producto_toggle(company_id, product_id):
-        """Activar/Desactivar producto (soft delete)"""
-        product = Product.query.get_or_404(product_id)
-        
-        # Verificar que el producto pertenece a la empresa
-        if product.company_id != company_id:
-            flash('Producto no encontrado', 'error')
-            return redirect(url_for('facturacion_productos', company_id=company_id))
-        
-        try:
-            product.active = not product.active
-            db.session.commit()
-            
-            status = 'activado' if product.active else 'desactivado'
-            flash(f'Producto "{product.name}" {status}', 'success')
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f'Error al cambiar estado de producto: {str(e)}')
-            flash('Error al cambiar estado del producto', 'error')
-        
-        return redirect(url_for('facturacion_productos', company_id=company_id))
-    
+
     # ==================== GENERADOR DE CFDI ROUTES ====================
     
     @app.route('/companies/<int:company_id>/facturacion/crear', methods=['GET', 'POST'])
@@ -2558,13 +3089,13 @@ def create_app(config_class=Config):
         # GET: Obtener serie y folio actual
         # Si el usuario especifica una serie en la URL, usarla; sino, usar "A" por defecto
         serie_param = request.args.get('serie', 'A')
-        
+
         # Buscar el contador para esta serie
         folio_counter = InvoiceFolioCounter.query.filter_by(
             company_id=company_id,
             serie=serie_param
         ).first()
-        
+
         if not folio_counter:
             # Crear contador nuevo para esta serie
             folio_counter = InvoiceFolioCounter(
@@ -2574,22 +3105,52 @@ def create_app(config_class=Config):
             )
             db.session.add(folio_counter)
             db.session.commit()
-        
+
         # El siguiente folio es el actual + 1
         next_folio = folio_counter.current_folio + 1
-        
+
         # Pre-poblar el formulario con serie y folio
         form_comprobante.serie.data = serie_param
         form_comprobante.folio.data = str(next_folio).zfill(7)  # Formato: 0000001
-        
+
         # Pre-llenar lugar de expedición con CP de la empresa
         if company.postal_code:
             form_comprobante.lugar_expedicion.data = company.postal_code
-        
+
+        # Cargar plantilla si se proporciona template_id
+        template_items = []
+        selected_template = None
+        template_id = request.args.get('template_id')
+        if template_id:
+            selected_template = InvoiceTemplate.query.filter_by(
+                id=template_id,
+                company_id=company_id,
+                active=True
+            ).first()
+            if selected_template:
+                for item in selected_template.items:
+                    template_items.append({
+                        'type': item.item_type,
+                        'name': item.item_name,
+                        'quantity': item.quantity,
+                        'price': item.item_price,
+                        'product_id': item.product_id,
+                        'service_id': item.service_id
+                    })
+
+        # Cargar lista de plantillas disponibles
+        available_templates = InvoiceTemplate.query.filter_by(
+            company_id=company_id,
+            active=True
+        ).order_by(InvoiceTemplate.name).all()
+
         return render_template('facturacion/crear_factura.html',
             company=company,
             form_comprobante=form_comprobante,
-            form_receptor=form_receptor
+            form_receptor=form_receptor,
+            available_templates=available_templates,
+            selected_template=selected_template,
+            template_items=template_items
         )
     
     

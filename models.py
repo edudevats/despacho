@@ -6,21 +6,89 @@ from extensions import db
 class User(UserMixin, db.Model):
     """User model for authentication and authorization."""
     __tablename__ = 'user'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(256))  # Larger for modern hash algorithms
-    
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
-    
+
     # Status
     is_active = db.Column(db.Boolean, default=True)
-    
+    is_admin = db.Column(db.Boolean, default=False)  # Admin can manage users and access all
+
+    # Relationships
+    company_access = db.relationship('UserCompanyAccess', back_populates='user', cascade='all, delete-orphan')
+
     def __repr__(self):
         return f'<User {self.username}>'
+
+    def can_access_company(self, company_id):
+        """Check if user can access a specific company"""
+        if self.is_admin:
+            return True
+        return any(access.company_id == company_id for access in self.company_access)
+
+    def get_company_permissions(self, company_id):
+        """Get permissions for a specific company"""
+        if self.is_admin:
+            # Admin has all permissions
+            return {
+                'dashboard': True, 'sync': True, 'inventory': True,
+                'invoices': True, 'ppd': True, 'taxes': True,
+                'sales': True, 'facturacion': True
+            }
+        for access in self.company_access:
+            if access.company_id == company_id:
+                return {
+                    'dashboard': access.perm_dashboard,
+                    'sync': access.perm_sync,
+                    'inventory': access.perm_inventory,
+                    'invoices': access.perm_invoices,
+                    'ppd': access.perm_ppd,
+                    'taxes': access.perm_taxes,
+                    'sales': access.perm_sales,
+                    'facturacion': access.perm_facturacion
+                }
+        return {}
+
+    def get_accessible_companies(self):
+        """Get list of companies user can access"""
+        if self.is_admin:
+            return Company.query.all()
+        return [access.company for access in self.company_access]
+
+
+class UserCompanyAccess(db.Model):
+    """Controls which companies a user can access and what permissions they have"""
+    __tablename__ = 'user_company_access'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+
+    # Menu permissions
+    perm_dashboard = db.Column(db.Boolean, default=True)
+    perm_sync = db.Column(db.Boolean, default=False)
+    perm_inventory = db.Column(db.Boolean, default=False)
+    perm_invoices = db.Column(db.Boolean, default=False)
+    perm_ppd = db.Column(db.Boolean, default=False)
+    perm_taxes = db.Column(db.Boolean, default=False)
+    perm_sales = db.Column(db.Boolean, default=False)
+    perm_facturacion = db.Column(db.Boolean, default=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = db.relationship('User', back_populates='company_access')
+    company = db.relationship('Company', backref=db.backref('user_access', lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'company_id', name='unique_user_company'),
+    )
 
 class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -57,45 +125,51 @@ class Category(db.Model):
 
 class Supplier(db.Model):
     """
-    Proveedores (emisores de facturas recibidas)
-    Se genera automáticamente desde las facturas
+    Proveedores (emisores de facturas recibidas y proveedores de medicamentos)
+    Se genera automáticamente desde las facturas o manualmente
     """
     __tablename__ = 'supplier'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     rfc = db.Column(db.String(13), nullable=False, index=True)
     business_name = db.Column(db.String(256))  # Razón social
     commercial_name = db.Column(db.String(256))  # Nombre comercial (opcional)
-    
+
     # Datos de contacto (opcional, para agregar manualmente)
     email = db.Column(db.String(120))
     phone = db.Column(db.String(20))
     address = db.Column(db.Text)
-    
+
+    # Campos adicionales para proveedores de medicamentos
+    contact_name = db.Column(db.String(150), nullable=True)  # Nombre de contacto
+    payment_terms = db.Column(db.String(200), nullable=True)  # Condiciones de pago (ej: "30 días", "Contado")
+    is_medication_supplier = db.Column(db.Boolean, default=False)  # Es proveedor de medicamentos
+    sanitary_registration = db.Column(db.String(100), nullable=True)  # Registro Sanitario del proveedor
+
     # Estadísticas auto-calculadas
     total_invoiced = db.Column(db.Float, default=0)  # Total facturado
     invoice_count = db.Column(db.Integer, default=0)  # Cantidad de facturas
     last_invoice_date = db.Column(db.DateTime)
     first_invoice_date = db.Column(db.DateTime)
-    
+
     # Notas y categorización
     notes = db.Column(db.Text)
     tags = db.Column(db.String(256))  # Tags separados por coma
     is_favorite = db.Column(db.Boolean, default=False)
-    
+
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     company = db.relationship('Company', backref=db.backref('suppliers', lazy=True))
-    invoices = db.relationship('Invoice', backref='supplier', lazy=True, 
+    invoices = db.relationship('Invoice', backref='supplier', lazy=True,
                               foreign_keys='Invoice.supplier_id')
-    
+
     __table_args__ = (
         db.UniqueConstraint('company_id', 'rfc', name='unique_supplier_per_company'),
     )
-    
+
     def __repr__(self):
         return f'<Supplier {self.business_name} - {self.rfc}>'
 
@@ -183,51 +257,91 @@ class Movement(db.Model):
 class TaxPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    
+
     period_month = db.Column(db.Integer, nullable=False)
     period_year = db.Column(db.Integer, nullable=False)
-    
-    tax_type = db.Column(db.String(20), nullable=False) # 'IVA', 'ISR', 'RETENCIONES'
+
+    tax_type = db.Column(db.String(20), nullable=False)  # 'IVA', 'ISR', 'RETENCIONES'
     amount = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    status = db.Column(db.String(20), default='PAID') # PAID, PENDING
+
+    status = db.Column(db.String(20), default='PAID')  # PAID, PENDING
     notes = db.Column(db.Text)
-    
+
     company = db.relationship('Company', backref=db.backref('tax_payments', lazy=True))
+
+
+class Laboratory(db.Model):
+    """
+    Laboratorios (fabricantes de medicamentos)
+    """
+    __tablename__ = 'laboratory'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    sanitary_registration = db.Column(db.String(100), nullable=True)  # Registro Sanitario del laboratorio
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    company = db.relationship('Company', backref=db.backref('laboratories', lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint('company_id', 'name', name='unique_laboratory_per_company'),
+    )
+
+    def __repr__(self):
+        return f'<Laboratory {self.name}>'
+
 
 class Product(db.Model):
     """
-    Producto para inventario
+    Producto/Medicamento para inventario
     """
     __tablename__ = 'product'
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    
-    sku = db.Column(db.String(50), nullable=True) # Código interno/barras
+
+    sku = db.Column(db.String(50), nullable=True)  # Código interno/barras
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    
-    cost_price = db.Column(db.Float, default=0.0) # Costo real (para valuación inventario)
-    selling_price = db.Column(db.Float, default=0.0) # Precio venta al público
-    
+
+    cost_price = db.Column(db.Float, default=0.0)  # Costo real (para valuación inventario)
+    selling_price = db.Column(db.Float, default=0.0)  # Precio venta manual (override)
+    profit_margin = db.Column(db.Float, default=0.0)  # Porcentaje de ganancia individual
+
     current_stock = db.Column(db.Integer, default=0)
     min_stock_level = db.Column(db.Integer, default=0)
-    
+
+    # Relaciones con laboratorio y proveedor
+    laboratory_id = db.Column(db.Integer, db.ForeignKey('laboratory.id'), nullable=True)
+    preferred_supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=True)
+
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Campos específicos para COFEPRIS
-    sanitary_registration = db.Column(db.String(100), nullable=True) # Registro Sanitario
-    is_controlled = db.Column(db.Boolean, default=False) # Si es medicamento controlado (Fracción I, II, III)
-    active_ingredient = db.Column(db.String(200), nullable=True) # Principio activo
-    presentation = db.Column(db.String(100), nullable=True) # Presentación (e.g., Tabletas, Jarabe)
-    therapeutic_group = db.Column(db.String(100), nullable=True) # Grupo Terapéutico
-    unit_measure = db.Column(db.String(20), default='PZA') # PZA, CAJA, etc.
-    
+    sanitary_registration = db.Column(db.String(100), nullable=True)  # Registro Sanitario
+    is_controlled = db.Column(db.Boolean, default=False)  # Si es medicamento controlado (Fracción I, II, III)
+    active_ingredient = db.Column(db.String(200), nullable=True)  # Principio activo
+    presentation = db.Column(db.String(100), nullable=True)  # Presentación (e.g., Tabletas, Jarabe)
+    therapeutic_group = db.Column(db.String(100), nullable=True)  # Grupo Terapéutico
+    unit_measure = db.Column(db.String(20), default='PZA')  # PZA, CAJA, etc.
+
     company = db.relationship('Company', backref=db.backref('products', lazy=True))
-    
+    laboratory = db.relationship('Laboratory', backref=db.backref('products', lazy=True))
+    preferred_supplier = db.relationship('Supplier', backref=db.backref('preferred_products', lazy=True))
+
+    @property
+    def calculated_selling_price(self):
+        """Calcula el precio de venta basado en costo y margen de ganancia"""
+        if self.selling_price and self.selling_price > 0:
+            return self.selling_price  # Override manual
+        if self.cost_price and self.profit_margin:
+            return self.cost_price * (1 + self.profit_margin / 100)
+        return self.cost_price or 0.0
+
     def __repr__(self):
         return f'<Product {self.name}>'
 
@@ -356,6 +470,148 @@ class Customer(db.Model):
     
     def __repr__(self):
         return f'<Customer {self.nombre} - {self.rfc}>'
+
+
+class Service(db.Model):
+    """
+    Servicios médicos para facturación
+    """
+    __tablename__ = 'service'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    price = db.Column(db.Float, default=0.0)
+    sat_key = db.Column(db.String(10), default='01010101')  # Clave de producto/servicio SAT
+    sat_unit_key = db.Column(db.String(10), default='E48')  # Clave de unidad SAT (E48 = Unidad de servicio)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    company = db.relationship('Company', backref=db.backref('services', lazy=True))
+
+    def __repr__(self):
+        return f'<Service {self.name}>'
+
+
+class PurchaseOrder(db.Model):
+    """
+    Órdenes de compra (cabecera)
+    """
+    __tablename__ = 'purchase_order'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=False)
+
+    # Estados: DRAFT (borrador), SENT (enviada), IN_REVIEW (recepción), COMPLETED (cerrada)
+    status = db.Column(db.String(20), default='DRAFT')
+    estimated_total = db.Column(db.Float, default=0.0)
+    notes = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)  # Cuando se envió
+    received_at = db.Column(db.DateTime, nullable=True)  # Cuando se recibió físicamente
+    completed_at = db.Column(db.DateTime, nullable=True)  # Cuando se cerró
+
+    company = db.relationship('Company', backref=db.backref('purchase_orders', lazy=True))
+    supplier = db.relationship('Supplier', backref=db.backref('purchase_orders', lazy=True))
+
+    def __repr__(self):
+        return f'<PurchaseOrder #{self.id} - {self.status}>'
+
+
+class PurchaseOrderDetail(db.Model):
+    """
+    Detalles de órdenes de compra (renglones)
+    """
+    __tablename__ = 'purchase_order_detail'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+
+    quantity_requested = db.Column(db.Integer, default=0)  # Cantidad solicitada (Fase 1)
+    quantity_received = db.Column(db.Integer, default=0)  # Cantidad recibida (Fase 2)
+    unit_cost = db.Column(db.Float, default=0.0)  # Costo unitario (solo referencia)
+
+    # Batch/Lot information for COFEPRIS compliance
+    batch_number = db.Column(db.String(50), nullable=True)  # Numero de lote
+    expiration_date = db.Column(db.Date, nullable=True)  # Fecha de caducidad
+
+    order = db.relationship('PurchaseOrder', backref=db.backref('details', lazy=True, cascade='all, delete-orphan'))
+    product = db.relationship('Product', backref=db.backref('order_details', lazy=True))
+
+    @property
+    def difference(self):
+        """Diferencia entre solicitado y recibido"""
+        return self.quantity_received - self.quantity_requested
+
+    def __repr__(self):
+        return f'<PurchaseOrderDetail Order:{self.order_id} Product:{self.product_id}>'
+
+
+class InvoiceTemplate(db.Model):
+    """
+    Plantillas de factura para procedimientos médicos
+    """
+    __tablename__ = 'invoice_template'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    company = db.relationship('Company', backref=db.backref('invoice_templates', lazy=True))
+
+    def __repr__(self):
+        return f'<InvoiceTemplate {self.name}>'
+
+
+class InvoiceTemplateItem(db.Model):
+    """
+    Items de plantillas de factura (productos o servicios)
+    """
+    __tablename__ = 'invoice_template_item'
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('invoice_template.id'), nullable=False)
+
+    # Tipo de item: 'PRODUCT' o 'SERVICE'
+    item_type = db.Column(db.String(20), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('service.id'), nullable=True)
+    quantity = db.Column(db.Float, default=1.0)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    template = db.relationship('InvoiceTemplate', backref=db.backref('items', lazy=True, cascade='all, delete-orphan'))
+    product = db.relationship('Product', backref=db.backref('template_items', lazy=True))
+    service = db.relationship('Service', backref=db.backref('template_items', lazy=True))
+
+    @property
+    def item_name(self):
+        """Nombre del item (producto o servicio)"""
+        if self.item_type == 'PRODUCT' and self.product:
+            return self.product.name
+        elif self.item_type == 'SERVICE' and self.service:
+            return self.service.name
+        return 'Sin nombre'
+
+    @property
+    def item_price(self):
+        """Precio del item (producto calculado o servicio)"""
+        if self.item_type == 'PRODUCT' and self.product:
+            return self.product.calculated_selling_price
+        elif self.item_type == 'SERVICE' and self.service:
+            return self.service.price
+        return 0.0
+
+    def __repr__(self):
+        return f'<InvoiceTemplateItem {self.item_type} Template:{self.template_id}>'
 
 
 # Late import to avoid circular dependency if needed, or put at top if safe.

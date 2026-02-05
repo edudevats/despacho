@@ -221,7 +221,7 @@ class SATService:
         Helper to poll status and download packages for a given request_id.
         """
         results = []
-        max_retries = 30
+        max_retries = 360  # 360 retries * 10 seconds = 60 minutes timeout
         
         print(f"Polling status for Request ID: {request_id}")
         

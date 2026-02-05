@@ -210,6 +210,33 @@
                     <h5 class="mb-0"><i class="fas fa-shopping-cart"></i> Paso 3: Conceptos/Productos</h5>
                 </div>
                 <div class="card-body">
+                    <!-- Template Selector -->
+                    {% if available_templates %}
+                    <div class="alert alert-info mb-3">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <label class="form-label mb-1"><i class="fas fa-file-medical"></i> Cargar desde Plantilla</label>
+                                <select class="form-select" id="templateSelector">
+                                    <option value="">-- Seleccionar Plantilla --</option>
+                                    {% for template in available_templates %}
+                                    <option value="{{ template.id }}" {% if selected_template and selected_template.id == template.id %}selected{% endif %}>
+                                        {{ template.name }}{% if template.description %} - {{ template.description }}{% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-primary me-2" onclick="cargarPlantilla()">
+                                    <i class="fas fa-download"></i> Cargar Plantilla
+                                </button>
+                                <a href="{{ url_for('inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-secondary" target="_blank">
+                                    <i class="fas fa-cog"></i> Gestionar Plantillas
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <button type="button" class="btn btn-primary mb-3" onclick="agregarConcepto()">
                         <i class="fas fa-plus"></i> Agregar Producto/Servicio
                     </button>
@@ -535,6 +562,100 @@
     let currentStep = 1;
     let editingIndex = -1; // Track if we're editing an existing concept
 
+    // Pre-load template items if provided by server
+    {% if template_items %}
+    const preloadedTemplateItems = {{ template_items|tojson }};
+    {% else %}
+    const preloadedTemplateItems = [];
+    {% endif %}
+
+    // Function to load template items
+    function cargarPlantilla() {
+        const selector = document.getElementById('templateSelector');
+        if (!selector) return;
+
+        const templateId = selector.value;
+        if (!templateId) {
+            alert('Seleccione una plantilla primero');
+            return;
+        }
+
+        // Confirmar si ya hay conceptos
+        if (conceptos.length > 0) {
+            if (!confirm('Ya hay conceptos agregados. ¿Desea reemplazarlos con los items de la plantilla?')) {
+                return;
+            }
+        }
+
+        // Fetch template items from API
+        const companyId = window.location.pathname.split('/')[2];
+        fetch(`/api/companies/${companyId}/templates/${templateId}/items`)
+            .then(response => response.json())
+            .then(items => {
+                if (items.error) {
+                    alert('Error: ' + items.error);
+                    return;
+                }
+
+                // Clear existing concepts and add template items
+                conceptos = [];
+                items.forEach(item => {
+                    conceptos.push({
+                        descripcion: item.name,
+                        cantidad: item.quantity,
+                        valor_unitario: item.price,
+                        descuento: 0,
+                        tasa_iva: 0.16, // Default IVA
+                        clave_prod_serv: '01010101',
+                        clave_unidad: 'E48',
+                        unidad: 'Servicio'
+                    });
+                });
+
+                actualizarTablaConceptos();
+
+                // Show notification
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #198754;
+                    color: white;
+                    padding: 15px 20px;
+                    border-radius: 4px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    z-index: 9999;
+                `;
+                notification.innerHTML = `<i class="fas fa-check-circle"></i> Plantilla cargada: ${items.length} items agregados`;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+            })
+            .catch(error => {
+                console.error('Error loading template:', error);
+                alert('Error al cargar la plantilla');
+            });
+    }
+
+    // Load preloaded template items on page load
+    function loadPreloadedTemplateItems() {
+        if (preloadedTemplateItems && preloadedTemplateItems.length > 0) {
+            preloadedTemplateItems.forEach(item => {
+                conceptos.push({
+                    descripcion: item.name,
+                    cantidad: item.quantity,
+                    valor_unitario: item.price,
+                    descuento: 0,
+                    tasa_iva: 0.16,
+                    clave_prod_serv: '01010101',
+                    clave_unidad: 'E48',
+                    unidad: 'Servicio'
+                });
+            });
+            actualizarTablaConceptos();
+        }
+    }
+
     function agregarConcepto() {
         editingIndex = -1; // Reset editing mode
         // Limpiar modal
@@ -786,6 +907,9 @@
     // Inicializar
     document.addEventListener('DOMContentLoaded', function () {
         actualizarStepper();
+
+        // Load preloaded template items if any
+        loadPreloadedTemplateItems();
 
         // ==================== AUTOCOMPLETADO DE CLIENTES ====================
 

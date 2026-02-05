@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Revisar Orden #{{ order.id }} - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>
+                <i class="fas fa-clipboard-check text-warning"></i>
+                Revisar Recepcion - Orden #{{ order.id }}
+            </h2>
+            <p class="text-muted">Proveedor: {{ order.supplier.business_name }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <span class="badge bg-warning text-dark fs-6">Fase 2: Recepcion</span>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <strong>Instrucciones:</strong> Ingrese las cantidades realmente recibidas, el numero de lote y la fecha de caducidad para cada producto.
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-list"></i> Productos Recibidos</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center">Solicitado</th>
+                                <th class="text-center" style="width: 120px;">Recibido</th>
+                                <th style="width: 150px;">No. Lote</th>
+                                <th style="width: 150px;">Caducidad</th>
+                                <th class="text-end">Costo Unit.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for detail in order.details %}
+                            <tr>
+                                <td>
+                                    <strong>{{ detail.product.name }}</strong>
+                                    {% if detail.product.sku %}
+                                    <br><small class="text-muted">SKU: {{ detail.product.sku }}</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary rounded-pill fs-6">{{ detail.quantity_requested }}</span>
+                                </td>
+                                <td class="text-center">
+                                    <input type="number" name="received_{{ detail.id }}"
+                                           class="form-control text-center"
+                                           value="{{ detail.quantity_received or detail.quantity_requested }}"
+                                           min="0" required>
+                                </td>
+                                <td>
+                                    <input type="text" name="batch_{{ detail.id }}"
+                                           class="form-control"
+                                           value="{{ detail.batch_number or '' }}"
+                                           placeholder="Ej: L2024001">
+                                </td>
+                                <td>
+                                    <input type="date" name="expiration_{{ detail.id }}"
+                                           class="form-control"
+                                           value="{{ detail.expiration_date.strftime('%Y-%m-%d') if detail.expiration_date else '' }}">
+                                </td>
+                                <td class="text-end">${{ detail.unit_cost|format_currency }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('inventory_list', company_id=company.id, tab='orders') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Volver
+            </a>
+            <button type="submit" class="btn btn-warning">
+                <i class="fas fa-arrow-right"></i> Guardar y Continuar a Confirmacion
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

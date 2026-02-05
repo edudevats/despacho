@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Nuevo' if action == 'crear' else 'Editar' }} Proveedor - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>
+                <i class="fas fa-truck text-primary"></i>
+                {{ 'Nuevo Proveedor' if action == 'crear' else 'Editar Proveedor' }}
+            </h2>
+            <p class="text-muted">{{ company.name }}</p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                {{ form.hidden_tag() }}
+
+                <!-- Datos Fiscales -->
+                <h5 class="mb-3"><i class="fas fa-id-card"></i> Datos Fiscales</h5>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.rfc.label(class="form-label") }}
+                        {{ form.rfc(class="form-control" + (" is-invalid" if form.rfc.errors else ""), placeholder="RFC000000XXX", readonly=(action == 'editar')) }}
+                        {% if form.rfc.errors %}
+                        <div class="invalid-feedback">{{ form.rfc.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-8 mb-3">
+                        {{ form.business_name.label(class="form-label") }}
+                        {{ form.business_name(class="form-control" + (" is-invalid" if form.business_name.errors else ""), placeholder="Razon social") }}
+                        {% if form.business_name.errors %}
+                        <div class="invalid-feedback">{{ form.business_name.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.commercial_name.label(class="form-label") }}
+                        {{ form.commercial_name(class="form-control", placeholder="Nombre comercial (opcional)") }}
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        {{ form.payment_terms.label(class="form-label") }}
+                        {{ form.payment_terms(class="form-control", placeholder="Ej: 30 dias, Contado") }}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.sanitary_registration.label(class="form-label") }}
+                        {{ form.sanitary_registration(class="form-control", placeholder="Registro sanitario del proveedor") }}
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Datos de Contacto -->
+                <h5 class="mb-3"><i class="fas fa-address-book"></i> Datos de Contacto</h5>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ form.contact_name.label(class="form-label") }}
+                        {{ form.contact_name(class="form-control", placeholder="Nombre del contacto") }}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control", placeholder="email@ejemplo.com") }}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        {{ form.phone.label(class="form-label") }}
+                        {{ form.phone(class="form-control", placeholder="(555) 123-4567") }}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        {{ form.address.label(class="form-label") }}
+                        {{ form.address(class="form-control", rows="2", placeholder="Direccion completa") }}
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Notas y Tipo -->
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        {{ form.notes.label(class="form-label") }}
+                        {{ form.notes(class="form-control", rows="3", placeholder="Notas adicionales") }}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Tipo de Proveedor</label>
+                        <div class="form-check mt-2">
+                            {{ form.is_medication_supplier(class="form-check-input") }}
+                            {{ form.is_medication_supplier.label(class="form-check-label") }}
+                        </div>
+                        <small class="text-muted">Marcar si es proveedor de medicamentos</small>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{{ url_for('inventory_list', company_id=company.id, tab='suppliers') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> {{ 'Crear' if action == 'crear' else 'Guardar' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -104,20 +104,39 @@
             </div>
         </div>
 
-        <!-- Productos/Servicios -->
+        <!-- Inventario -->
         <div class="col-md-6 col-lg-3">
             <div class="card text-center shadow h-100 hover-card">
                 <div class="card-body">
                     <div class="icon-wrapper bg-primary bg-gradient text-white rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
                         style="width: 80px; height: 80px;">
-                        <i class="fas fa-box-open fa-2x"></i>
+                        <i class="fas fa-pills fa-2x"></i>
                     </div>
-                    <h5 class="card-title">Productos/Servicios</h5>
+                    <h5 class="card-title">Inventario</h5>
                     <p class="card-text text-muted">
-                        Administre su catálogo
+                        Medicamentos y servicios
                     </p>
-                    <a href="{{ url_for('facturacion_productos', company_id=company.id) }}" class="btn btn-primary">
+                    <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-primary">
                         <i class="fas fa-arrow-right"></i> Gestionar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Plantillas -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center shadow h-100 hover-card">
+                <div class="card-body">
+                    <div class="icon-wrapper bg-purple bg-gradient text-white rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                        style="width: 80px; height: 80px; background-color: #6f42c1 !important;">
+                        <i class="fas fa-file-medical fa-2x"></i>
+                    </div>
+                    <h5 class="card-title">Plantillas</h5>
+                    <p class="card-text text-muted">
+                        Facturacion rapida
+                    </p>
+                    <a href="{{ url_for('inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-primary" style="border-color: #6f42c1; color: #6f42c1;">
+                        <i class="fas fa-arrow-right"></i> Ver Plantillas
                     </a>
                 </div>
             </div>

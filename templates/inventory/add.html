@@ -5,30 +5,28 @@
 {% block content %}
 <div class="container mt-4">
     <div class="row justify-content-center">
-        <div class="col-md-8">
+        <div class="col-md-10">
             <div class="card shadow">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">Agregar Nuevo Producto</h4>
+                    <h4 class="mb-0"><i class="fas fa-pills"></i> Agregar Nuevo Producto/Medicamento</h4>
                 </div>
                 <div class="card-body">
                     <form method="POST">
                         {{ form.hidden_tag() }}
 
+                        <!-- Informacion Basica -->
+                        <h5 class="mb-3"><i class="fas fa-info-circle"></i> Informacion Basica</h5>
                         <div class="row mb-3">
                             <div class="col-md-8">
                                 {{ form.name.label(class="form-label") }}
-                                {{ form.name(class="form-control") }}
+                                {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
                                 {% if form.name.errors %}
-                                <div class="text-danger">
-                                    {% for error in form.name.errors %}
-                                    <small>{{ error }}</small>
-                                    {% endfor %}
-                                </div>
+                                <div class="invalid-feedback">{{ form.name.errors[0] }}</div>
                                 {% endif %}
                             </div>
                             <div class="col-md-4">
                                 {{ form.sku.label(class="form-label") }}
-                                {{ form.sku(class="form-control") }}
+                                {{ form.sku(class="form-control", placeholder="Codigo de barras o SKU") }}
                             </div>
                         </div>
 
@@ -37,17 +35,89 @@
                             {{ form.description(class="form-control", rows="2") }}
                         </div>
 
+                        <!-- Laboratorio y Proveedor -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.laboratory_id.label(class="form-label") }}
+                                {{ form.laboratory_id(class="form-select") }}
+                                <small class="text-muted">Fabricante del producto</small>
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.preferred_supplier_id.label(class="form-label") }}
+                                {{ form.preferred_supplier_id(class="form-select") }}
+                                <small class="text-muted">Proveedor principal para compras</small>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Precios -->
+                        <h5 class="mb-3"><i class="fas fa-dollar-sign"></i> Precios</h5>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.cost_price.label(class="form-label") }}
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.cost_price(class="form-control", id="costPrice") }}
+                                </div>
+                                <small class="text-muted">Costo de compra</small>
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.profit_margin.label(class="form-label") }}
+                                <div class="input-group">
+                                    {{ form.profit_margin(class="form-control", id="profitMargin") }}
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                <small class="text-muted">Porcentaje de ganancia</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Precio de Venta Calculado</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="text" class="form-control bg-light" id="calculatedPrice" readonly>
+                                </div>
+                                <small class="text-success">Calculado automaticamente</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.selling_price.label(class="form-label") }}
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.selling_price(class="form-control") }}
+                                </div>
+                                <small class="text-muted">Dejar en 0 para usar precio calculado</small>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Stock -->
+                        <h5 class="mb-3"><i class="fas fa-boxes"></i> Inventario</h5>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="alert alert-info mb-0">
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>Stock inicial: 0</strong><br>
+                                    <small>El inventario solo se incrementa al completar ordenes de compra.</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.min_stock_level.label(class="form-label") }}
+                                {{ form.min_stock_level(class="form-control", value="0") }}
+                                <small class="text-muted">Punto de reorden</small>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
                         <!-- COFEPRIS Section -->
                         <div class="card bg-light mb-3">
                             <div class="card-body">
-                                <h6 class="card-title text-primary"><i class="bi bi-shield-check"></i> Datos Sanitarios
-                                    (COFEPRIS)</h6>
+                                <h5 class="card-title text-primary"><i class="fas fa-shield-alt"></i> Datos Sanitarios (COFEPRIS)</h5>
                                 <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        {{ form.sanitary_registration.label(class="form-label") }}
-                                        {{ form.sanitary_registration(class="form-control") }}
-                                    </div>
-                                    <div class="col-md-6 d-flex align-items-center mt-4">
+                                    <div class="col-md-6 d-flex align-items-center">
                                         <div class="form-check form-switch">
                                             {{ form.is_controlled(class="form-check-input") }}
                                             {{ form.is_controlled.label(class="form-check-label") }}
@@ -75,36 +145,12 @@
                             </div>
                         </div>
 
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                {{ form.cost_price.label(class="form-label") }}
-                                {{ form.cost_price(class="form-control") }}
-                                <small class="text-muted">Usado para calcular valor del inventario.</small>
-                            </div>
-                            <div class="col-md-6">
-                                {{ form.selling_price.label(class="form-label") }}
-                                {{ form.selling_price(class="form-control") }}
-                            </div>
-                        </div>
-
-                        <hr>
-
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                {{ form.initial_stock.label(class="form-label") }}
-                                {{ form.initial_stock(class="form-control", value="0") }}
-                                <small class="text-muted">Stock inicial general (sin lote).</small>
-                            </div>
-                            <div class="col-md-6">
-                                {{ form.min_stock_level.label(class="form-label") }}
-                                {{ form.min_stock_level(class="form-control") }}
-                            </div>
-                        </div>
-
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                             <a href="{{ url_for('inventory_list', company_id=company.id) }}"
                                 class="btn btn-light me-md-2">Cancelar</a>
-                            <button type="submit" class="btn btn-primary">Guardar Producto</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Guardar Producto
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -112,4 +158,20 @@
         </div>
     </div>
 </div>
+
+<script>
+// Calculate selling price based on cost and margin
+function calculatePrice() {
+    const cost = parseFloat(document.getElementById('costPrice').value) || 0;
+    const margin = parseFloat(document.getElementById('profitMargin').value) || 0;
+    const calculated = cost * (1 + margin / 100);
+    document.getElementById('calculatedPrice').value = calculated.toFixed(2);
+}
+
+document.getElementById('costPrice').addEventListener('input', calculatePrice);
+document.getElementById('profitMargin').addEventListener('input', calculatePrice);
+
+// Calculate on page load
+calculatePrice();
+</script>
 {% endblock %}

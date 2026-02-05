@@ -219,34 +219,43 @@ class ProductForm(FlaskForm):
         Length(max=50)
     ])
     description = TextAreaField('Descripción', validators=[Optional()])
-    
+
     cost_price = FloatField('Costo Real', validators=[
         NumberRange(min=0, message='El costo debe ser positivo'),
         Optional()
     ], default=0.0)
-    
-    selling_price = FloatField('Precio Venta', validators=[
+
+    selling_price = FloatField('Precio Venta (Override)', validators=[
         NumberRange(min=0, message='El precio debe ser positivo'),
         Optional()
     ], default=0.0)
-    
+
+    profit_margin = FloatField('Margen de Ganancia (%)', validators=[
+        NumberRange(min=0, max=1000, message='El margen debe ser entre 0 y 1000%'),
+        Optional()
+    ], default=0.0)
+
     initial_stock = IntegerField('Stock Inicial', validators=[
         Optional(),
         NumberRange(min=0)
     ])
-    
+
     min_stock_level = IntegerField('Stock Mínimo', validators=[
         Optional(),
         NumberRange(min=0)
     ])
-    
+
+    # Relaciones
+    laboratory_id = SelectField('Laboratorio', coerce=int, validators=[Optional()])
+    preferred_supplier_id = SelectField('Proveedor Preferido', coerce=int, validators=[Optional()])
+
     # COFEPRIS Fields
     sanitary_registration = StringField('Registro Sanitario', validators=[
         Optional(),
         Length(max=100)
     ])
     is_controlled = BooleanField('Medicamento Controlado')
-    
+
     active_ingredient = StringField('Principio Activo', validators=[
         Optional(),
         Length(max=200)
@@ -483,4 +492,148 @@ class CFDIConceptoForm(FlaskForm):
         ('0.08', '8%'),
         ('0.00', '0% (Exento)')
     ], validators=[DataRequired()], default='0.16')
+
+
+# ==================== NUEVOS FORMULARIOS PARA INVENTARIO MEJORADO ====================
+
+class LaboratoryForm(FlaskForm):
+    """Form for creating/editing laboratories"""
+    name = StringField('Nombre del Laboratorio', validators=[
+        DataRequired(message='El nombre es requerido'),
+        Length(max=200)
+    ])
+    sanitary_registration = StringField('Registro Sanitario', validators=[
+        Optional(),
+        Length(max=100)
+    ])
+
+
+class ServiceForm(FlaskForm):
+    """Form for creating/editing medical services"""
+    name = StringField('Nombre del Servicio', validators=[
+        DataRequired(message='El nombre es requerido'),
+        Length(max=200)
+    ])
+    description = TextAreaField('Descripción', validators=[
+        Optional(),
+        Length(max=1000)
+    ])
+    price = FloatField('Precio', validators=[
+        DataRequired(message='El precio es requerido'),
+        NumberRange(min=0, message='El precio debe ser positivo')
+    ], default=0.0)
+    sat_key = StringField('Clave SAT Producto/Servicio', validators=[
+        Optional(),
+        Length(max=10)
+    ], default='01010101')
+    sat_unit_key = StringField('Clave SAT Unidad', validators=[
+        Optional(),
+        Length(max=10)
+    ], default='E48')
+
+
+class SupplierManualForm(FlaskForm):
+    """Form for manually creating suppliers"""
+    rfc = StringField('RFC', validators=[
+        DataRequired(message='El RFC es requerido'),
+        Length(min=12, max=13, message='El RFC debe tener 12 o 13 caracteres'),
+        validate_rfc
+    ])
+    business_name = StringField('Razón Social', validators=[
+        DataRequired(message='La razón social es requerida'),
+        Length(max=256)
+    ])
+    commercial_name = StringField('Nombre Comercial', validators=[
+        Optional(),
+        Length(max=256)
+    ])
+    contact_name = StringField('Nombre de Contacto', validators=[
+        Optional(),
+        Length(max=150)
+    ])
+    email = StringField('Email', validators=[
+        Optional(),
+        Email(message='Email inválido')
+    ])
+    phone = StringField('Teléfono', validators=[
+        Optional(),
+        Length(max=20)
+    ])
+    address = TextAreaField('Dirección', validators=[
+        Optional(),
+        Length(max=500)
+    ])
+    payment_terms = StringField('Condiciones de Pago', validators=[
+        Optional(),
+        Length(max=200)
+    ])
+    notes = TextAreaField('Notas', validators=[
+        Optional(),
+        Length(max=1000)
+    ])
+    is_medication_supplier = BooleanField('Es proveedor de medicamentos')
+    sanitary_registration = StringField('Registro Sanitario', validators=[
+        Optional(),
+        Length(max=100)
+    ])
+
+
+class PurchaseOrderForm(FlaskForm):
+    """Form for creating purchase orders"""
+    supplier_id = SelectField('Proveedor', coerce=int, validators=[
+        DataRequired(message='El proveedor es requerido')
+    ])
+    notes = TextAreaField('Notas', validators=[
+        Optional(),
+        Length(max=1000)
+    ])
+
+
+class InvoiceTemplateForm(FlaskForm):
+    """Form for creating/editing invoice templates"""
+    name = StringField('Nombre de la Plantilla', validators=[
+        DataRequired(message='El nombre es requerido'),
+        Length(max=200)
+    ])
+    description = TextAreaField('Descripción', validators=[
+        Optional(),
+        Length(max=500)
+    ])
+
+
+# ==================== USER MANAGEMENT FORMS ====================
+
+class UserForm(FlaskForm):
+    """Form for creating/editing users"""
+    username = StringField('Nombre de Usuario', validators=[
+        DataRequired(message='El nombre de usuario es requerido'),
+        Length(min=3, max=64, message='El nombre debe tener entre 3 y 64 caracteres'),
+        Regexp(r'^[a-zA-Z0-9_]+$', message='Solo letras, números y guión bajo')
+    ])
+    email = StringField('Email', validators=[
+        Optional(),
+        Email(message='Email inválido'),
+        Length(max=120)
+    ])
+    password = PasswordField('Contraseña', validators=[
+        Optional(),
+        Length(min=6, message='La contraseña debe tener al menos 6 caracteres')
+    ])
+    is_active = BooleanField('Usuario Activo')
+    is_admin = BooleanField('Es Administrador')
+
+
+class UserCompanyAccessForm(FlaskForm):
+    """Form for assigning company access and permissions"""
+    company_id = SelectField('Empresa', coerce=int, validators=[
+        DataRequired(message='Seleccione una empresa')
+    ])
+    perm_dashboard = BooleanField('Dashboard')
+    perm_sync = BooleanField('Sincronización')
+    perm_inventory = BooleanField('Inventario')
+    perm_invoices = BooleanField('Facturas')
+    perm_ppd = BooleanField('Facturas PPD')
+    perm_taxes = BooleanField('Impuestos')
+    perm_sales = BooleanField('Análisis de Ventas')
+    perm_facturacion = BooleanField('Facturación')
 
