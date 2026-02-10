@@ -551,6 +551,62 @@ class PurchaseOrderDetail(db.Model):
         return f'<PurchaseOrderDetail Order:{self.order_id} Product:{self.product_id}>'
 
 
+class ExitOrder(db.Model):
+    """
+    Ordenes de salida - registro de entregas de medicamentos/productos
+    """
+    __tablename__ = 'exit_order'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+
+    # Destinatario
+    recipient_name = db.Column(db.String(200), nullable=False)  # Nombre del paciente/departamento
+    recipient_type = db.Column(db.String(50), default='PATIENT')  # PATIENT, DEPARTMENT, OTHER
+    recipient_id = db.Column(db.String(50), nullable=True)  # ID del paciente, numero de expediente, etc.
+
+    # Estado y fechas
+    status = db.Column(db.String(20), default='DRAFT')  # DRAFT, COMPLETED, CANCELLED
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    # Relationships
+    company = db.relationship('Company', backref=db.backref('exit_orders', lazy=True))
+    created_by = db.relationship('User', backref=db.backref('exit_orders', lazy=True))
+
+    @property
+    def total_items(self):
+        """Total de productos en la orden"""
+        return sum(d.quantity for d in self.details)
+
+    def __repr__(self):
+        return f'<ExitOrder #{self.id} - {self.recipient_name}>'
+
+
+class ExitOrderDetail(db.Model):
+    """
+    Detalles de ordenes de salida (productos entregados)
+    """
+    __tablename__ = 'exit_order_detail'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('exit_order.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    batch_id = db.Column(db.Integer, db.ForeignKey('product_batch.id'), nullable=True)  # Lote especifico
+
+    quantity = db.Column(db.Integer, default=1)  # Cantidad entregada
+
+    # Relationships
+    order = db.relationship('ExitOrder', backref=db.backref('details', lazy=True, cascade='all, delete-orphan'))
+    product = db.relationship('Product', backref=db.backref('exit_details', lazy=True))
+    batch = db.relationship('ProductBatch', backref=db.backref('exit_details', lazy=True))
+
+    def __repr__(self):
+        return f'<ExitOrderDetail Order:{self.order_id} Product:{self.product_id}>'
+
+
 class InvoiceTemplate(db.Model):
     """
     Plantillas de factura para procedimientos médicos

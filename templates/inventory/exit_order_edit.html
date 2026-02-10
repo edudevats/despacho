@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Orden de Salida #{{ order.id }} - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>
+                <i class="fas fa-sign-out-alt text-warning"></i>
+                Orden de Salida #{{ order.id }}
+            </h2>
+            <p class="text-muted">{{ company.name }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <span class="badge bg-warning text-dark fs-6">Borrador</span>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informacion del Destinatario -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-user"></i> Destinatario</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+                        <input type="hidden" name="action" value="update_info">
+
+                        <div class="mb-3">
+                            {{ form.recipient_name.label(class="form-label") }}
+                            {{ form.recipient_name(class="form-control") }}
+                        </div>
+                        <div class="mb-3">
+                            {{ form.recipient_type.label(class="form-label") }}
+                            {{ form.recipient_type(class="form-select") }}
+                        </div>
+                        <div class="mb-3">
+                            {{ form.recipient_id.label(class="form-label") }}
+                            {{ form.recipient_id(class="form-control") }}
+                        </div>
+                        <div class="mb-3">
+                            {{ form.notes.label(class="form-label") }}
+                            {{ form.notes(class="form-control", rows="2") }}
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-save"></i> Actualizar
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Agregar Producto -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-plus"></i> Agregar Producto</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="add_product">
+
+                        <div class="mb-3">
+                            <label class="form-label">Producto</label>
+                            <select name="product_id" id="productSelect" class="form-select" required onchange="loadBatches()">
+                                <option value="">-- Seleccionar --</option>
+                                {% for product in products %}
+                                <option value="{{ product.id }}" data-stock="{{ product.current_stock }}">
+                                    {{ product.name }} (Stock: {{ product.current_stock }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Lote (Opcional)</label>
+                            <select name="batch_id" id="batchSelect" class="form-select">
+                                <option value="">-- Sin lote especifico --</option>
+                            </select>
+                            <small class="text-muted">Seleccionar lote prioriza productos proximos a vencer</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Cantidad</label>
+                            <input type="number" name="quantity" class="form-control" value="1" min="1" required id="quantityInput">
+                            <small class="text-muted" id="stockAvailable"></small>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-plus"></i> Agregar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista de Productos -->
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Productos en la Orden</h5>
+                </div>
+                <div class="card-body">
+                    {% if order.details %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Lote</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for detail in order.details %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ detail.product.name }}</strong>
+                                        {% if detail.product.sku %}
+                                        <br><small class="text-muted">SKU: {{ detail.product.sku }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if detail.batch %}
+                                        <code>{{ detail.batch.batch_number }}</code>
+                                        {% if detail.batch.expiration_date %}
+                                        <br><small class="text-muted">Vence: {{ detail.batch.expiration_date.strftime('%d/%m/%Y') }}</small>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="text-muted">--</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary rounded-pill fs-6">{{ detail.quantity }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <form method="POST" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="remove_detail">
+                                            <input type="hidden" name="detail_id" value="{{ detail.id }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-light">
+                                    <td colspan="2"><strong>Total</strong></td>
+                                    <td class="text-center"><strong class="fs-5">{{ order.total_items }}</strong></td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-box-open fa-3x mb-3"></i><br>
+                        No hay productos agregados aun.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Acciones -->
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('inventory_list', company_id=company.id, tab='exits') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </a>
+                {% if order.details %}
+                <form method="POST" action="{{ url_for('complete_exit_order', company_id=company.id, order_id=order.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-success btn-lg" onclick="return confirm('¿Completar la orden? Esto descontara los productos del inventario.')">
+                        <i class="fas fa-check-circle"></i> Completar Orden
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadBatches() {
+    const productSelect = document.getElementById('productSelect');
+    const batchSelect = document.getElementById('batchSelect');
+    const stockInfo = document.getElementById('stockAvailable');
+    const productId = productSelect.value;
+
+    // Clear batches
+    batchSelect.innerHTML = '<option value="">-- Sin lote especifico --</option>';
+
+    if (!productId) {
+        stockInfo.textContent = '';
+        return;
+    }
+
+    // Show stock available
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    const stock = selectedOption.dataset.stock;
+    stockInfo.textContent = `Stock disponible: ${stock}`;
+
+    // Fetch batches from API
+    fetch(`/api/companies/{{ company.id }}/products/${productId}/batches`)
+        .then(response => response.json())
+        .then(batches => {
+            batches.forEach(batch => {
+                const option = document.createElement('option');
+                option.value = batch.id;
+                option.textContent = `${batch.batch_number} - Vence: ${batch.expiration_date || 'N/A'} (${batch.current_stock} uds)`;
+                batchSelect.appendChild(option);
+            });
+        });
+}
+</script>
+{% endblock %}

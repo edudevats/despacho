@@ -637,3 +637,26 @@ class UserCompanyAccessForm(FlaskForm):
     perm_sales = BooleanField('Análisis de Ventas')
     perm_facturacion = BooleanField('Facturación')
 
+
+# ==================== EXIT ORDER FORMS ====================
+
+class ExitOrderForm(FlaskForm):
+    """Form for creating exit orders (salidas de inventario)"""
+    recipient_name = StringField('Nombre del Destinatario', validators=[
+        DataRequired(message='El nombre es requerido'),
+        Length(max=200)
+    ])
+    recipient_type = SelectField('Tipo de Destinatario', choices=[
+        ('PATIENT', 'Paciente'),
+        ('DEPARTMENT', 'Departamento'),
+        ('OTHER', 'Otro')
+    ])
+    recipient_id = StringField('ID/Expediente', validators=[
+        Optional(),
+        Length(max=50)
+    ])
+    notes = TextAreaField('Notas', validators=[
+        Optional(),
+        Length(max=1000)
+    ])
+

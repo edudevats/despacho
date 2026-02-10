@@ -15,6 +15,49 @@
         </div>
     </div>
 
+    <!-- Alertas de Caducidad -->
+    {% if expired_batches or critical_batches or warning_batches %}
+    <div class="row mb-4">
+        <div class="col-12">
+            {% if expired_batches %}
+            <div class="alert alert-danger d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                <div>
+                    <strong>PRODUCTOS CADUCADOS ({{ expired_batches|length }})</strong><br>
+                    {% for batch, product in expired_batches[:5] %}
+                    <small>{{ product.name }} - Lote: {{ batch.batch_number }} (Vencido: {{ batch.expiration_date.strftime('%d/%m/%Y') }}) - {{ batch.current_stock }} unidades</small><br>
+                    {% endfor %}
+                    {% if expired_batches|length > 5 %}<small class="text-muted">... y {{ expired_batches|length - 5 }} mas</small>{% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if critical_batches %}
+            <div class="alert alert-warning d-flex align-items-center">
+                <i class="fas fa-clock fa-2x me-3"></i>
+                <div>
+                    <strong>PROXIMOS A VENCER (30 dias) - {{ critical_batches|length }} lotes</strong><br>
+                    {% for batch, product in critical_batches[:5] %}
+                    <small>{{ product.name }} - Lote: {{ batch.batch_number }} (Vence: {{ batch.expiration_date.strftime('%d/%m/%Y') }}) - {{ batch.current_stock }} unidades</small><br>
+                    {% endfor %}
+                    {% if critical_batches|length > 5 %}<small class="text-muted">... y {{ critical_batches|length - 5 }} mas</small>{% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if warning_batches %}
+            <div class="alert alert-info d-flex align-items-center">
+                <i class="fas fa-info-circle fa-2x me-3"></i>
+                <div>
+                    <strong>VENCEN EN 90 DIAS - {{ warning_batches|length }} lotes</strong>
+                    <small class="text-muted ms-2">(Dar prioridad a su venta)</small>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Navigation Tabs -->
     <ul class="nav nav-tabs mb-4" id="inventoryTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -39,6 +82,12 @@
             <button class="nav-link {{ 'active' if active_tab == 'orders' else '' }}" id="orders-tab"
                     data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
                 <i class="fas fa-clipboard-list"></i> Ordenes de Compra
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if active_tab == 'exits' else '' }}" id="exits-tab"
+                    data-bs-toggle="tab" data-bs-target="#exits" type="button" role="tab">
+                <i class="fas fa-sign-out-alt"></i> Ordenes de Salida
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -372,6 +421,93 @@
             </div>
         </div>
 
+        <!-- TAB: Ordenes de Salida -->
+        <div class="tab-pane fade {{ 'show active' if active_tab == 'exits' else '' }}" id="exits" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Ordenes de Salida</h4>
+                <a href="{{ url_for('add_exit_order', company_id=company.id) }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Nueva Salida
+                </a>
+            </div>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th># Orden</th>
+                                    <th>Destinatario</th>
+                                    <th>Tipo</th>
+                                    <th class="text-center">Productos</th>
+                                    <th>Fecha</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for order in exit_orders %}
+                                <tr>
+                                    <td><strong>#{{ order.id }}</strong></td>
+                                    <td>
+                                        {{ order.recipient_name }}
+                                        {% if order.recipient_id %}
+                                        <br><small class="text-muted">ID: {{ order.recipient_id }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if order.recipient_type == 'PATIENT' %}
+                                        <span class="badge bg-primary">Paciente</span>
+                                        {% elif order.recipient_type == 'DEPARTMENT' %}
+                                        <span class="badge bg-info">Departamento</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Otro</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary rounded-pill">{{ order.total_items }}</span>
+                                    </td>
+                                    <td>{{ order.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                    <td class="text-center">
+                                        {% if order.status == 'DRAFT' %}
+                                        <span class="badge bg-warning text-dark">Borrador</span>
+                                        {% elif order.status == 'COMPLETED' %}
+                                        <span class="badge bg-success">Completada</span>
+                                        {% elif order.status == 'CANCELLED' %}
+                                        <span class="badge bg-danger">Cancelada</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if order.status == 'DRAFT' %}
+                                        <a href="{{ url_for('edit_exit_order', company_id=company.id, order_id=order.id) }}"
+                                            class="btn btn-sm btn-outline-primary" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar"
+                                            onclick="confirmDeleteExitOrder('{{ order.id }}', '{{ order.recipient_name }}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                        <a href="{{ url_for('view_exit_order', company_id=company.id, order_id=order.id) }}"
+                                            class="btn btn-sm btn-outline-secondary" title="Ver Detalles">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-muted">
+                                        <i class="fas fa-sign-out-alt fa-3x mb-3"></i><br>
+                                        No hay ordenes de salida.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- TAB: Servicios -->
         <div class="tab-pane fade {{ 'show active' if active_tab == 'services' else '' }}" id="services" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -521,12 +657,47 @@
     </div>
 </div>
 
+<!-- Modal de Confirmación para Eliminar Orden de Salida -->
+<div class="modal fade" id="deleteExitOrderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro que deseas eliminar la orden de salida para <strong id="deleteExitOrderRecipient"></strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-circle"></i> Esta acción no se puede deshacer.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteExitOrderForm" method="POST" action="">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // Confirm delete order
 function confirmDeleteOrder(orderId, supplierName) {
     document.getElementById('deleteOrderSupplier').textContent = supplierName;
     document.getElementById('deleteOrderForm').action = "{{ url_for('delete_purchase_order', company_id=company.id, order_id=0) }}".replace('/0', '/' + orderId);
     var deleteModal = new bootstrap.Modal(document.getElementById('deleteOrderModal'));
+    deleteModal.show();
+}
+
+// Confirm delete exit order
+function confirmDeleteExitOrder(orderId, recipientName) {
+    document.getElementById('deleteExitOrderRecipient').textContent = recipientName;
+    document.getElementById('deleteExitOrderForm').action = "{{ url_for('delete_exit_order', company_id=company.id, order_id=0) }}".replace('/0', '/' + orderId);
+    var deleteModal = new bootstrap.Modal(document.getElementById('deleteExitOrderModal'));
     deleteModal.show();
 }
 

@@ -11,13 +11,13 @@ from extensions import db, login_manager, migrate, mail, cache, csrf, init_exten
 from models import (Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product,
                     InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer,
                     Laboratory, Service, PurchaseOrder, PurchaseOrderDetail, InvoiceTemplate, InvoiceTemplateItem,
-                    UserCompanyAccess)
+                    UserCompanyAccess, ExitOrder, ExitOrderDetail)
 from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm,
                    CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm,
                    FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm,
                    CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm,
                    LaboratoryForm, ServiceForm, SupplierManualForm, PurchaseOrderForm, InvoiceTemplateForm,
-                   UserForm, UserCompanyAccessForm)
+                   UserForm, UserCompanyAccessForm, ExitOrderForm)
 from functools import wraps
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1437,11 +1437,29 @@ def create_app(config_class=Config):
         # Cargar ordenes de compra
         purchase_orders = PurchaseOrder.query.filter_by(company_id=company_id).order_by(PurchaseOrder.created_at.desc()).all()
 
+        # Cargar ordenes de salida
+        exit_orders = ExitOrder.query.filter_by(company_id=company_id).order_by(ExitOrder.created_at.desc()).all()
+
         # Cargar servicios
         services = Service.query.filter_by(company_id=company_id).order_by(Service.name).all()
 
         # Cargar plantillas de factura
         invoice_templates = InvoiceTemplate.query.filter_by(company_id=company_id).order_by(InvoiceTemplate.name).all()
+
+        # Alertas de caducidad - productos que vencen en los proximos 90 dias
+        today = now_mexico().date()
+        expiring_soon_date = today + timedelta(days=90)
+        expiring_batches = db.session.query(ProductBatch, Product).join(Product).filter(
+            Product.company_id == company_id,
+            ProductBatch.current_stock > 0,
+            ProductBatch.expiration_date != None,
+            ProductBatch.expiration_date <= expiring_soon_date
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        # Separar por urgencia
+        expired_batches = [(b, p) for b, p in expiring_batches if b.expiration_date < today]
+        critical_batches = [(b, p) for b, p in expiring_batches if today <= b.expiration_date <= today + timedelta(days=30)]
+        warning_batches = [(b, p) for b, p in expiring_batches if today + timedelta(days=30) < b.expiration_date <= expiring_soon_date]
 
         return render_template('inventory/list.html',
                                company=company,
@@ -1451,9 +1469,14 @@ def create_app(config_class=Config):
                                laboratories=laboratories,
                                suppliers=suppliers,
                                purchase_orders=purchase_orders,
+                               exit_orders=exit_orders,
                                services=services,
                                invoice_templates=invoice_templates,
-                               active_tab=active_tab)
+                               active_tab=active_tab,
+                               expired_batches=expired_batches,
+                               critical_batches=critical_batches,
+                               warning_batches=warning_batches,
+                               today=today)
 
     @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
     @login_required
@@ -1543,53 +1566,12 @@ def create_app(config_class=Config):
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/adjust', methods=['GET', 'POST'])
     @login_required
     def adjust_stock(company_id, product_id):
-        """Ajuste manual de stock"""
-        company = Company.query.get_or_404(company_id)
-        product = Product.query.get_or_404(product_id)
-        
-        if product.company_id != company_id:
-            flash('Producto no encontrado.', 'error')
-            return redirect(url_for('inventory_list', company_id=company_id))
-            
-        if request.method == 'POST':
-            adjustment_type = request.form['type'] # 'IN' or 'OUT'
-            quantity = int(request.form['quantity'])
-            notes = request.form.get('notes')
-            
-            if quantity <= 0:
-                flash('La cantidad debe ser mayor a 0.', 'error')
-                return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
-            
-            previous_stock = product.current_stock
-            new_stock = previous_stock
-            
-            if adjustment_type == 'IN':
-                new_stock += quantity
-            elif adjustment_type == 'OUT':
-                if previous_stock < quantity:
-                    flash('No hay suficiente stock para realizar esta salida.', 'error')
-                    return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
-                new_stock -= quantity
-                
-            product.current_stock = new_stock
-            
-            transaction = InventoryTransaction(
-                product_id=product.id,
-                type=adjustment_type,
-                quantity=quantity,
-                previous_stock=previous_stock,
-                new_stock=new_stock,
-                reference='Manual Adjustment',
-                notes=notes
-            )
-            
-            db.session.add(transaction)
-            db.session.commit()
-            
-            flash('Inventario actualizado correctamente.', 'success')
-            return redirect(url_for('inventory_list', company_id=company_id))
-            
-        return render_template('inventory/adjust.html', company=company, product=product)
+        """Ajuste manual de stock - DESHABILITADO"""
+        # Los ajustes manuales ya no están permitidos
+        # Las entradas son via Ordenes de Compra
+        # Las salidas son via Ordenes de Salida
+        flash('Los ajustes manuales de inventario ya no estan permitidos. Use Ordenes de Compra para entradas y Ordenes de Salida para entregas.', 'warning')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/history')
     @login_required
@@ -2040,6 +2022,213 @@ def create_app(config_class=Config):
 
         flash(f'Orden #{order_id} eliminada correctamente.', 'success')
         return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+    # ==================== EXIT ORDER ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/exits/add', methods=['GET', 'POST'])
+    @login_required
+    def add_exit_order(company_id):
+        """Crear nueva orden de salida"""
+        company = Company.query.get_or_404(company_id)
+        form = ExitOrderForm()
+
+        if form.validate_on_submit():
+            order = ExitOrder(
+                company_id=company_id,
+                recipient_name=form.recipient_name.data,
+                recipient_type=form.recipient_type.data,
+                recipient_id=form.recipient_id.data,
+                notes=form.notes.data,
+                created_by_id=current_user.id
+            )
+            db.session.add(order)
+            db.session.commit()
+            flash('Orden de salida creada. Agregue los productos.', 'success')
+            return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order.id))
+
+        return render_template('inventory/exit_order_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    def edit_exit_order(company_id, order_id):
+        """Editar orden de salida (agregar productos)"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        if order.status != 'DRAFT':
+            flash('Esta orden ya no puede ser editada.', 'warning')
+            return redirect(url_for('view_exit_order', company_id=company_id, order_id=order_id))
+
+        # Productos disponibles con stock
+        products = Product.query.filter(
+            Product.company_id == company_id,
+            Product.active == True,
+            Product.current_stock > 0
+        ).order_by(Product.name).all()
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+
+            if action == 'add_product':
+                product_id = int(request.form.get('product_id'))
+                quantity = int(request.form.get('quantity', 1))
+                batch_id = request.form.get('batch_id')
+                batch_id = int(batch_id) if batch_id else None
+
+                product = Product.query.get(product_id)
+                if product and quantity > 0:
+                    # Verificar stock disponible
+                    if quantity > product.current_stock:
+                        flash(f'Stock insuficiente. Disponible: {product.current_stock}', 'error')
+                    else:
+                        detail = ExitOrderDetail(
+                            order_id=order.id,
+                            product_id=product_id,
+                            batch_id=batch_id,
+                            quantity=quantity
+                        )
+                        db.session.add(detail)
+                        db.session.commit()
+                        flash(f'Producto agregado: {product.name} x{quantity}', 'success')
+
+            elif action == 'remove_detail':
+                detail_id = int(request.form.get('detail_id'))
+                detail = ExitOrderDetail.query.get(detail_id)
+                if detail and detail.order_id == order.id:
+                    db.session.delete(detail)
+                    db.session.commit()
+                    flash('Producto eliminado de la orden.', 'success')
+
+            elif action == 'update_info':
+                form = ExitOrderForm()
+                order.recipient_name = form.recipient_name.data
+                order.recipient_type = form.recipient_type.data
+                order.recipient_id = form.recipient_id.data
+                order.notes = form.notes.data
+                db.session.commit()
+                flash('Informacion actualizada.', 'success')
+
+            return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order_id))
+
+        form = ExitOrderForm(obj=order)
+        return render_template('inventory/exit_order_edit.html', company=company, order=order, form=form, products=products)
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/complete', methods=['POST'])
+    @login_required
+    def complete_exit_order(company_id, order_id):
+        """Completar orden de salida - descuenta del inventario"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        if order.status != 'DRAFT':
+            flash('Esta orden ya fue procesada.', 'warning')
+            return redirect(url_for('view_exit_order', company_id=company_id, order_id=order_id))
+
+        if not order.details:
+            flash('No hay productos en la orden.', 'error')
+            return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order_id))
+
+        # Verificar stock antes de procesar
+        for detail in order.details:
+            if detail.quantity > detail.product.current_stock:
+                flash(f'Stock insuficiente para {detail.product.name}. Disponible: {detail.product.current_stock}', 'error')
+                return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order_id))
+
+        # Procesar salidas
+        for detail in order.details:
+            product = detail.product
+            previous_stock = product.current_stock
+
+            # Crear transaccion de inventario
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                batch_id=detail.batch_id,
+                type='OUT',
+                quantity=detail.quantity,
+                previous_stock=previous_stock,
+                new_stock=previous_stock - detail.quantity,
+                reference=f'Orden Salida #{order.id}',
+                notes=f'Entrega a: {order.recipient_name}'
+            )
+            db.session.add(transaction)
+
+            # Actualizar stock del producto
+            product.current_stock -= detail.quantity
+
+            # Actualizar stock del lote si aplica
+            if detail.batch_id and detail.batch:
+                detail.batch.current_stock -= detail.quantity
+
+        order.status = 'COMPLETED'
+        order.completed_at = now_mexico()
+        db.session.commit()
+
+        flash(f'Orden #{order.id} completada. Inventario actualizado.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>')
+    @login_required
+    def view_exit_order(company_id, order_id):
+        """Ver detalle de orden de salida"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        return render_template('inventory/exit_order_view.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/delete', methods=['POST'])
+    @login_required
+    def delete_exit_order(company_id, order_id):
+        """Eliminar orden de salida (solo borradores)"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        if order.status != 'DRAFT':
+            flash('Solo se pueden eliminar ordenes en borrador.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        ExitOrderDetail.query.filter_by(order_id=order_id).delete()
+        db.session.delete(order)
+        db.session.commit()
+
+        flash(f'Orden #{order_id} eliminada.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+    @app.route('/api/companies/<int:company_id>/products/<int:product_id>/batches')
+    @login_required
+    def api_product_batches(company_id, product_id):
+        """API para obtener lotes de un producto"""
+        product = Product.query.get_or_404(product_id)
+        if product.company_id != company_id:
+            return jsonify([])
+
+        batches = ProductBatch.query.filter(
+            ProductBatch.product_id == product_id,
+            ProductBatch.current_stock > 0,
+            ProductBatch.is_active == True
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        return jsonify([{
+            'id': b.id,
+            'batch_number': b.batch_number,
+            'expiration_date': b.expiration_date.strftime('%d/%m/%Y') if b.expiration_date else None,
+            'current_stock': b.current_stock
+        } for b in batches])
 
     # ==================== INVOICE TEMPLATE ROUTES ====================
 
@@ -3374,6 +3563,11 @@ def create_app(config_class=Config):
             logger.error(f'Error al generar y timbrar: {str(e)}')
             flash(f'Error: {str(e)}', 'error')
             return redirect(url_for('crear_factura', company_id=company.id))
+
+    # Register mobile API blueprint
+    from routes.mobile_api import mobile_api_bp
+    app.register_blueprint(mobile_api_bp, url_prefix='/api/mobile')
+    csrf.exempt(mobile_api_bp)
 
     # Register CLI commands
     from cli import register_commands
