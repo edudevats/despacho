@@ -598,10 +598,15 @@ class ExitOrderDetail(db.Model):
 
     quantity = db.Column(db.Integer, default=1)  # Cantidad entregada
 
+    # Auditoría POS/Scanner
+    scanned_at = db.Column(db.DateTime, nullable=True)
+    scanned_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
     # Relationships
     order = db.relationship('ExitOrder', backref=db.backref('details', lazy=True, cascade='all, delete-orphan'))
     product = db.relationship('Product', backref=db.backref('exit_details', lazy=True))
     batch = db.relationship('ProductBatch', backref=db.backref('exit_details', lazy=True))
+    scanned_by = db.relationship('User', foreign_keys=[scanned_by_id])
 
     def __repr__(self):
         return f'<ExitOrderDetail Order:{self.order_id} Product:{self.product_id}>'
