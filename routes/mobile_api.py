@@ -15,7 +15,8 @@ from sqlalchemy import func, extract
 from extensions import db
 from models import (
     User, Company, UserCompanyAccess, Movement, Product, ProductBatch,
-    Invoice, ExitOrder, ExitOrderDetail, InventoryTransaction
+    Invoice, ExitOrder, ExitOrderDetail, InventoryTransaction,
+    PurchaseOrder, PurchaseOrderDetail, Supplier
 )
 from utils.timezone_helper import now_mexico
 
@@ -785,3 +786,371 @@ def pos_complete_exit_order(order_id, current_user):
         'success': True,
         'order': _serialize_exit_order(order),
     })
+
+
+# ==================== PURCHASE ORDERS / ENTRADA ENDPOINTS ====================
+
+
+def _serialize_purchase_order(order, include_items=True):
+    """Serialize a PurchaseOrder to dict."""
+    data = {
+        'id': order.id,
+        'company_id': order.company_id,
+        'supplier_id': order.supplier_id,
+        'supplier_name': order.supplier.business_name if order.supplier else None,
+        'status': order.status,
+        'estimated_total': order.estimated_total or 0,
+        'notes': order.notes,
+        'total_items': len(order.details),
+        'created_at': order.created_at.isoformat() if order.created_at else None,
+        'sent_at': order.sent_at.isoformat() if order.sent_at else None,
+        'received_at': order.received_at.isoformat() if order.received_at else None,
+        'completed_at': order.completed_at.isoformat() if order.completed_at else None,
+    }
+    if include_items:
+        items = []
+        for d in order.details:
+            items.append({
+                'id': d.id,
+                'product_id': d.product_id,
+                'product_name': d.product.name if d.product else None,
+                'product_sku': d.product.sku if d.product else None,
+                'quantity_requested': d.quantity_requested,
+                'quantity_received': d.quantity_received,
+                'unit_cost': d.unit_cost,
+                'batch_number': d.batch_number,
+                'expiration_date': d.expiration_date.isoformat() if d.expiration_date else None,
+            })
+        data['items'] = items
+    return data
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/suppliers', methods=['GET'])
+@token_required
+def mobile_suppliers(company_id, current_user):
+    """List active suppliers for a company."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    search = request.args.get('q', '').strip()
+
+    query = Supplier.query.filter_by(company_id=company_id, active=True)
+
+    if search:
+        query = query.filter(
+            db.or_(
+                Supplier.business_name.ilike(f'%{search}%'),
+                Supplier.rfc.ilike(f'%{search}%'),
+                Supplier.commercial_name.ilike(f'%{search}%'),
+            )
+        )
+
+    suppliers = query.order_by(Supplier.business_name).all()
+
+    result = []
+    for s in suppliers:
+        result.append({
+            'id': s.id,
+            'rfc': s.rfc,
+            'business_name': s.business_name,
+            'commercial_name': s.commercial_name,
+            'contact_name': s.contact_name,
+            'email': s.email,
+            'phone': s.phone,
+            'is_medication_supplier': s.is_medication_supplier,
+            'sanitary_registration': s.sanitary_registration,
+        })
+
+    return jsonify({'suppliers': result})
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders', methods=['GET'])
+@token_required
+def mobile_list_purchase_orders(company_id, current_user):
+    """List purchase orders for a company."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    status_filter = request.args.get('status')
+
+    query = PurchaseOrder.query.filter_by(company_id=company_id)
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+
+    orders = query.order_by(PurchaseOrder.created_at.desc()).limit(50).all()
+
+    result = []
+    for o in orders:
+        result.append(_serialize_purchase_order(o, include_items=False))
+
+    return jsonify({'orders': result})
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>', methods=['GET'])
+@token_required
+def mobile_get_purchase_order(company_id, order_id, current_user):
+    """Get purchase order detail with all items."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    return jsonify(_serialize_purchase_order(order))
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders', methods=['POST'])
+@token_required
+def mobile_create_purchase_order(company_id, current_user):
+    """Create a new purchase order in DRAFT status."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    supplier_id = data.get('supplier_id')
+    if not supplier_id:
+        return jsonify({'error': 'supplier_id es requerido'}), 400
+
+    supplier = Supplier.query.filter_by(id=supplier_id, company_id=company_id, active=True).first()
+    if not supplier:
+        return jsonify({'error': 'Proveedor no encontrado'}), 404
+
+    order = PurchaseOrder(
+        company_id=company_id,
+        supplier_id=supplier_id,
+        status='DRAFT',
+        notes=data.get('notes'),
+    )
+    db.session.add(order)
+    db.session.commit()
+
+    logger.info(f"Mobile: user '{current_user.username}' created PurchaseOrder #{order.id}")
+    return jsonify(_serialize_purchase_order(order)), 201
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/add-item', methods=['POST'])
+@token_required
+def mobile_add_purchase_order_item(company_id, order_id, current_user):
+    """Add a product to a purchase order."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status not in ['DRAFT', 'SENT']:
+        return jsonify({'error': 'Esta orden no se puede editar'}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    product_id = data.get('product_id')
+    quantity = data.get('quantity', 1)
+    unit_cost = data.get('unit_cost', 0)
+
+    if not product_id or quantity < 1:
+        return jsonify({'error': 'product_id y quantity son requeridos'}), 400
+
+    product = Product.query.filter_by(id=product_id, company_id=company_id, active=True).first()
+    if not product:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    detail = PurchaseOrderDetail(
+        order_id=order.id,
+        product_id=product_id,
+        quantity_requested=quantity,
+        unit_cost=unit_cost,
+    )
+    db.session.add(detail)
+
+    # Recalculate estimated total
+    order.estimated_total = sum(d.quantity_requested * d.unit_cost for d in order.details) + (quantity * unit_cost)
+    db.session.commit()
+
+    return jsonify(_serialize_purchase_order(order))
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/remove-item', methods=['POST'])
+@token_required
+def mobile_remove_purchase_order_item(company_id, order_id, current_user):
+    """Remove an item from a purchase order."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status not in ['DRAFT', 'SENT']:
+        return jsonify({'error': 'Esta orden no se puede editar'}), 400
+
+    data = request.get_json(silent=True)
+    detail_id = data.get('detail_id') if data else None
+    if not detail_id:
+        return jsonify({'error': 'detail_id es requerido'}), 400
+
+    detail = db.session.get(PurchaseOrderDetail, detail_id)
+    if not detail or detail.order_id != order.id:
+        return jsonify({'error': 'Item no encontrado en esta orden'}), 404
+
+    db.session.delete(detail)
+
+    # Recalculate estimated total
+    order.estimated_total = sum(d.quantity_requested * d.unit_cost for d in order.details if d.id != detail_id)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/send', methods=['POST'])
+@token_required
+def mobile_send_purchase_order(company_id, order_id, current_user):
+    """Send a purchase order (DRAFT -> SENT)."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status != 'DRAFT':
+        return jsonify({'error': 'Solo se pueden enviar ordenes en borrador'}), 400
+
+    if not order.details:
+        return jsonify({'error': 'La orden no tiene productos'}), 400
+
+    order.status = 'SENT'
+    order.sent_at = now_mexico()
+    db.session.commit()
+
+    logger.info(f"Mobile: PurchaseOrder #{order.id} SENT by '{current_user.username}'")
+    return jsonify(_serialize_purchase_order(order))
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/review', methods=['POST'])
+@token_required
+def mobile_review_purchase_order(company_id, order_id, current_user):
+    """Review/receive a purchase order - record received quantities, batches, expiration dates."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status not in ['SENT', 'IN_REVIEW']:
+        return jsonify({'error': 'Esta orden no puede ser revisada en este momento'}), 400
+
+    data = request.get_json(silent=True)
+    if not data or 'items' not in data:
+        return jsonify({'error': 'Se requiere JSON con items'}), 400
+
+    items_data = {item['detail_id']: item for item in data['items']}
+
+    for detail in order.details:
+        if detail.id in items_data:
+            item = items_data[detail.id]
+            detail.quantity_received = item.get('quantity_received', 0)
+            detail.batch_number = item.get('batch_number') or None
+            exp_str = item.get('expiration_date')
+            if exp_str:
+                detail.expiration_date = datetime.strptime(exp_str, '%Y-%m-%d').date()
+            else:
+                detail.expiration_date = None
+
+    order.status = 'IN_REVIEW'
+    order.received_at = now_mexico()
+    db.session.commit()
+
+    logger.info(f"Mobile: PurchaseOrder #{order.id} IN_REVIEW by '{current_user.username}'")
+    return jsonify(_serialize_purchase_order(order))
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/complete', methods=['POST'])
+@token_required
+def mobile_complete_purchase_order(company_id, order_id, current_user):
+    """Complete a purchase order: create batches, transactions, update stock."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status != 'IN_REVIEW':
+        return jsonify({'error': 'Esta orden no puede ser completada en este momento'}), 400
+
+    for detail in order.details:
+        if detail.quantity_received > 0:
+            product = detail.product
+            previous_stock = product.current_stock
+            batch_id = None
+
+            # Create batch if batch info is present
+            if detail.batch_number:
+                batch = ProductBatch(
+                    product_id=product.id,
+                    batch_number=detail.batch_number,
+                    expiration_date=detail.expiration_date,
+                    initial_stock=detail.quantity_received,
+                    current_stock=detail.quantity_received,
+                    acquisition_date=now_mexico().date(),
+                )
+                db.session.add(batch)
+                db.session.flush()
+                batch_id = batch.id
+
+            # Create inventory transaction
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                batch_id=batch_id,
+                type='IN',
+                quantity=detail.quantity_received,
+                previous_stock=previous_stock,
+                new_stock=previous_stock + detail.quantity_received,
+                reference=f'Orden Compra #{order.id}',
+                notes=f'Recepcion de orden de compra' + (f' - Lote: {detail.batch_number}' if detail.batch_number else ''),
+            )
+            db.session.add(transaction)
+
+            # Update product stock
+            product.current_stock += detail.quantity_received
+
+    order.status = 'COMPLETED'
+    order.completed_at = now_mexico()
+    db.session.commit()
+
+    logger.info(
+        f"Mobile: PurchaseOrder #{order.id} COMPLETED by '{current_user.username}' "
+        f"({len(order.details)} items)"
+    )
+    return jsonify({'success': True, 'order': _serialize_purchase_order(order)})
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/delete', methods=['POST'])
+@token_required
+def mobile_delete_purchase_order(company_id, order_id, current_user):
+    """Delete a draft purchase order."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status != 'DRAFT':
+        return jsonify({'error': 'Solo se pueden eliminar ordenes en borrador'}), 400
+
+    for detail in order.details:
+        db.session.delete(detail)
+    db.session.delete(order)
+    db.session.commit()
+
+    logger.info(f"Mobile: PurchaseOrder #{order_id} DELETED by '{current_user.username}'")
+    return jsonify({'success': True})
