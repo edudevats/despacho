@@ -1154,3 +1154,278 @@ def mobile_delete_purchase_order(company_id, order_id, current_user):
 
     logger.info(f"Mobile: PurchaseOrder #{order_id} DELETED by '{current_user.username}'")
     return jsonify({'success': True})
+
+
+# ==================== MEDICINE CATALOG ENDPOINTS ====================
+
+
+@mobile_api_bp.route('/catalog/lookup-barcode', methods=['POST'])
+@token_required
+def catalog_lookup_barcode(current_user):
+    """
+    Hybrid barcode lookup: searches local catalog first, then external API.
+    
+    This is the main endpoint for the mobile app to scan a barcode and
+    identify a medicine. It will:
+    1. Search in local Product catalog by SKU
+    2. If not found, query external barcode API (UPCitemdb, etc.)
+    3. Return product information with suggestion to add to catalog
+    
+    Input: {"barcode": "7501234567890", "company_id": 1}
+    """
+    from services.barcode_service import get_barcode_service
+    
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+    
+    barcode = (data.get('barcode') or '').strip()
+    company_id = data.get('company_id')
+    
+    if not barcode:
+        return jsonify({'error': 'Código de barras es requerido'}), 400
+    
+    if not company_id or not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+    
+    # 1. Search in local catalog first
+    product = Product.query.filter(
+        Product.company_id == company_id,
+        Product.active == True,
+        db.func.lower(Product.sku) == barcode.lower()
+    ).first()
+    
+    if product:
+        # Found in local catalog
+        logger.info(f"Catalog: barcode '{barcode}' found in local catalog (product #{product.id})")
+        return jsonify({
+            'found': True,
+            'source': 'local',
+            'product': {
+                'id': product.id,
+                'sku': product.sku,
+                'name': product.name,
+                'description': product.description,
+                'active_ingredient': product.active_ingredient,
+                'presentation': product.presentation,
+                'therapeutic_group': product.therapeutic_group,
+                'is_controlled': product.is_controlled,
+                'sanitary_registration': product.sanitary_registration,
+                'laboratory': product.laboratory.name if product.laboratory else None,
+                'current_stock': product.current_stock,
+                'cost_price': product.cost_price,
+                'selling_price': product.calculated_selling_price,
+            },
+            'in_catalog': True,
+        })
+    
+    # 2. Not in local catalog, try external API
+    barcode_service = get_barcode_service()
+    api_data = barcode_service.lookup(barcode)
+    
+    if api_data:
+        # Found in external API
+        logger.info(
+            f"Catalog: barcode '{barcode}' found in external API ({api_data.get('source')})"
+        )
+        return jsonify({
+            'found': True,
+            'source': 'external',
+            'product': {
+                'barcode': api_data.get('barcode'),
+                'name': api_data.get('name'),
+                'description': api_data.get('description'),
+                'brand': api_data.get('brand'),
+                'manufacturer': api_data.get('manufacturer'),
+                'category': api_data.get('category'),
+                'images': api_data.get('images', []),
+            },
+            'in_catalog': False,
+            'suggestion': 'Este producto no está en tu catálogo. ¿Deseas agregarlo?',
+        })
+    
+    # 3. Not found anywhere
+    logger.info(f"Catalog: barcode '{barcode}' not found in local or external sources")
+    return jsonify({
+        'found': False,
+        'source': None,
+        'error': 'Producto no encontrado',
+        'suggestion': 'Puedes agregar este medicamento manualmente al catálogo',
+    }), 404
+
+
+@mobile_api_bp.route('/catalog/products', methods=['POST'])
+@token_required
+def catalog_add_product(current_user):
+    """
+    Add a new product to the catalog from mobile app.
+    
+    Supports adding either:
+    - From external API data (after barcode lookup)
+    - Manual entry from the app
+    
+    Input: {
+        "company_id": 1,
+        "sku": "7501234567890",
+        "name": "Paracetamol 500mg",
+        "description": "...",
+        "active_ingredient": "Paracetamol",
+        "presentation": "Tabletas",
+        "laboratory_name": "Genomma Lab",  // optional, will create if not exists
+        "is_controlled": false,
+        "cost_price": 25.50,
+        "selling_price": 35.00,
+        "min_stock_level": 20
+    }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+    
+    company_id = data.get('company_id')
+    if not company_id or not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+    
+    # Validate required fields
+    sku = (data.get('sku') or '').strip()
+    name = (data.get('name') or '').strip()
+    
+    if not sku or not name:
+        return jsonify({'error': 'SKU y nombre son requeridos'}), 400
+    
+    # Check if product with this SKU already exists
+    existing = Product.query.filter_by(
+        company_id=company_id,
+        sku=sku
+    ).first()
+    
+    if existing:
+        return jsonify({
+            'error': 'Ya existe un producto con este código de barras',
+            'existing_product': {
+                'id': existing.id,
+                'name': existing.name,
+                'sku': existing.sku,
+            }
+        }), 409
+    
+    # Handle laboratory (create if doesn't exist)
+    laboratory_id = None
+    laboratory_name = data.get('laboratory_name', '').strip()
+    if laboratory_name:
+        from models import Laboratory
+        lab = Laboratory.query.filter_by(
+            company_id=company_id,
+            name=laboratory_name
+        ).first()
+        
+        if not lab:
+            lab = Laboratory(
+                company_id=company_id,
+                name=laboratory_name
+            )
+            db.session.add(lab)
+            db.session.flush()  # Get the ID
+        
+        laboratory_id = lab.id
+    
+    # Create product
+    product = Product(
+        company_id=company_id,
+        sku=sku,
+        name=name,
+        description=data.get('description', ''),
+        active_ingredient=data.get('active_ingredient'),
+        presentation=data.get('presentation'),
+        therapeutic_group=data.get('therapeutic_group'),
+        is_controlled=data.get('is_controlled', False),
+        sanitary_registration=data.get('sanitary_registration'),
+        laboratory_id=laboratory_id,
+        cost_price=float(data.get('cost_price', 0)),
+        selling_price=float(data.get('selling_price', 0)),
+        profit_margin=float(data.get('profit_margin', 0)),
+        min_stock_level=int(data.get('min_stock_level', 0)),
+        current_stock=0,  # Start with 0 stock
+        unit_measure=data.get('unit_measure', 'PZA'),
+    )
+    
+    db.session.add(product)
+    db.session.commit()
+    
+    logger.info(
+        f"Catalog: user '{current_user.username}' added product '{name}' "
+        f"(SKU: {sku}) to company #{company_id}"
+    )
+    
+    return jsonify({
+        'success': True,
+        'product': {
+            'id': product.id,
+            'sku': product.sku,
+            'name': product.name,
+            'description': product.description,
+            'active_ingredient': product.active_ingredient,
+            'presentation': product.presentation,
+            'is_controlled': product.is_controlled,
+            'laboratory': product.laboratory.name if product.laboratory else None,
+        },
+        'message': 'Producto agregado exitosamente al catálogo'
+    }), 201
+
+
+@mobile_api_bp.route('/catalog/products/<int:product_id>', methods=['PUT'])
+@token_required
+def catalog_update_product(product_id, current_user):
+    """
+    Update an existing product in the catalog.
+    
+    Useful for updating prices, stock levels, or other product information.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+    
+    product = db.session.get(Product, product_id)
+    if not product:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+    
+    if not current_user.can_access_company(product.company_id):
+        return jsonify({'error': 'Sin acceso'}), 403
+    
+    # Update allowed fields
+    if 'name' in data:
+        product.name = data['name'].strip()
+    if 'description' in data:
+        product.description = data['description']
+    if 'active_ingredient' in data:
+        product.active_ingredient = data['active_ingredient']
+    if 'presentation' in data:
+        product.presentation = data['presentation']
+    if 'therapeutic_group' in data:
+        product.therapeutic_group = data['therapeutic_group']
+    if 'is_controlled' in data:
+        product.is_controlled = data['is_controlled']
+    if 'sanitary_registration' in data:
+        product.sanitary_registration = data['sanitary_registration']
+    if 'cost_price' in data:
+        product.cost_price = float(data['cost_price'])
+    if 'selling_price' in data:
+        product.selling_price = float(data['selling_price'])
+    if 'profit_margin' in data:
+        product.profit_margin = float(data['profit_margin'])
+    if 'min_stock_level' in data:
+        product.min_stock_level = int(data['min_stock_level'])
+    
+    db.session.commit()
+    
+    logger.info(f"Catalog: user '{current_user.username}' updated product #{product_id}")
+    
+    return jsonify({
+        'success': True,
+        'product': {
+            'id': product.id,
+            'name': product.name,
+            'sku': product.sku,
+        },
+        'message': 'Producto actualizado exitosamente'
+    })

@@ -52,6 +52,7 @@
                                     <td class="text-end fw-bold">${{ (detail.quantity_requested * detail.unit_cost)|format_currency }}</td>
                                     <td class="text-center">
                                         <form method="POST" style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="action" value="remove_product">
                                             <input type="hidden" name="detail_id" value="{{ detail.id }}">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
@@ -90,6 +91,7 @@
                 </a>
                 {% if order.details %}
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="send_order">
                     <button type="submit" class="btn btn-success">
                         <i class="fas fa-paper-plane"></i> Enviar Orden
@@ -107,6 +109,7 @@
                 </div>
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="add_product">
 
                         <div class="mb-3">

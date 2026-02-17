@@ -71,6 +71,12 @@ class Config:
     # JWT for mobile API
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or SECRET_KEY
     JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS') or 72)
+    
+    # Barcode Lookup API (optional - for external product catalog)
+    BARCODE_API_PROVIDER = os.environ.get('BARCODE_API_PROVIDER') or 'upcitemdb'  # upcitemdb, ean-search
+    BARCODE_API_URL = os.environ.get('BARCODE_API_URL')
+    BARCODE_API_KEY = os.environ.get('BARCODE_API_KEY')
+
 
 
 class DevelopmentConfig(Config):

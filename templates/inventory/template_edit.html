@@ -87,6 +87,7 @@
                                     <td class="text-end fw-bold">${{ subtotal|format_currency }}</td>
                                     <td class="text-center">
                                         <form method="POST" style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="action" value="remove_item">
                                             <input type="hidden" name="item_id" value="{{ item.id }}">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
@@ -139,6 +140,7 @@
                 </div>
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="add_product">
 
                         <div class="mb-3">
@@ -172,6 +174,7 @@
                 </div>
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="add_service">
 
                         <div class="mb-3">
