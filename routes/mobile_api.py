@@ -1072,6 +1072,191 @@ def mobile_review_purchase_order(company_id, order_id, current_user):
     return jsonify(_serialize_purchase_order(order))
 
 
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/scan-receive', methods=['POST'])
+@token_required
+def mobile_scan_receive_purchase_order(company_id, order_id, current_user):
+    """Scan a barcode to receive a product into a purchase order."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status not in ['SENT', 'IN_REVIEW']:
+        return jsonify({'error': 'Esta orden no puede recibir productos en este momento', 'allowed': False}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    barcode = (data.get('barcode') or '').strip()
+    if not barcode:
+        return jsonify({'error': 'barcode es requerido'}), 400
+
+    batch_number = (data.get('batch_number') or '').strip() or None
+    expiration_date_str = data.get('expiration_date')
+    expiration_date = None
+    if expiration_date_str:
+        try:
+            expiration_date = datetime.strptime(expiration_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Formato de fecha invalido, usar YYYY-MM-DD'}), 400
+
+    # Find product by SKU (barcode)
+    product = Product.query.filter(
+        Product.company_id == order.company_id,
+        Product.active == True,
+        db.func.lower(Product.sku) == barcode.lower()
+    ).first()
+
+    if not product:
+        return jsonify({
+            'allowed': False,
+            'error': f'Producto no encontrado para código: {barcode}',
+            'alert': 'NO_ENCONTRADO',
+        }), 404
+
+    # Find existing detail for this product in the order
+    detail = PurchaseOrderDetail.query.filter_by(
+        order_id=order.id,
+        product_id=product.id,
+    ).first()
+
+    if detail:
+        detail.quantity_received = (detail.quantity_received or 0) + 1
+        if batch_number:
+            detail.batch_number = batch_number
+        if expiration_date:
+            detail.expiration_date = expiration_date
+    else:
+        # Product not in original order - add as unexpected item
+        detail = PurchaseOrderDetail(
+            order_id=order.id,
+            product_id=product.id,
+            quantity_requested=0,
+            quantity_received=1,
+            unit_cost=product.cost_price or 0,
+            batch_number=batch_number,
+            expiration_date=expiration_date,
+        )
+        db.session.add(detail)
+
+    # Transition SENT → IN_REVIEW on first scan
+    if order.status == 'SENT':
+        order.status = 'IN_REVIEW'
+        order.received_at = now_mexico()
+
+    db.session.commit()
+    db.session.refresh(detail)
+
+    # Determine item status
+    if detail.quantity_requested == 0:
+        item_status = 'unexpected'
+    elif detail.quantity_received == detail.quantity_requested:
+        item_status = 'complete'
+    elif detail.quantity_received < detail.quantity_requested:
+        item_status = 'partial'
+    else:
+        item_status = 'excess'
+
+    # Calculate order totals
+    total_ordered = sum(d.quantity_requested for d in order.details)
+    total_received = sum(d.quantity_received or 0 for d in order.details)
+    items_complete = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) == d.quantity_requested)
+    items_partial = sum(1 for d in order.details if d.quantity_requested > 0 and 0 < (d.quantity_received or 0) < d.quantity_requested)
+    items_excess = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) > d.quantity_requested)
+    items_missing = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) == 0)
+
+    logger.info(
+        f"Mobile: PO #{order.id} scan-receive '{barcode}' → {product.name} "
+        f"received={detail.quantity_received}/{detail.quantity_requested} "
+        f"user={current_user.username}"
+    )
+
+    return jsonify({
+        'allowed': True,
+        'product': {
+            'id': product.id,
+            'name': product.name,
+            'sku': product.sku,
+            'active_ingredient': product.active_ingredient,
+            'presentation': product.presentation,
+            'is_controlled': product.is_controlled,
+        },
+        'detail_id': detail.id,
+        'quantity_received': detail.quantity_received,
+        'quantity_requested': detail.quantity_requested,
+        'item_status': item_status,
+        'batch_number': detail.batch_number,
+        'expiration_date': detail.expiration_date.isoformat() if detail.expiration_date else None,
+        'order_totals': {
+            'total_items_ordered': total_ordered,
+            'total_items_received': total_received,
+            'items_complete': items_complete,
+            'items_partial': items_partial,
+            'items_excess': items_excess,
+            'items_missing': items_missing,
+        },
+    })
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/remove-received', methods=['POST'])
+@token_required
+def mobile_remove_received_item(company_id, order_id, current_user):
+    """Remove/decrement a received item from a purchase order during review."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status != 'IN_REVIEW':
+        return jsonify({'error': 'Solo se pueden modificar ordenes en revision'}), 400
+
+    data = request.get_json(silent=True)
+    if not data or 'detail_id' not in data:
+        return jsonify({'error': 'detail_id es requerido'}), 400
+
+    detail = db.session.get(PurchaseOrderDetail, data['detail_id'])
+    if not detail or detail.order_id != order.id:
+        return jsonify({'error': 'Item no encontrado en esta orden'}), 404
+
+    if (detail.quantity_received or 0) <= 0:
+        return jsonify({'error': 'Este item no tiene unidades recibidas'}), 400
+
+    if detail.quantity_received == 1 and detail.quantity_requested == 0:
+        # Unexpected item with only 1 received - remove entirely
+        db.session.delete(detail)
+    else:
+        detail.quantity_received = (detail.quantity_received or 1) - 1
+
+    db.session.commit()
+
+    # Recalculate order totals
+    total_ordered = sum(d.quantity_requested for d in order.details)
+    total_received = sum(d.quantity_received or 0 for d in order.details)
+    items_complete = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) == d.quantity_requested)
+    items_partial = sum(1 for d in order.details if d.quantity_requested > 0 and 0 < (d.quantity_received or 0) < d.quantity_requested)
+    items_excess = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) > d.quantity_requested)
+    items_missing = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) == 0)
+
+    logger.info(f"Mobile: PO #{order.id} remove-received detail={data['detail_id']} user={current_user.username}")
+
+    return jsonify({
+        'success': True,
+        'order_totals': {
+            'total_items_ordered': total_ordered,
+            'total_items_received': total_received,
+            'items_complete': items_complete,
+            'items_partial': items_partial,
+            'items_excess': items_excess,
+            'items_missing': items_missing,
+        },
+    })
+
+
 @mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/complete', methods=['POST'])
 @token_required
 def mobile_complete_purchase_order(company_id, order_id, current_user):
@@ -1126,11 +1311,40 @@ def mobile_complete_purchase_order(company_id, order_id, current_user):
     order.completed_at = now_mexico()
     db.session.commit()
 
+    # Build completion summary
+    items_summary = []
+    is_complete = True
+    for detail in order.details:
+        qty_recv = detail.quantity_received or 0
+        qty_req = detail.quantity_requested or 0
+        if qty_req > 0 and qty_recv == qty_req:
+            item_status = 'complete'
+        elif qty_req > 0 and qty_recv == 0:
+            item_status = 'missing'
+            is_complete = False
+        elif qty_req > 0 and qty_recv < qty_req:
+            item_status = 'partial'
+            is_complete = False
+        else:
+            item_status = 'excess'
+        items_summary.append({
+            'product_name': detail.product.name if detail.product else None,
+            'product_sku': detail.product.sku if detail.product else None,
+            'quantity_requested': qty_req,
+            'quantity_received': qty_recv,
+            'status': item_status,
+        })
+
     logger.info(
         f"Mobile: PurchaseOrder #{order.id} COMPLETED by '{current_user.username}' "
-        f"({len(order.details)} items)"
+        f"({len(order.details)} items, complete={is_complete})"
     )
-    return jsonify({'success': True, 'order': _serialize_purchase_order(order)})
+    return jsonify({
+        'success': True,
+        'order': _serialize_purchase_order(order),
+        'is_complete': is_complete,
+        'items_summary': items_summary,
+    })
 
 
 @mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/delete', methods=['POST'])
