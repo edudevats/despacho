@@ -270,23 +270,58 @@ def mobile_products(company_id, current_user):
         return jsonify({'error': 'Sin acceso a esta empresa'}), 403
 
     search = request.args.get('q', '').strip()
+    search_field = request.args.get('search_field', '').strip()  # name, sku, active_ingredient
     low_stock = request.args.get('low_stock', type=int)  # 1 = only low stock
+    expiring_days = request.args.get('expiring_days', type=int)  # filter by expiration
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 200)  # Cap at 200
 
     query = Product.query.filter_by(company_id=company_id, active=True)
 
     if search:
-        query = query.filter(
-            db.or_(
-                Product.name.ilike(f'%{search}%'),
-                Product.sku.ilike(f'%{search}%'),
-                Product.active_ingredient.ilike(f'%{search}%'),
+        if search_field == 'sku':
+            query = query.filter(Product.sku.ilike(f'%{search}%'))
+        elif search_field == 'active_ingredient':
+            query = query.filter(Product.active_ingredient.ilike(f'%{search}%'))
+        elif search_field == 'name':
+            query = query.filter(Product.name.ilike(f'%{search}%'))
+        else:
+            query = query.filter(
+                db.or_(
+                    Product.name.ilike(f'%{search}%'),
+                    Product.sku.ilike(f'%{search}%'),
+                    Product.active_ingredient.ilike(f'%{search}%'),
+                )
             )
-        )
 
     if low_stock:
         query = query.filter(Product.current_stock <= Product.min_stock_level)
 
-    products = query.order_by(Product.name).all()
+    if expiring_days:
+        from sqlalchemy import exists
+        today = now_mexico().date()
+        cutoff = today + timedelta(days=expiring_days)
+        query = query.filter(
+            Product.id.in_(
+                db.session.query(ProductBatch.product_id).filter(
+                    ProductBatch.is_active == True,
+                    ProductBatch.current_stock > 0,
+                    ProductBatch.expiration_date != None,
+                    ProductBatch.expiration_date <= cutoff,
+                )
+            )
+        )
+
+    query = query.order_by(Product.name)
+
+    # Paginated or full response
+    if page is not None:
+        total = query.count()
+        products = query.offset((page - 1) * per_page).limit(per_page).all()
+    else:
+        products = query.all()
+        total = len(products)
 
     result = []
     for p in products:
@@ -306,7 +341,15 @@ def mobile_products(company_id, current_user):
             'is_controlled': p.is_controlled,
         })
 
-    return jsonify({'products': result, 'count': len(result)})
+    response = {'products': result, 'count': len(result)}
+    if page is not None:
+        response['pagination'] = {
+            'page': page,
+            'per_page': per_page,
+            'total': total,
+            'pages': (total + per_page - 1) // per_page,
+        }
+    return jsonify(response)
 
 
 @mobile_api_bp.route('/companies/<int:company_id>/products/<int:product_id>', methods=['GET'])
@@ -358,6 +401,428 @@ def mobile_product_detail(company_id, product_id, current_user):
             'preferred_supplier': product.preferred_supplier.business_name if product.preferred_supplier else None,
         },
         'batches': batch_list,
+    })
+
+
+# ==================== TRANSACTION HISTORY ENDPOINTS ====================
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/products/<int:product_id>/transactions', methods=['GET'])
+@token_required
+def get_product_transactions(company_id, product_id, current_user):
+    """Paginated transaction history for a specific product."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    product = db.session.get(Product, product_id)
+    if not product or product.company_id != company_id:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    # Filters
+    tx_type = request.args.get('type')  # IN, OUT, ADJUSTMENT
+    date_from = request.args.get('date_from')  # YYYY-MM-DD
+    date_to = request.args.get('date_to')  # YYYY-MM-DD
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 30, type=int)
+    per_page = min(per_page, 200)
+
+    query = InventoryTransaction.query.filter_by(product_id=product_id)
+
+    if tx_type:
+        query = query.filter_by(type=tx_type)
+
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(InventoryTransaction.date >= dt_from)
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            query = query.filter(InventoryTransaction.date <= dt_to)
+        except ValueError:
+            pass
+
+    query = query.order_by(InventoryTransaction.date.desc())
+
+    total = query.count()
+    transactions = query.offset((page - 1) * per_page).limit(per_page).all()
+
+    result = []
+    for tx in transactions:
+        batch_info = None
+        if tx.batch:
+            batch_info = {
+                'batch_number': tx.batch.batch_number,
+                'expiration_date': tx.batch.expiration_date.isoformat() if tx.batch.expiration_date else None,
+            }
+        result.append({
+            'id': tx.id,
+            'type': tx.type,
+            'quantity': tx.quantity,
+            'previous_stock': tx.previous_stock,
+            'new_stock': tx.new_stock,
+            'date': tx.date.isoformat() if tx.date else None,
+            'reference': tx.reference,
+            'notes': tx.notes,
+            'batch': batch_info,
+        })
+
+    return jsonify({
+        'product': {
+            'id': product.id,
+            'name': product.name,
+            'sku': product.sku,
+            'current_stock': product.current_stock,
+        },
+        'transactions': result,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': total,
+            'pages': (total + per_page - 1) // per_page,
+        },
+    })
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/transactions/recent', methods=['GET'])
+@token_required
+def get_recent_transactions(company_id, current_user):
+    """Recent transactions across all products for this company."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    limit = request.args.get('limit', 20, type=int)
+    limit = min(limit, 100)
+
+    transactions = (
+        InventoryTransaction.query
+        .join(Product, InventoryTransaction.product_id == Product.id)
+        .filter(Product.company_id == company_id)
+        .order_by(InventoryTransaction.date.desc())
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for tx in transactions:
+        batch_info = None
+        if tx.batch:
+            batch_info = {
+                'batch_number': tx.batch.batch_number,
+                'expiration_date': tx.batch.expiration_date.isoformat() if tx.batch.expiration_date else None,
+            }
+        result.append({
+            'id': tx.id,
+            'product_id': tx.product_id,
+            'product_name': tx.product.name if tx.product else None,
+            'product_sku': tx.product.sku if tx.product else None,
+            'type': tx.type,
+            'quantity': tx.quantity,
+            'previous_stock': tx.previous_stock,
+            'new_stock': tx.new_stock,
+            'date': tx.date.isoformat() if tx.date else None,
+            'reference': tx.reference,
+            'notes': tx.notes,
+            'batch': batch_info,
+        })
+
+    return jsonify({'transactions': result})
+
+
+# ==================== INVENTORY STATS ENDPOINTS ====================
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/inventory-stats', methods=['GET'])
+@token_required
+def get_inventory_stats(company_id, current_user):
+    """Get inventory statistics for the dashboard."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    from datetime import date, timedelta as td
+
+    today = date.today()
+    ninety_days = today + td(days=90)
+
+    # Active products
+    active_products = Product.query.filter_by(company_id=company_id, active=True)
+    total_products = active_products.count()
+
+    # Inventory value and low stock
+    products = active_products.all()
+    inventory_value = 0.0
+    low_stock_count = 0
+    low_stock_products = []
+
+    for p in products:
+        inventory_value += (p.current_stock or 0) * (p.cost_price or 0)
+        if p.min_stock_level and p.min_stock_level > 0 and (p.current_stock or 0) <= p.min_stock_level:
+            low_stock_count += 1
+            low_stock_products.append({
+                'id': p.id,
+                'name': p.name,
+                'sku': p.sku,
+                'current_stock': p.current_stock,
+                'min_stock_level': p.min_stock_level,
+            })
+
+    # Sort by most critical (lowest ratio of current/min)
+    low_stock_products.sort(key=lambda x: (x['current_stock'] / x['min_stock_level']) if x['min_stock_level'] > 0 else 999)
+    low_stock_products = low_stock_products[:10]
+
+    # Expiring batches
+    expiring_batches = []
+    expired_count = 0
+
+    active_batches = (
+        ProductBatch.query
+        .join(Product, ProductBatch.product_id == Product.id)
+        .filter(Product.company_id == company_id, Product.active == True,
+                ProductBatch.is_active == True, ProductBatch.current_stock > 0)
+        .all()
+    )
+
+    for b in active_batches:
+        if b.expiration_date:
+            days_remaining = (b.expiration_date - today).days
+            if days_remaining < 0:
+                expired_count += 1
+                expiring_batches.append({
+                    'product_name': b.product.name if b.product else None,
+                    'batch_number': b.batch_number,
+                    'expiration_date': b.expiration_date.isoformat(),
+                    'current_stock': b.current_stock,
+                    'days_remaining': days_remaining,
+                    'alert': 'EXPIRED',
+                })
+            elif b.expiration_date <= ninety_days:
+                expiring_batches.append({
+                    'product_name': b.product.name if b.product else None,
+                    'batch_number': b.batch_number,
+                    'expiration_date': b.expiration_date.isoformat(),
+                    'current_stock': b.current_stock,
+                    'days_remaining': days_remaining,
+                    'alert': 'CRITICAL' if days_remaining <= 30 else 'WARNING',
+                })
+
+    # Sort by days_remaining ascending (most urgent first)
+    expiring_batches.sort(key=lambda x: x['days_remaining'])
+    expiring_soon_count = len([b for b in expiring_batches if b['alert'] != 'EXPIRED'])
+
+    return jsonify({
+        'total_products': total_products,
+        'inventory_value': round(inventory_value, 2),
+        'low_stock_count': low_stock_count,
+        'expiring_soon_count': expiring_soon_count,
+        'expired_count': expired_count,
+        'low_stock_products': low_stock_products,
+        'expiring_batches': expiring_batches[:10],
+    })
+
+
+# ==================== PHYSICAL COUNT ENDPOINTS ====================
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/physical-count/snapshot', methods=['GET'])
+@token_required
+def get_physical_count_snapshot(company_id, current_user):
+    """Get a snapshot of all active products with current stock for physical counting."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    products = (
+        Product.query
+        .filter_by(company_id=company_id, active=True)
+        .order_by(Product.name)
+        .all()
+    )
+
+    result = []
+    for p in products:
+        result.append({
+            'id': p.id,
+            'sku': p.sku,
+            'name': p.name,
+            'expected_stock': p.current_stock,
+            'unit_measure': p.unit_measure,
+        })
+
+    return jsonify({
+        'snapshot_at': datetime.utcnow().isoformat(),
+        'products': result,
+    })
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/physical-count/apply', methods=['POST'])
+@token_required
+def apply_physical_count(company_id, current_user):
+    """Apply physical count adjustments."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    data = request.get_json() or {}
+    items = data.get('items', [])
+
+    if not items:
+        return jsonify({'error': 'No hay items para aplicar'}), 400
+
+    applied = []
+    skipped = []
+
+    for item in items:
+        product_id = item.get('product_id')
+        actual_stock = item.get('actual_stock')
+
+        if product_id is None or actual_stock is None:
+            skipped.append({'product_id': product_id, 'reason': 'Datos incompletos'})
+            continue
+
+        actual_stock = int(actual_stock)
+        if actual_stock < 0:
+            skipped.append({'product_id': product_id, 'reason': 'Stock negativo'})
+            continue
+
+        product = db.session.get(Product, product_id)
+        if not product or product.company_id != company_id or not product.active:
+            skipped.append({'product_id': product_id, 'reason': 'Producto no encontrado'})
+            continue
+
+        # Use REAL current stock (not snapshot) to avoid concurrency issues
+        previous_stock = product.current_stock
+        difference = actual_stock - previous_stock
+
+        if difference == 0:
+            skipped.append({
+                'product_id': product_id,
+                'product_name': product.name,
+                'reason': 'Sin diferencia',
+            })
+            continue
+
+        # Update stock
+        product.current_stock = actual_stock
+
+        # Create transaction
+        tx = InventoryTransaction(
+            product_id=product_id,
+            type='ADJUSTMENT',
+            quantity=abs(difference),
+            previous_stock=previous_stock,
+            new_stock=actual_stock,
+            reference='Conteo Fisico',
+            notes=f'Esperado: {previous_stock}, Contado: {actual_stock}, Dif: {difference:+d}',
+        )
+        db.session.add(tx)
+
+        applied.append({
+            'product_id': product_id,
+            'product_name': product.name,
+            'previous_stock': previous_stock,
+            'actual_stock': actual_stock,
+            'difference': difference,
+        })
+
+    db.session.commit()
+
+    return jsonify({
+        'applied': applied,
+        'applied_count': len(applied),
+        'skipped': skipped,
+        'skipped_count': len(skipped),
+    })
+
+
+# ==================== STOCK ADJUSTMENT ENDPOINTS ====================
+
+
+VALID_ADJUSTMENT_TYPES = {'MERMA', 'DAÑO', 'CADUCADO', 'CORRECCION', 'OTRO'}
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/adjustments', methods=['POST'])
+@token_required
+def create_adjustment(company_id, current_user):
+    """Create a stock adjustment for a product."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    data = request.get_json() or {}
+    product_id = data.get('product_id')
+    batch_id = data.get('batch_id')
+    adjustment_type = data.get('adjustment_type', '').upper()
+    quantity = data.get('quantity')  # positive = add, negative = remove
+    notes = data.get('notes', '')
+
+    if not product_id or quantity is None:
+        return jsonify({'error': 'product_id y quantity son requeridos'}), 400
+
+    if adjustment_type not in VALID_ADJUSTMENT_TYPES:
+        return jsonify({'error': f'Tipo invalido. Validos: {", ".join(sorted(VALID_ADJUSTMENT_TYPES))}'}), 400
+
+    quantity = int(quantity)
+    if quantity == 0:
+        return jsonify({'error': 'La cantidad no puede ser 0'}), 400
+
+    product = db.session.get(Product, product_id)
+    if not product or product.company_id != company_id or not product.active:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    previous_stock = product.current_stock
+    new_stock = previous_stock + quantity
+
+    if new_stock < 0:
+        return jsonify({
+            'error': f'Stock resultante seria negativo ({new_stock}). Stock actual: {previous_stock}',
+        }), 400
+
+    # Update batch stock if specified
+    batch = None
+    if batch_id:
+        batch = ProductBatch.query.filter_by(
+            id=batch_id, product_id=product_id,
+        ).first()
+        if batch:
+            new_batch_stock = batch.current_stock + quantity
+            if new_batch_stock < 0:
+                return jsonify({
+                    'error': f'Stock del lote seria negativo. Stock actual del lote: {batch.current_stock}',
+                }), 400
+            batch.current_stock = new_batch_stock
+            if batch.current_stock == 0:
+                batch.is_active = False
+
+    # Update product stock
+    product.current_stock = new_stock
+
+    # Create transaction record
+    ref_label = f'Ajuste: {adjustment_type}'
+    if notes:
+        ref_label = f'{ref_label} - {notes}'
+
+    tx = InventoryTransaction(
+        product_id=product_id,
+        batch_id=batch_id if batch else None,
+        type='ADJUSTMENT',
+        quantity=abs(quantity),
+        previous_stock=previous_stock,
+        new_stock=new_stock,
+        reference=ref_label,
+        notes=notes,
+    )
+    db.session.add(tx)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'transaction_id': tx.id,
+        'product_id': product.id,
+        'product_name': product.name,
+        'previous_stock': previous_stock,
+        'new_stock': new_stock,
+        'adjustment_type': adjustment_type,
+        'quantity': quantity,
     })
 
 
@@ -436,12 +901,22 @@ def pos_list_exit_orders(current_user):
         return jsonify({'error': 'Sin acceso a esta empresa'}), 403
 
     status_filter = request.args.get('status')  # DRAFT, COMPLETED, or omit for all
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 200)
 
     query = ExitOrder.query.filter_by(company_id=company_id)
     if status_filter:
         query = query.filter_by(status=status_filter)
 
-    orders = query.order_by(ExitOrder.created_at.desc()).limit(50).all()
+    query = query.order_by(ExitOrder.created_at.desc())
+
+    if page is not None:
+        total = query.count()
+        orders = query.offset((page - 1) * per_page).limit(per_page).all()
+    else:
+        orders = query.limit(50).all()
+        total = len(orders)
 
     result = []
     for o in orders:
@@ -456,7 +931,13 @@ def pos_list_exit_orders(current_user):
             'created_by': o.created_by.username if o.created_by else None,
         })
 
-    return jsonify({'orders': result})
+    response = {'orders': result}
+    if page is not None:
+        response['pagination'] = {
+            'page': page, 'per_page': per_page,
+            'total': total, 'pages': (total + per_page - 1) // per_page,
+        }
+    return jsonify(response)
 
 
 @mobile_api_bp.route('/pos/exit-orders/<int:order_id>', methods=['GET'])
@@ -872,18 +1353,34 @@ def mobile_list_purchase_orders(company_id, current_user):
         return jsonify({'error': 'Sin acceso a esta empresa'}), 403
 
     status_filter = request.args.get('status')
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 200)
 
     query = PurchaseOrder.query.filter_by(company_id=company_id)
     if status_filter:
         query = query.filter_by(status=status_filter)
 
-    orders = query.order_by(PurchaseOrder.created_at.desc()).limit(50).all()
+    query = query.order_by(PurchaseOrder.created_at.desc())
+
+    if page is not None:
+        total = query.count()
+        orders = query.offset((page - 1) * per_page).limit(per_page).all()
+    else:
+        orders = query.limit(50).all()
+        total = len(orders)
 
     result = []
     for o in orders:
         result.append(_serialize_purchase_order(o, include_items=False))
 
-    return jsonify({'orders': result})
+    response = {'orders': result}
+    if page is not None:
+        response['pagination'] = {
+            'page': page, 'per_page': per_page,
+            'total': total, 'pages': (total + per_page - 1) // per_page,
+        }
+    return jsonify(response)
 
 
 @mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>', methods=['GET'])
@@ -1103,19 +1600,58 @@ def mobile_scan_receive_purchase_order(company_id, order_id, current_user):
         except ValueError:
             return jsonify({'error': 'Formato de fecha invalido, usar YYYY-MM-DD'}), 400
 
-    # Find product by SKU (barcode)
-    product = Product.query.filter(
-        Product.company_id == order.company_id,
-        Product.active == True,
-        db.func.lower(Product.sku) == barcode.lower()
-    ).first()
+    # Optional: product_id for barcode assignment mode
+    # When provided, assigns the scanned barcode as the product's SKU
+    assign_product_id = data.get('product_id')
+    barcode_assigned = False
 
-    if not product:
-        return jsonify({
-            'allowed': False,
-            'error': f'Producto no encontrado para código: {barcode}',
-            'alert': 'NO_ENCONTRADO',
-        }), 404
+    if assign_product_id:
+        # Barcode assignment mode: user selected a product and scanned its barcode
+        product = db.session.get(Product, assign_product_id)
+        if not product or product.company_id != order.company_id or not product.active:
+            return jsonify({
+                'allowed': False,
+                'error': 'Producto no encontrado',
+                'alert': 'NO_ENCONTRADO',
+            }), 404
+
+        # Check if barcode is already used by another product in this company
+        existing = Product.query.filter(
+            Product.company_id == order.company_id,
+            Product.active == True,
+            db.func.lower(Product.sku) == barcode.lower(),
+            Product.id != product.id,
+        ).first()
+        if existing:
+            return jsonify({
+                'allowed': False,
+                'error': f'Este código de barras ya está asignado a: {existing.name}',
+                'alert': 'SKU_DUPLICADO',
+            }), 409
+
+        # Assign the barcode as the product's SKU
+        old_sku = product.sku
+        product.sku = barcode
+        barcode_assigned = True
+        logger.info(
+            f"Mobile: PO #{order.id} assigned barcode '{barcode}' to product "
+            f"#{product.id} '{product.name}' (old SKU: '{old_sku}') "
+            f"user={current_user.username}"
+        )
+    else:
+        # Normal mode: find product by SKU (barcode)
+        product = Product.query.filter(
+            Product.company_id == order.company_id,
+            Product.active == True,
+            db.func.lower(Product.sku) == barcode.lower()
+        ).first()
+
+        if not product:
+            return jsonify({
+                'allowed': False,
+                'error': f'Producto no encontrado para código: {barcode}',
+                'alert': 'NO_ENCONTRADO',
+            }), 404
 
     # Find existing detail for this product in the order
     detail = PurchaseOrderDetail.query.filter_by(
@@ -1174,7 +1710,7 @@ def mobile_scan_receive_purchase_order(company_id, order_id, current_user):
         f"user={current_user.username}"
     )
 
-    return jsonify({
+    response = {
         'allowed': True,
         'product': {
             'id': product.id,
@@ -1198,7 +1734,13 @@ def mobile_scan_receive_purchase_order(company_id, order_id, current_user):
             'items_excess': items_excess,
             'items_missing': items_missing,
         },
-    })
+    }
+
+    if barcode_assigned:
+        response['barcode_assigned'] = True
+        response['message'] = f'Código de barras asignado a {product.name}'
+
+    return jsonify(response)
 
 
 @mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/remove-received', methods=['POST'])
