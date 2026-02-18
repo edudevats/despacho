@@ -2013,10 +2013,7 @@ def create_app(config_class=Config):
             flash('Orden no encontrada.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
 
-        # Eliminar los detalles de la orden primero
-        PurchaseOrderDetail.query.filter_by(purchase_order_id=order_id).delete()
-
-        # Eliminar la orden
+        # Eliminar la orden (los detalles se eliminan automáticamente por cascade)
         db.session.delete(order)
         db.session.commit()
 
