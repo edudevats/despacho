@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Movimientos de Inventario - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+
+    <div class="row mb-3 align-items-center">
+        <div class="col">
+            <h3><i class="fas fa-exchange-alt text-primary me-2"></i>Registro de Movimientos</h3>
+            <p class="text-muted mb-0">{{ company.name }} &mdash; Historial completo de entradas, salidas y correcciones</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Volver al Inventario
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Tipo de movimiento</label>
+                    <select name="type" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="IN" {{ 'selected' if type_filter == 'IN' }}>Entradas</option>
+                        <option value="OUT" {{ 'selected' if type_filter == 'OUT' }}>Salidas</option>
+                        <option value="ADJUSTMENT" {{ 'selected' if type_filter == 'ADJUSTMENT' }}>Correcciones</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Producto</label>
+                    <select name="product_id" class="form-select">
+                        <option value="">Todos los productos</option>
+                        {% for p in products %}
+                        <option value="{{ p.id }}" {{ 'selected' if product_filter == p.id }}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold">Desde</label>
+                    <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold">Hasta</label>
+                    <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i> Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resumen rápido -->
+    {% if transactions %}
+    <div class="row mb-4">
+        {% set entradas = transactions | selectattr('type', 'equalto', 'IN') | list %}
+        {% set salidas = transactions | selectattr('type', 'equalto', 'OUT') | list %}
+        {% set correcciones = transactions | selectattr('type', 'equalto', 'ADJUSTMENT') | list %}
+        <div class="col-md-4">
+            <div class="card border-success">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <i class="fas fa-arrow-down fa-2x text-success"></i>
+                    <div>
+                        <div class="text-muted small">Entradas</div>
+                        <div class="fw-bold fs-4 text-success">{{ entradas|length }}</div>
+                        <div class="text-muted small">{{ entradas | sum(attribute='quantity') }} unidades</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-danger">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <i class="fas fa-arrow-up fa-2x text-danger"></i>
+                    <div>
+                        <div class="text-muted small">Salidas</div>
+                        <div class="fw-bold fs-4 text-danger">{{ salidas|length }}</div>
+                        <div class="text-muted small">{{ salidas | sum(attribute='quantity') }} unidades</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-warning">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <i class="fas fa-tools fa-2x text-warning"></i>
+                    <div>
+                        <div class="text-muted small">Correcciones Admin</div>
+                        <div class="fw-bold fs-4 text-warning">{{ correcciones|length }}</div>
+                        <div class="text-muted small">ajustes manuales</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabla de movimientos -->
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">
+                <i class="fas fa-list me-1"></i>
+                {% if transactions %}{{ transactions|length }} movimiento(s){% else %}Sin resultados{% endif %}
+            </span>
+            {% if transactions|length == 500 %}
+            <span class="badge bg-warning text-dark">Mostrando máximo 500 registros — usa filtros para acotar</span>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 table-sm">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th class="text-center">Tipo</th>
+                            <th class="text-center">Cant.</th>
+                            <th class="text-center">Ant.</th>
+                            <th class="text-center">Nuevo</th>
+                            <th>Referencia / Notas</th>
+                            <th>Realizado por</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in transactions %}
+                        <tr class="{{ 'table-success' if tx.type == 'IN' else ('table-danger' if tx.type == 'OUT' else 'table-warning') }} bg-opacity-10">
+                            <td class="text-nowrap">
+                                <small>{{ tx.date.strftime('%d/%m/%Y') }}</small><br>
+                                <small class="text-muted">{{ tx.date.strftime('%H:%M') }}</small>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('product_history', company_id=company.id, product_id=tx.product_id) }}"
+                                   class="text-decoration-none fw-bold">
+                                    {{ tx.product.name if tx.product else '—' }}
+                                </a>
+                                {% if tx.product and tx.product.sku %}
+                                <br><small class="text-muted">{{ tx.product.sku }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center text-nowrap">
+                                {% if tx.type == 'IN' %}
+                                <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i>Entrada</span>
+                                {% elif tx.type == 'OUT' %}
+                                <span class="badge bg-danger"><i class="fas fa-arrow-up me-1"></i>Salida</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-tools me-1"></i>Corrección</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center fw-bold">
+                                {% if tx.type == 'IN' %}
+                                <span class="text-success">+{{ tx.quantity }}</span>
+                                {% elif tx.type == 'OUT' %}
+                                <span class="text-danger">-{{ tx.quantity }}</span>
+                                {% else %}
+                                {% set diff = tx.new_stock - tx.previous_stock %}
+                                <span class="{{ 'text-success' if diff >= 0 else 'text-danger' }}">
+                                    {{ '+' if diff >= 0 else '' }}{{ diff }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center text-muted">{{ tx.previous_stock }}</td>
+                            <td class="text-center fw-bold">{{ tx.new_stock }}</td>
+                            <td style="max-width: 300px;">
+                                {% if tx.reference %}
+                                <small class="fw-semibold">{{ tx.reference }}</small><br>
+                                {% endif %}
+                                {% if tx.notes %}
+                                <small class="text-muted">{{ tx.notes }}</small>
+                                {% endif %}
+                                {% if tx.doctor_name %}
+                                <br><small class="text-info">
+                                    <i class="fas fa-user-md"></i> Dr. {{ tx.doctor_name }}
+                                    {% if tx.patient_name %}&rarr; {{ tx.patient_name }}{% endif %}
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td class="text-nowrap">
+                                {% if tx.created_by %}
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fas fa-user me-1"></i>{{ tx.created_by.username }}
+                                </span>
+                                {% else %}
+                                <small class="text-muted">Sistema</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                                No se encontraron movimientos con los filtros aplicados.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

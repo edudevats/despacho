@@ -8,9 +8,19 @@
         <div class="col-md-8">
             <h2><i class="fas fa-warehouse text-primary"></i> Inventario: {{ company.name }}</h2>
         </div>
-        <div class="col-md-4 text-end">
+        <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+            {% if not current_user.is_admin %}
+            <span class="badge bg-secondary py-2 px-3">
+                <i class="fas fa-eye me-1"></i> Solo lectura
+            </span>
+            {% endif %}
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('inventory_movements', company_id=company.id) }}" class="btn btn-outline-info">
+                <i class="fas fa-exchange-alt"></i> Movimientos
+            </a>
+            {% endif %}
             <a href="{{ url_for('company_dashboard', company_id=company.id) }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left"></i> Volver al Dashboard
+                <i class="fas fa-arrow-left"></i> Dashboard
             </a>
         </div>
     </div>
@@ -110,9 +120,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'products' else '' }}" id="products" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Medicamentos / Productos</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Producto
                 </a>
+                {% endif %}
             </div>
 
             <!-- Resumen -->
@@ -187,16 +199,22 @@
                                         </span>
                                     </td>
                                     <td class="text-center">
+                                        {% if current_user.is_admin %}
                                         <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('product_history', company_id=company.id, product_id=product.id) }}"
+                                                class="btn btn-outline-info" title="Ver Historial">
+                                                <i class="fas fa-history"></i>
+                                            </a>
                                             <a href="{{ url_for('adjust_stock', company_id=company.id, product_id=product.id) }}"
-                                                class="btn btn-outline-primary" title="Ajustar Stock">
-                                                <i class="fas fa-boxes"></i>
+                                                class="btn btn-outline-warning" title="Corrección de Stock">
+                                                <i class="fas fa-tools"></i>
                                             </a>
                                             <a href="{{ url_for('edit_product', company_id=company.id, product_id=product.id) }}"
                                                 class="btn btn-outline-secondary" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                         </div>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
@@ -218,9 +236,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'laboratories' else '' }}" id="laboratories" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Laboratorios</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_laboratory', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Laboratorio
                 </a>
+                {% endif %}
             </div>
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -251,10 +271,12 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
+                                        {% if current_user.is_admin %}
                                         <a href="{{ url_for('edit_laboratory', company_id=company.id, laboratory_id=lab.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
@@ -276,9 +298,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'suppliers' else '' }}" id="suppliers" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Proveedores</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_supplier_manual', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Proveedor
                 </a>
+                {% endif %}
             </div>
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -316,10 +340,12 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
+                                        {% if current_user.is_admin %}
                                         <a href="{{ url_for('edit_supplier_inventory', company_id=company.id, supplier_id=supplier.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
@@ -341,9 +367,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'orders' else '' }}" id="orders" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Ordenes de Compra</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_purchase_order', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Orden
                 </a>
+                {% endif %}
             </div>
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -378,32 +406,36 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if order.status == 'DRAFT' or order.status == 'SENT' %}
-                                        <a href="{{ url_for('edit_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                            class="btn btn-sm btn-outline-primary" title="Editar">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                        {% endif %}
-                                        {% if order.status == 'SENT' %}
-                                        <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                            class="btn btn-sm btn-warning" title="Revisar Recepcion">
-                                            <i class="fas fa-clipboard-check"></i>
-                                        </a>
-                                        {% endif %}
-                                        {% if order.status == 'IN_REVIEW' %}
-                                        <a href="{{ url_for('complete_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                            class="btn btn-sm btn-success" title="Completar">
-                                            <i class="fas fa-check"></i>
-                                        </a>
+                                        {% if current_user.is_admin %}
+                                            {% if order.status == 'DRAFT' or order.status == 'SENT' %}
+                                            <a href="{{ url_for('edit_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                                class="btn btn-sm btn-outline-primary" title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            {% endif %}
+                                            {% if order.status == 'SENT' %}
+                                            <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                                class="btn btn-sm btn-warning" title="Revisar Recepcion">
+                                                <i class="fas fa-clipboard-check"></i>
+                                            </a>
+                                            {% endif %}
+                                            {% if order.status == 'IN_REVIEW' %}
+                                            <a href="{{ url_for('complete_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                                class="btn btn-sm btn-success" title="Completar">
+                                                <i class="fas fa-check"></i>
+                                            </a>
+                                            {% endif %}
                                         {% endif %}
                                         <a href="{{ url_for('view_purchase_order', company_id=company.id, order_id=order.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Ver Detalles">
                                             <i class="fas fa-eye"></i>
                                         </a>
+                                        {% if current_user.is_admin %}
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar"
                                             onclick="confirmDeleteOrder('{{ order.id }}', '{{ order.supplier.business_name }}')">
                                             <i class="fas fa-trash"></i>
                                         </button>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
@@ -425,9 +457,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'exits' else '' }}" id="exits" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Ordenes de Salida</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_exit_order', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Salida
                 </a>
+                {% endif %}
             </div>
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -477,7 +511,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if order.status == 'DRAFT' %}
+                                        {% if current_user.is_admin and order.status == 'DRAFT' %}
                                         <a href="{{ url_for('edit_exit_order', company_id=company.id, order_id=order.id) }}"
                                             class="btn btn-sm btn-outline-primary" title="Editar">
                                             <i class="fas fa-edit"></i>
@@ -512,9 +546,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'services' else '' }}" id="services" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Servicios Medicos</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_service', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Servicio
                 </a>
+                {% endif %}
             </div>
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -545,10 +581,12 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
+                                        {% if current_user.is_admin %}
                                         <a href="{{ url_for('edit_service', company_id=company.id, service_id=service.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
@@ -570,9 +608,11 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'templates' else '' }}" id="templates" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Plantillas de Factura</h4>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('add_invoice_template', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Plantilla
                 </a>
+                {% endif %}
             </div>
             <div class="card shadow-sm">
                 <div class="card-body">
@@ -603,10 +643,12 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
+                                        {% if current_user.is_admin %}
                                         <a href="{{ url_for('edit_invoice_template', company_id=company.id, template_id=template.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
+                                        {% endif %}
                                         <a href="{{ url_for('crear_factura', company_id=company.id, template_id=template.id) }}"
                                             class="btn btn-sm btn-success" title="Usar para Facturar">
                                             <i class="fas fa-file-invoice-dollar"></i>

@@ -16,7 +16,8 @@ from extensions import db
 from models import (
     User, Company, UserCompanyAccess, Movement, Product, ProductBatch,
     Invoice, ExitOrder, ExitOrderDetail, InventoryTransaction,
-    PurchaseOrder, PurchaseOrderDetail, Supplier
+    PurchaseOrder, PurchaseOrderDetail, Supplier,
+    FinkokCredentials, InvoiceFolioCounter, Customer
 )
 from utils.timezone_helper import now_mexico
 
@@ -714,6 +715,7 @@ def apply_physical_count(company_id, current_user):
             new_stock=actual_stock,
             reference='Conteo Fisico',
             notes=f'Esperado: {previous_stock}, Contado: {actual_stock}, Dif: {difference:+d}',
+            created_by_id=current_user.id
         )
         db.session.add(tx)
 
@@ -810,6 +812,7 @@ def create_adjustment(company_id, current_user):
         new_stock=new_stock,
         reference=ref_label,
         notes=notes,
+        created_by_id=current_user.id
     )
     db.session.add(tx)
     db.session.commit()
@@ -2185,3 +2188,350 @@ def catalog_update_product(product_id, current_user):
         },
         'message': 'Producto actualizado exitosamente'
     })
+
+
+# ==================== FACTURACIÓN ENDPOINTS ====================
+
+@mobile_api_bp.route('/companies/<int:company_id>/facturacion/config', methods=['GET'])
+@token_required
+def mobile_facturacion_config(company_id, current_user):
+    """Verificar si la empresa tiene Finkok configurado para facturación."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    perms = current_user.get_company_permissions(company_id)
+    if not perms.get('facturacion'):
+        return jsonify({'error': 'Sin permiso de facturación'}), 403
+
+    company = db.session.get(Company, company_id)
+    if not company:
+        return jsonify({'error': 'Empresa no encontrada'}), 404
+
+    credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+
+    return jsonify({
+        'has_finkok': credentials is not None,
+        'environment': credentials.environment if credentials else None,
+        'company_rfc': company.rfc,
+        'company_name': company.name,
+    })
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/facturacion/next-folio', methods=['GET'])
+@token_required
+def mobile_facturacion_next_folio(company_id, current_user):
+    """Obtener siguiente número de folio para una serie."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    perms = current_user.get_company_permissions(company_id)
+    if not perms.get('facturacion'):
+        return jsonify({'error': 'Sin permiso de facturación'}), 403
+
+    serie = request.args.get('serie', 'A')
+
+    folio_counter = InvoiceFolioCounter.query.filter_by(
+        company_id=company_id,
+        serie=serie
+    ).first()
+
+    current_folio = folio_counter.current_folio if folio_counter else 0
+    next_folio_num = current_folio + 1
+
+    return jsonify({
+        'serie': serie,
+        'folio_num': next_folio_num,
+        'next_folio': str(next_folio_num).zfill(7),
+    })
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/facturacion/clientes', methods=['GET'])
+@token_required
+def mobile_facturacion_clientes(company_id, current_user):
+    """Listar clientes guardados para autocompletar receptor."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    perms = current_user.get_company_permissions(company_id)
+    if not perms.get('facturacion'):
+        return jsonify({'error': 'Sin permiso de facturación'}), 403
+
+    q = request.args.get('q', '').strip().upper()
+
+    query = Customer.query.filter_by(company_id=company_id)
+    if q:
+        query = query.filter(
+            db.or_(
+                Customer.rfc.ilike(f'%{q}%'),
+                Customer.nombre.ilike(f'%{q}%')
+            )
+        )
+
+    clientes = query.order_by(Customer.nombre).limit(20).all()
+
+    return jsonify({
+        'clientes': [
+            {
+                'rfc': c.rfc,
+                'nombre': c.nombre,
+                'cp': c.codigo_postal,
+                'regimen': c.regimen_fiscal,
+            }
+            for c in clientes
+        ]
+    })
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/facturacion/crear', methods=['POST'])
+@token_required
+def mobile_facturacion_crear(company_id, current_user):
+    """Crear y timbrar una factura CFDI usando FIEL enviada en base64."""
+    import base64
+    import tempfile
+    import os
+
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    perms = current_user.get_company_permissions(company_id)
+    if not perms.get('facturacion'):
+        return jsonify({'error': 'Sin permiso de facturación'}), 403
+
+    company = db.session.get(Company, company_id)
+    if not company:
+        return jsonify({'error': 'Empresa no encontrada'}), 404
+
+    credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+    if not credentials:
+        return jsonify({'error': 'No hay credenciales Finkok configuradas. Configure desde la web.'}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    # Validar FIEL
+    fiel_cer_b64 = data.get('fiel_cer_base64', '')
+    fiel_key_b64 = data.get('fiel_key_base64', '')
+    fiel_password = data.get('fiel_password', '')
+
+    if not fiel_cer_b64 or not fiel_key_b64 or not fiel_password:
+        return jsonify({'error': 'Debe proporcionar fiel_cer_base64, fiel_key_base64 y fiel_password'}), 400
+
+    # Validar campos de la factura
+    forma_pago = data.get('forma_pago', '')
+    metodo_pago = data.get('metodo_pago', '')
+    serie = data.get('serie', 'A')
+    receptor = data.get('receptor', {})
+    conceptos = data.get('conceptos', [])
+
+    if not forma_pago or not metodo_pago:
+        return jsonify({'error': 'forma_pago y metodo_pago son requeridos'}), 400
+
+    if not receptor.get('rfc') or not receptor.get('nombre') or not receptor.get('cp') \
+            or not receptor.get('uso_cfdi') or not receptor.get('regimen'):
+        return jsonify({'error': 'Datos del receptor incompletos (rfc, nombre, cp, uso_cfdi, regimen)'}), 400
+
+    if not conceptos:
+        return jsonify({'error': 'Debe incluir al menos un concepto'}), 400
+
+    cer_path = None
+    key_path = None
+
+    try:
+        # Decodificar FIEL de base64 y guardar temporalmente
+        cer_bytes = base64.b64decode(fiel_cer_b64)
+        key_bytes = base64.b64decode(fiel_key_b64)
+
+        temp_dir = tempfile.gettempdir()
+        cer_path = os.path.join(temp_dir, f'mobile_fiel_{company_id}_{current_user.id}.cer')
+        key_path = os.path.join(temp_dir, f'mobile_fiel_{company_id}_{current_user.id}.key')
+
+        with open(cer_path, 'wb') as f:
+            f.write(cer_bytes)
+        with open(key_path, 'wb') as f:
+            f.write(key_bytes)
+
+        from services.cfdi_generator import CFDIGenerator
+        from services.facturacion_service import FacturacionService
+        from utils.crypto import decrypt_password
+
+        generator = CFDIGenerator(
+            certificado_path=cer_path,
+            key_path=key_path,
+            key_password=fiel_password
+        )
+
+        # Validar datos
+        validacion = generator.validar_datos(
+            receptor_rfc=receptor['rfc'],
+            receptor_cp=receptor['cp'],
+            receptor_regimen=receptor['regimen'],
+            receptor_uso_cfdi=receptor['uso_cfdi'],
+            lugar_expedicion=company.postal_code or receptor['cp'],
+            conceptos=conceptos
+        )
+        if not validacion['valido']:
+            return jsonify({'error': 'Datos inválidos', 'errores': validacion['errores']}), 400
+
+        # Obtener y auto-incrementar folio
+        folio_counter = InvoiceFolioCounter.query.filter_by(
+            company_id=company_id,
+            serie=serie
+        ).first()
+        if not folio_counter:
+            folio_counter = InvoiceFolioCounter(
+                company_id=company_id,
+                serie=serie,
+                current_folio=0
+            )
+            db.session.add(folio_counter)
+            db.session.flush()
+
+        next_folio_num = folio_counter.current_folio + 1
+        folio_str = str(next_folio_num).zfill(7)
+
+        # Generar CFDI firmado
+        cfdi_firmado, _xml_sin_timbrar = generator.crear_factura(
+            serie=serie,
+            folio=folio_str,
+            forma_pago=forma_pago,
+            metodo_pago=metodo_pago,
+            lugar_expedicion=company.postal_code or receptor['cp'],
+            receptor_rfc=receptor['rfc'],
+            receptor_nombre=receptor['nombre'],
+            receptor_uso_cfdi=receptor['uso_cfdi'],
+            receptor_regimen=receptor['regimen'],
+            receptor_cp=receptor['cp'],
+            conceptos=conceptos
+        )
+
+        # Timbrar con Finkok
+        finkok_password = decrypt_password(credentials.password_enc)
+        facturacion_service = FacturacionService(
+            finkok_username=credentials.username,
+            finkok_password=finkok_password,
+            environment=credentials.environment
+        )
+
+        result = facturacion_service.timbrar_factura(cfdi_firmado, accept='XML')
+
+        if not result['success']:
+            return jsonify({'error': result.get('message', 'Error al timbrar')}), 500
+
+        uuid = result['uuid']
+        filename_base = f"{serie}{folio_str}_{uuid}"
+
+        # Guardar XML timbrado
+        import re
+        safe_rfc = re.sub(r'[^A-Z0-9]', '_', company.rfc.upper())
+        xml_dir = os.path.join(os.path.dirname(__file__), '..', 'xml', safe_rfc)
+        os.makedirs(xml_dir, exist_ok=True)
+
+        if 'xml' in result:
+            with open(os.path.join(xml_dir, f'{filename_base}.xml'), 'wb') as f:
+                f.write(result['xml'])
+
+        # Actualizar contador de folio
+        folio_counter.current_folio = next_folio_num
+        folio_counter.updated_at = now_mexico()
+
+        # Guardar/actualizar cliente
+        rfc_upper = receptor['rfc'].upper().strip()
+        existing = Customer.query.filter_by(company_id=company_id, rfc=rfc_upper).first()
+        if existing:
+            existing.nombre = receptor['nombre']
+            existing.codigo_postal = receptor['cp']
+            existing.regimen_fiscal = receptor['regimen']
+            existing.updated_at = now_mexico()
+        else:
+            db.session.add(Customer(
+                company_id=company_id,
+                rfc=rfc_upper,
+                nombre=receptor['nombre'],
+                codigo_postal=receptor['cp'],
+                regimen_fiscal=receptor['regimen']
+            ))
+
+        db.session.commit()
+
+        # Calcular total desde conceptos
+        total = sum(
+            float(c.get('cantidad', 1)) * float(c.get('valor_unitario', 0)) * (1 + float(c.get('tasa_iva', 0.16)))
+            for c in conceptos
+        )
+
+        logger.info(f"Mobile facturación: user '{current_user.username}' creó factura {serie}{folio_str} UUID={uuid}")
+
+        return jsonify({
+            'success': True,
+            'uuid': uuid,
+            'folio': f'{serie}{folio_str}',
+            'fecha_timbrado': result.get('fecha_timbrado', ''),
+            'receptor_nombre': receptor['nombre'],
+            'total': round(total, 2),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Mobile facturación crear error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Error al generar factura: {str(e)}'}), 500
+
+    finally:
+        # Eliminar archivos FIEL temporales
+        for path in [cer_path, key_path]:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+
+@mobile_api_bp.route('/companies/<int:company_id>/facturacion/estado', methods=['POST'])
+@token_required
+def mobile_facturacion_estado(company_id, current_user):
+    """Consultar estado de un CFDI en el SAT por UUID."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    perms = current_user.get_company_permissions(company_id)
+    if not perms.get('facturacion'):
+        return jsonify({'error': 'Sin permiso de facturación'}), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    uuid = data.get('uuid', '').strip()
+    rfc_emisor = data.get('rfc_emisor', '').strip()
+    rfc_receptor = data.get('rfc_receptor', '').strip()
+    total = data.get('total', '').strip() if isinstance(data.get('total'), str) else str(data.get('total', ''))
+
+    if not uuid or not rfc_emisor or not rfc_receptor or not total:
+        return jsonify({'error': 'uuid, rfc_emisor, rfc_receptor y total son requeridos'}), 400
+
+    try:
+        from services.facturacion_service import FacturacionService
+
+        service = FacturacionService()
+        result = service.consultar_estado(
+            uuid=uuid,
+            rfc_emisor=rfc_emisor,
+            rfc_receptor=rfc_receptor,
+            total=total
+        )
+
+        if not result['success']:
+            return jsonify({'error': result.get('message', 'Error al consultar')}), 500
+
+        return jsonify({
+            'success': True,
+            'uuid': uuid,
+            'estado': result.get('estado'),
+            'es_cancelable': result.get('es_cancelable'),
+            'codigo_estado': result.get('codigo_estado'),
+            'validacion_efos': result.get('validacion_efos'),
+        })
+
+    except Exception as e:
+        logger.error(f"Mobile facturación estado error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Error al consultar estado: {str(e)}'}), 500

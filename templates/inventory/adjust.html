@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Ajustar Stock - {{ company.name }}{% endblock %}
+{% block title %}Corrección de Stock - {{ company.name }}{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
@@ -8,47 +8,55 @@
         <div class="col-md-6">
             <div class="card shadow">
                 <div class="card-header bg-warning text-dark">
-                    <h4 class="mb-0">Ajuste Manual de Inventario</h4>
+                    <h4 class="mb-0"><i class="fas fa-user-shield me-2"></i>Corrección de Inventario (Admin)</h4>
                     <small>Producto: <strong>{{ product.name }}</strong> ({{ product.sku }})</small>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-primary text-center">
-                        Has seleccionado ajustar el stock actual:
-                        <span class="fs-4 fw-bold">{{ product.current_stock }}</span>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Esta corrección quedará registrada en el historial con tu usuario y la nota que escribas.
+                        <br><strong>Stock actual:</strong>
+                        <span class="fs-5 fw-bold text-primary ms-1">{{ product.current_stock }}</span>
                     </div>
 
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div class="mb-3">
-                            <label class="form-label">Tipo de Movimiento</label>
+                            <label class="form-label fw-bold">Tipo de Corrección</label>
                             <div class="btn-group w-100" role="group">
                                 <input type="radio" class="btn-check" name="type" id="type_in" value="IN" checked>
                                 <label class="btn btn-outline-success" for="type_in">
-                                    <i class="fas fa-plus"></i> Entrada (Compra/Devolución)
+                                    <i class="fas fa-plus"></i> Agregar Unidades
                                 </label>
 
                                 <input type="radio" class="btn-check" name="type" id="type_out" value="OUT">
                                 <label class="btn btn-outline-danger" for="type_out">
-                                    <i class="fas fa-minus"></i> Salida (Venta/Pérdida)
+                                    <i class="fas fa-minus"></i> Quitar Unidades
                                 </label>
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label for="quantity" class="form-label">Cantidad a ajustar</label>
+                            <label for="quantity" class="form-label fw-bold">Cantidad a corregir</label>
                             <input type="number" class="form-control form-control-lg text-center" id="quantity"
                                 name="quantity" min="1" required placeholder="0">
                         </div>
 
                         <div class="mb-3">
-                            <label for="notes" class="form-label">Motivo / Notas</label>
-                            <textarea class="form-control" id="notes" name="notes" rows="2"
-                                placeholder="Ej. Inventario inicial, Ajuste por merma, etc."></textarea>
+                            <label for="notes" class="form-label fw-bold">
+                                Motivo de la corrección <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"
+                                placeholder="Ej. Error de captura en recepción del 01/03/2026, Merma detectada en auditoría, Producto dañado contabilizado por error..."
+                                required></textarea>
+                            <div class="form-text text-muted">Obligatorio. Esta nota quedará en el historial del producto.</div>
                         </div>
 
                         <div class="d-grid gap-2 mt-4">
-                            <button type="submit" class="btn btn-primary">Confirmar Ajuste</button>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-save me-1"></i> Registrar Corrección
+                            </button>
                             <a href="{{ url_for('inventory_list', company_id=company.id) }}"
                                 class="btn btn-light">Cancelar</a>
                         </div>
