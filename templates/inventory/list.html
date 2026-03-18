@@ -8,8 +8,17 @@
         <div class="col-md-8">
             <h2><i class="fas fa-warehouse text-primary"></i> Inventario: {{ company.name }}</h2>
         </div>
-        <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
-            {% if not current_user.is_admin %}
+        <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2 flex-wrap">
+            {% if not current_user.is_admin and perms.get('perm_inventory') %}
+            <div class="btn-group btn-group-sm">
+                <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-outline-info" title="Solicitar Ingreso Inicial">
+                    <i class="fas fa-box-open"></i> Ingreso Inicial
+                </a>
+                <a href="{{ url_for('create_adjustment_request', company_id=company.id) }}" class="btn btn-outline-warning" title="Solicitar Ajuste">
+                    <i class="fas fa-balance-scale"></i> Solicitar Ajuste
+                </a>
+            </div>
+            {% elif not current_user.is_admin %}
             <span class="badge bg-secondary py-2 px-3">
                 <i class="fas fa-eye me-1"></i> Solo lectura
             </span>
@@ -112,6 +121,17 @@
                 <i class="fas fa-file-medical"></i> Plantillas
             </button>
         </li>
+        {% if current_user.is_admin or perms.get('perm_inventory') %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if active_tab == 'requests' else '' }}" id="requests-tab"
+                    data-bs-toggle="tab" data-bs-target="#requests" type="button" role="tab">
+                <i class="fas fa-clipboard-check"></i> Solicitudes
+                {% if pending_requests_count > 0 %}
+                <span class="badge bg-danger rounded-pill ms-1">{{ pending_requests_count }}</span>
+                {% endif %}
+            </button>
+        </li>
+        {% endif %}
     </ul>
 
     <!-- Tab Content -->
@@ -669,6 +689,97 @@
                 </div>
             </div>
         </div>
+
+        <!-- TAB: Solicitudes de Inventario -->
+        {% if current_user.is_admin or perms.get('perm_inventory') %}
+        <div class="tab-pane fade {{ 'show active' if active_tab == 'requests' else '' }}" id="requests" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Solicitudes de Inventario</h4>
+                {% if current_user.is_admin or perms.get('perm_inventory') %}
+                <div class="btn-group">
+                    <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-info text-white">
+                        <i class="fas fa-box-open"></i> Ingreso Inicial
+                    </a>
+                    <a href="{{ url_for('create_adjustment_request', company_id=company.id) }}" class="btn btn-warning">
+                        <i class="fas fa-balance-scale"></i> Solicitud de Ajuste
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Tipo</th>
+                                    <th>Producto</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th>Solicitante</th>
+                                    <th>Fecha</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for req in inventory_requests %}
+                                <tr>
+                                    <td><strong>#{{ req.id }}</strong></td>
+                                    <td>
+                                        {% if req.request_type == 'INITIAL_STOCK' %}
+                                        <span class="badge bg-info">Ingreso Inicial</span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark">Ajuste</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if req.product %}
+                                        {{ req.product.name }}
+                                        {% elif req.new_product_name %}
+                                        <em class="text-muted"><i class="fas fa-plus-circle"></i> {{ req.new_product_name }}</em>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if req.request_type == 'ADJUSTMENT' and req.adjustment_direction == 'OUT' %}
+                                        <span class="text-danger">-{{ req.quantity }}</span>
+                                        {% else %}
+                                        <span class="text-success">+{{ req.quantity }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ req.created_by.username }}</td>
+                                    <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                    <td class="text-center">
+                                        {% if req.status == 'PENDING' %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-clock"></i> Pendiente</span>
+                                        {% elif req.status == 'APPROVED' %}
+                                        <span class="badge bg-success"><i class="fas fa-check"></i> Aprobada</span>
+                                        {% elif req.status == 'REJECTED' %}
+                                        <span class="badge bg-danger"><i class="fas fa-times"></i> Rechazada</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ url_for('view_inventory_request', company_id=company.id, request_id=req.id) }}"
+                                            class="btn btn-sm btn-outline-secondary" title="Ver Detalle">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-muted">
+                                        <i class="fas fa-clipboard-check fa-3x mb-3 d-block"></i>
+                                        No hay solicitudes registradas.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

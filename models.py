@@ -401,6 +401,61 @@ class InventoryTransaction(db.Model):
     created_by = db.relationship('User', foreign_keys=[created_by_id], backref=db.backref('inventory_transactions', lazy=True))
 
 
+class InventoryRequest(db.Model):
+    """
+    Solicitudes de inventario que requieren aprobacion del admin.
+    Tipos: INITIAL_STOCK (ingreso inicial) y ADJUSTMENT (ajuste de stock).
+    """
+    __tablename__ = 'inventory_request'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+
+    request_type = db.Column(db.String(20), nullable=False)  # 'INITIAL_STOCK' | 'ADJUSTMENT'
+    status = db.Column(db.String(20), default='PENDING', nullable=False)  # 'PENDING' | 'APPROVED' | 'REJECTED'
+
+    # Producto (existente o nuevo)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=True)
+    new_product_name = db.Column(db.String(200), nullable=True)
+    new_product_sku = db.Column(db.String(50), nullable=True)
+
+    # Cantidad
+    quantity = db.Column(db.Integer, nullable=False)
+
+    # Campos INITIAL_STOCK
+    batch_number = db.Column(db.String(100), nullable=True)
+    expiration_date = db.Column(db.Date, nullable=True)
+    cost_price = db.Column(db.Float, nullable=True)
+    selling_price = db.Column(db.Float, nullable=True)
+
+    # Campos ADJUSTMENT
+    adjustment_mode = db.Column(db.String(20), nullable=True)  # 'ADD_REMOVE' | 'CORRECT_STOCK'
+    adjustment_direction = db.Column(db.String(5), nullable=True)  # 'IN' | 'OUT'
+    current_stock_snapshot = db.Column(db.Integer, nullable=True)
+    desired_stock = db.Column(db.Integer, nullable=True)
+
+    # Nota obligatoria
+    notes = db.Column(db.Text, nullable=False)
+
+    # Auditoria
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+
+    # Relaciones
+    company = db.relationship('Company', backref=db.backref('inventory_requests', lazy=True))
+    product = db.relationship('Product', backref=db.backref('inventory_requests', lazy=True))
+    created_by = db.relationship('User', foreign_keys=[created_by_id],
+                                  backref=db.backref('inventory_requests_created', lazy=True))
+    reviewed_by = db.relationship('User', foreign_keys=[reviewed_by_id],
+                                   backref=db.backref('inventory_requests_reviewed', lazy=True))
+
+    def __repr__(self):
+        return f'<InventoryRequest #{self.id} {self.request_type} - {self.status}>'
+
+
 class FinkokCredentials(db.Model):
     """
     Credenciales de Finkok para timbrado de facturas por empresa.

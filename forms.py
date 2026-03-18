@@ -660,3 +660,87 @@ class ExitOrderForm(FlaskForm):
         Length(max=1000)
     ])
 
+
+# ==================== INVENTORY REQUEST FORMS ====================
+
+class InitialStockRequestForm(FlaskForm):
+    """Form para solicitar ingreso inicial de medicamentos al inventario"""
+    product_id = SelectField('Producto Existente', coerce=int, validators=[Optional()])
+    new_product_name = StringField('Nombre del Producto Nuevo', validators=[
+        Optional(),
+        Length(max=200)
+    ])
+    new_product_sku = StringField('SKU / Codigo', validators=[
+        Optional(),
+        Length(max=50)
+    ])
+    quantity = IntegerField('Cantidad', validators=[
+        DataRequired(message='La cantidad es requerida'),
+        NumberRange(min=1, message='La cantidad debe ser mayor a 0')
+    ])
+    batch_number = StringField('Numero de Lote', validators=[
+        Optional(),
+        Length(max=100)
+    ])
+    expiration_date = DateField('Fecha de Caducidad', validators=[Optional()])
+    cost_price = FloatField('Precio de Costo', validators=[
+        Optional(),
+        NumberRange(min=0, message='El costo debe ser positivo')
+    ])
+    selling_price = FloatField('Precio de Venta', validators=[
+        Optional(),
+        NumberRange(min=0, message='El precio debe ser positivo')
+    ])
+    notes = TextAreaField('Notas / Justificacion', validators=[
+        DataRequired(message='Debe explicar el motivo de la solicitud'),
+        Length(max=1000)
+    ])
+
+    def validate(self, extra_validators=None):
+        if not super().validate(extra_validators):
+            return False
+        if (not self.product_id.data or self.product_id.data == 0) and not self.new_product_name.data:
+            self.product_id.errors.append('Debe seleccionar un producto existente o ingresar el nombre de uno nuevo.')
+            return False
+        return True
+
+
+class AdjustmentRequestForm(FlaskForm):
+    """Form para solicitar ajuste de stock"""
+    product_id = SelectField('Producto', coerce=int, validators=[
+        DataRequired(message='Debe seleccionar un producto')
+    ])
+    adjustment_mode = SelectField('Modo de Ajuste', choices=[
+        ('ADD_REMOVE', 'Agregar / Quitar unidades'),
+        ('CORRECT_STOCK', 'Corregir stock (indicar cantidad real)')
+    ], validators=[DataRequired()])
+    adjustment_direction = SelectField('Tipo', choices=[
+        ('IN', 'Agregar'),
+        ('OUT', 'Quitar')
+    ], validators=[Optional()])
+    quantity = IntegerField('Cantidad', validators=[
+        Optional(),
+        NumberRange(min=1, message='La cantidad debe ser mayor a 0')
+    ])
+    desired_stock = IntegerField('Stock Real', validators=[
+        Optional(),
+        NumberRange(min=0, message='El stock no puede ser negativo')
+    ])
+    notes = TextAreaField('Motivo del Ajuste', validators=[
+        DataRequired(message='Debe explicar el motivo del ajuste'),
+        Length(max=1000)
+    ])
+
+    def validate(self, extra_validators=None):
+        if not super().validate(extra_validators):
+            return False
+        if self.adjustment_mode.data == 'ADD_REMOVE':
+            if not self.quantity.data or self.quantity.data < 1:
+                self.quantity.errors.append('La cantidad es requerida para este modo de ajuste.')
+                return False
+        elif self.adjustment_mode.data == 'CORRECT_STOCK':
+            if self.desired_stock.data is None:
+                self.desired_stock.errors.append('Debe indicar el stock real.')
+                return False
+        return True
+

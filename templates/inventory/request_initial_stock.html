@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitud de Ingreso Inicial - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0"><i class="fas fa-box-open"></i> Solicitud de Ingreso Inicial</h4>
+                    <small>{{ company.name }}</small>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Esta solicitud sera revisada por un administrador antes de aplicarse al inventario.
+                    </div>
+
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+
+                        <!-- Seleccion de producto -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Tipo de Producto</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="product_type" id="existing_product" value="existing" checked>
+                                <label class="form-check-label" for="existing_product">Producto Existente</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="product_type" id="new_product" value="new">
+                                <label class="form-check-label" for="new_product">Producto Nuevo</label>
+                            </div>
+                        </div>
+
+                        <!-- Producto existente -->
+                        <div id="existing_product_fields" class="mb-3">
+                            {{ form.product_id.label(class="form-label") }}
+                            {{ form.product_id(class="form-select") }}
+                            {% if form.product_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.product_id.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Producto nuevo -->
+                        <div id="new_product_fields" class="mb-3" style="display:none;">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    {{ form.new_product_name.label(class="form-label") }}
+                                    {{ form.new_product_name(class="form-control", placeholder="Nombre del medicamento") }}
+                                    {% if form.new_product_name.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.new_product_name.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    {{ form.new_product_sku.label(class="form-label") }}
+                                    {{ form.new_product_sku(class="form-control", placeholder="Codigo / SKU") }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Cantidad -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.quantity.label(class="form-label") }}
+                                {{ form.quantity(class="form-control", min="1") }}
+                                {% if form.quantity.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.quantity.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.batch_number.label(class="form-label") }}
+                                {{ form.batch_number(class="form-control", placeholder="Ej: LOT-2026-001") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.expiration_date.label(class="form-label") }}
+                                {{ form.expiration_date(class="form-control", type="date") }}
+                            </div>
+                        </div>
+
+                        <!-- Precios -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.cost_price.label(class="form-label") }}
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.cost_price(class="form-control", step="0.01", min="0") }}
+                                </div>
+                                {% if form.cost_price.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.cost_price.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.selling_price.label(class="form-label") }}
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.selling_price(class="form-control", step="0.01", min="0") }}
+                                </div>
+                                {% if form.selling_price.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.selling_price.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Notas -->
+                        <div class="mb-3">
+                            {{ form.notes.label(class="form-label") }}
+                            {{ form.notes(class="form-control", rows="3", placeholder="Explique el motivo del ingreso inicial...") }}
+                            {% if form.notes.errors %}
+                            <div class="text-danger">
+                                {% for error in form.notes.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('inventory_list', company_id=company.id, tab='requests') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-info text-white">
+                                <i class="fas fa-paper-plane"></i> Enviar Solicitud
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const existingRadio = document.getElementById('existing_product');
+    const newRadio = document.getElementById('new_product');
+    const existingFields = document.getElementById('existing_product_fields');
+    const newFields = document.getElementById('new_product_fields');
+    const productSelect = document.getElementById('product_id');
+
+    function toggleFields() {
+        if (newRadio.checked) {
+            existingFields.style.display = 'none';
+            newFields.style.display = 'block';
+            if (productSelect) productSelect.value = '0';
+        } else {
+            existingFields.style.display = 'block';
+            newFields.style.display = 'none';
+        }
+    }
+
+    existingRadio.addEventListener('change', toggleFields);
+    newRadio.addEventListener('change', toggleFields);
+});
+</script>
+{% endblock %}

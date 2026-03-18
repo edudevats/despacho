@@ -11,13 +11,14 @@ from extensions import db, login_manager, migrate, mail, cache, csrf, init_exten
 from models import (Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product,
                     InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer,
                     Laboratory, Service, PurchaseOrder, PurchaseOrderDetail, InvoiceTemplate, InvoiceTemplateItem,
-                    UserCompanyAccess, ExitOrder, ExitOrderDetail)
+                    UserCompanyAccess, ExitOrder, ExitOrderDetail, InventoryRequest)
 from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm,
                    CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm,
                    FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm,
                    CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm,
                    LaboratoryForm, ServiceForm, SupplierManualForm, PurchaseOrderForm, InvoiceTemplateForm,
-                   UserForm, UserCompanyAccessForm, ExitOrderForm)
+                   UserForm, UserCompanyAccessForm, ExitOrderForm,
+                   InitialStockRequestForm, AdjustmentRequestForm)
 from functools import wraps
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1461,6 +1462,23 @@ def create_app(config_class=Config):
         critical_batches = [(b, p) for b, p in expiring_batches if today <= b.expiration_date <= today + timedelta(days=30)]
         warning_batches = [(b, p) for b, p in expiring_batches if today + timedelta(days=30) < b.expiration_date <= expiring_soon_date]
 
+        # Solicitudes de inventario
+        pending_requests_count = InventoryRequest.query.filter_by(
+            company_id=company_id, status='PENDING'
+        ).count()
+
+        if current_user.is_admin:
+            inventory_requests = InventoryRequest.query.filter_by(
+                company_id=company_id
+            ).order_by(InventoryRequest.created_at.desc()).limit(50).all()
+        else:
+            inventory_requests = InventoryRequest.query.filter_by(
+                company_id=company_id, created_by_id=current_user.id
+            ).order_by(InventoryRequest.created_at.desc()).limit(50).all()
+
+        # Permisos del usuario para la empresa
+        perms = current_user.get_company_permissions(company_id) if not current_user.is_admin else {}
+
         return render_template('inventory/list.html',
                                company=company,
                                products=products,
@@ -1476,7 +1494,10 @@ def create_app(config_class=Config):
                                expired_batches=expired_batches,
                                critical_batches=critical_batches,
                                warning_batches=warning_batches,
-                               today=today)
+                               today=today,
+                               pending_requests_count=pending_requests_count,
+                               inventory_requests=inventory_requests,
+                               perms=perms)
 
     @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
     @admin_required
@@ -2322,6 +2343,255 @@ def create_app(config_class=Config):
             'expiration_date': b.expiration_date.strftime('%d/%m/%Y') if b.expiration_date else None,
             'current_stock': b.current_stock
         } for b in batches])
+
+    # ==================== INVENTORY REQUEST ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/requests/initial-stock', methods=['GET', 'POST'])
+    @login_required
+    def create_initial_stock_request(company_id):
+        """Crear solicitud de ingreso inicial de medicamentos"""
+        company = Company.query.get_or_404(company_id)
+        if not current_user.is_admin:
+            perms = current_user.get_company_permissions(company_id)
+            if not perms.get('perm_inventory'):
+                flash('No tienes permisos de inventario para esta empresa.', 'error')
+                return redirect(url_for('index'))
+
+        form = InitialStockRequestForm()
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        form.product_id.choices = [(0, '-- Producto Nuevo --')] + [(p.id, p.name) for p in products]
+
+        if form.validate_on_submit():
+            inv_request = InventoryRequest(
+                company_id=company_id,
+                request_type='INITIAL_STOCK',
+                status='PENDING',
+                product_id=form.product_id.data if form.product_id.data and form.product_id.data != 0 else None,
+                new_product_name=form.new_product_name.data if (not form.product_id.data or form.product_id.data == 0) else None,
+                new_product_sku=form.new_product_sku.data if (not form.product_id.data or form.product_id.data == 0) else None,
+                quantity=form.quantity.data,
+                batch_number=form.batch_number.data,
+                expiration_date=form.expiration_date.data,
+                cost_price=form.cost_price.data,
+                selling_price=form.selling_price.data,
+                notes=form.notes.data,
+                created_by_id=current_user.id,
+                created_at=now_mexico()
+            )
+            db.session.add(inv_request)
+            db.session.commit()
+            flash('Solicitud de ingreso inicial enviada. Pendiente de aprobacion.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        return render_template('inventory/request_initial_stock.html', form=form, company=company)
+
+    @app.route('/companies/<int:company_id>/inventory/requests/adjustment', methods=['GET', 'POST'])
+    @login_required
+    def create_adjustment_request(company_id):
+        """Crear solicitud de ajuste de inventario"""
+        company = Company.query.get_or_404(company_id)
+        if not current_user.is_admin:
+            perms = current_user.get_company_permissions(company_id)
+            if not perms.get('perm_inventory'):
+                flash('No tienes permisos de inventario para esta empresa.', 'error')
+                return redirect(url_for('index'))
+
+        form = AdjustmentRequestForm()
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        form.product_id.choices = [(p.id, f'{p.name} (Stock: {p.current_stock})') for p in products]
+
+        # Mapa de stock para JavaScript
+        products_stock = {p.id: p.current_stock for p in products}
+
+        if form.validate_on_submit():
+            product = Product.query.get_or_404(form.product_id.data)
+            if product.company_id != company_id:
+                flash('Producto no valido.', 'error')
+                return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+            current_stock = product.current_stock
+
+            if form.adjustment_mode.data == 'CORRECT_STOCK':
+                desired = form.desired_stock.data
+                quantity = abs(desired - current_stock)
+                direction = 'IN' if desired > current_stock else 'OUT'
+            else:
+                quantity = form.quantity.data
+                direction = form.adjustment_direction.data
+                desired = None
+
+            inv_request = InventoryRequest(
+                company_id=company_id,
+                request_type='ADJUSTMENT',
+                status='PENDING',
+                product_id=product.id,
+                quantity=quantity,
+                adjustment_mode=form.adjustment_mode.data,
+                adjustment_direction=direction,
+                current_stock_snapshot=current_stock,
+                desired_stock=desired,
+                notes=form.notes.data,
+                created_by_id=current_user.id,
+                created_at=now_mexico()
+            )
+            db.session.add(inv_request)
+            db.session.commit()
+            flash('Solicitud de ajuste enviada. Pendiente de aprobacion.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        return render_template('inventory/request_adjustment.html', form=form, company=company,
+                               products_stock=products_stock)
+
+    @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>')
+    @login_required
+    def view_inventory_request(company_id, request_id):
+        """Ver detalle de solicitud de inventario"""
+        company = Company.query.get_or_404(company_id)
+        inv_request = InventoryRequest.query.get_or_404(request_id)
+
+        if inv_request.company_id != company_id:
+            flash('Solicitud no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        if not current_user.is_admin and inv_request.created_by_id != current_user.id:
+            flash('No tienes permiso para ver esta solicitud.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        return render_template('inventory/request_detail.html', company=company, inv_request=inv_request)
+
+    @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>/approve', methods=['POST'])
+    @admin_required
+    def approve_inventory_request(company_id, request_id):
+        """Aprobar solicitud de inventario (solo admin)"""
+        company = Company.query.get_or_404(company_id)
+        inv_request = InventoryRequest.query.get_or_404(request_id)
+
+        if inv_request.company_id != company_id:
+            flash('Solicitud no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        if inv_request.status != 'PENDING':
+            flash('Esta solicitud ya fue procesada.', 'error')
+            return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
+
+        try:
+            if inv_request.request_type == 'INITIAL_STOCK':
+                # Obtener o crear producto
+                if inv_request.product_id:
+                    product = Product.query.get(inv_request.product_id)
+                else:
+                    product = Product(
+                        company_id=company_id,
+                        name=inv_request.new_product_name,
+                        sku=inv_request.new_product_sku,
+                        cost_price=inv_request.cost_price or 0.0,
+                        selling_price=inv_request.selling_price or 0.0,
+                        current_stock=0
+                    )
+                    db.session.add(product)
+                    db.session.flush()
+                    inv_request.product_id = product.id
+
+                # Actualizar precios si se proporcionaron
+                if inv_request.cost_price is not None:
+                    product.cost_price = inv_request.cost_price
+                if inv_request.selling_price is not None:
+                    product.selling_price = inv_request.selling_price
+
+                # Crear lote si hay datos
+                batch = None
+                if inv_request.batch_number:
+                    batch = ProductBatch(
+                        product_id=product.id,
+                        batch_number=inv_request.batch_number,
+                        expiration_date=inv_request.expiration_date,
+                        initial_stock=inv_request.quantity,
+                        current_stock=inv_request.quantity,
+                        acquisition_date=now_mexico().date()
+                    )
+                    db.session.add(batch)
+                    db.session.flush()
+
+                # Crear transaccion
+                previous_stock = product.current_stock
+                product.current_stock += inv_request.quantity
+
+                transaction = InventoryTransaction(
+                    product_id=product.id,
+                    batch_id=batch.id if batch else None,
+                    type='IN',
+                    quantity=inv_request.quantity,
+                    previous_stock=previous_stock,
+                    new_stock=product.current_stock,
+                    date=now_mexico(),
+                    reference=f'Solicitud Ingreso #{inv_request.id}',
+                    notes=f'[APROBADO: {current_user.username}] {inv_request.notes}',
+                    created_by_id=current_user.id
+                )
+                db.session.add(transaction)
+
+            elif inv_request.request_type == 'ADJUSTMENT':
+                product = Product.query.get(inv_request.product_id)
+                previous_stock = product.current_stock
+
+                if inv_request.adjustment_mode == 'CORRECT_STOCK':
+                    new_stock = inv_request.desired_stock
+                elif inv_request.adjustment_direction == 'IN':
+                    new_stock = product.current_stock + inv_request.quantity
+                else:
+                    new_stock = max(0, product.current_stock - inv_request.quantity)
+
+                product.current_stock = new_stock
+
+                transaction = InventoryTransaction(
+                    product_id=product.id,
+                    type='ADJUSTMENT',
+                    quantity=inv_request.quantity,
+                    previous_stock=previous_stock,
+                    new_stock=new_stock,
+                    date=now_mexico(),
+                    reference=f'Solicitud Ajuste #{inv_request.id}',
+                    notes=f'[APROBADO: {current_user.username}] {inv_request.notes}',
+                    created_by_id=current_user.id
+                )
+                db.session.add(transaction)
+
+            inv_request.status = 'APPROVED'
+            inv_request.reviewed_by_id = current_user.id
+            inv_request.reviewed_at = now_mexico()
+            db.session.commit()
+            flash('Solicitud aprobada. El inventario ha sido actualizado.', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f'Error al aprobar solicitud #{request_id}: {str(e)}')
+            flash(f'Error al procesar la solicitud: {str(e)}', 'error')
+
+        return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
+
+    @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>/reject', methods=['POST'])
+    @admin_required
+    def reject_inventory_request(company_id, request_id):
+        """Rechazar solicitud de inventario (solo admin)"""
+        company = Company.query.get_or_404(company_id)
+        inv_request = InventoryRequest.query.get_or_404(request_id)
+
+        if inv_request.company_id != company_id:
+            flash('Solicitud no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        if inv_request.status != 'PENDING':
+            flash('Esta solicitud ya fue procesada.', 'error')
+            return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
+
+        inv_request.status = 'REJECTED'
+        inv_request.reviewed_by_id = current_user.id
+        inv_request.reviewed_at = now_mexico()
+        inv_request.rejection_reason = request.form.get('rejection_reason', '').strip()
+        db.session.commit()
+
+        flash('Solicitud rechazada.', 'info')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
 
     # ==================== INVOICE TEMPLATE ROUTES ====================
 

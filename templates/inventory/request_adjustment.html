@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitud de Ajuste - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="fas fa-balance-scale"></i> Solicitud de Ajuste de Inventario</h4>
+                    <small>{{ company.name }}</small>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Esta solicitud sera revisada por un administrador antes de aplicarse al inventario.
+                    </div>
+
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+
+                        <!-- Producto -->
+                        <div class="mb-3">
+                            {{ form.product_id.label(class="form-label fw-bold") }}
+                            {{ form.product_id(class="form-select", id="product_select") }}
+                            {% if form.product_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.product_id.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Stock actual -->
+                        <div class="mb-3" id="current_stock_display" style="display:none;">
+                            <div class="alert alert-secondary py-2">
+                                <i class="fas fa-boxes"></i> Stock actual: <strong id="current_stock_value">0</strong> unidades
+                            </div>
+                        </div>
+
+                        <!-- Modo de ajuste -->
+                        <div class="mb-3">
+                            {{ form.adjustment_mode.label(class="form-label fw-bold") }}
+                            {{ form.adjustment_mode(class="form-select", id="adjustment_mode") }}
+                        </div>
+
+                        <!-- Campos modo Agregar/Quitar -->
+                        <div id="add_remove_fields">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    {{ form.adjustment_direction.label(class="form-label") }}
+                                    {{ form.adjustment_direction(class="form-select") }}
+                                </div>
+                                <div class="col-md-6">
+                                    {{ form.quantity.label(class="form-label") }}
+                                    {{ form.quantity(class="form-control", min="1") }}
+                                    {% if form.quantity.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.quantity.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Campos modo Corregir Stock -->
+                        <div id="correct_stock_fields" style="display:none;">
+                            <div class="mb-3">
+                                {{ form.desired_stock.label(class="form-label") }}
+                                {{ form.desired_stock(class="form-control", min="0", id="desired_stock_input") }}
+                                {% if form.desired_stock.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.desired_stock.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <div id="stock_difference" class="mt-2" style="display:none;">
+                                    <span id="diff_icon"></span>
+                                    <span id="diff_text"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notas -->
+                        <div class="mb-3">
+                            {{ form.notes.label(class="form-label fw-bold") }}
+                            {{ form.notes(class="form-control", rows="3", placeholder="Explique detalladamente el motivo del ajuste...") }}
+                            {% if form.notes.errors %}
+                            <div class="text-danger">
+                                {% for error in form.notes.errors %}
+                                <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('inventory_list', company_id=company.id, tab='requests') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-paper-plane"></i> Enviar Solicitud
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const productsStock = {{ products_stock | tojson }};
+    const productSelect = document.getElementById('product_select');
+    const currentStockDisplay = document.getElementById('current_stock_display');
+    const currentStockValue = document.getElementById('current_stock_value');
+    const adjustmentMode = document.getElementById('adjustment_mode');
+    const addRemoveFields = document.getElementById('add_remove_fields');
+    const correctStockFields = document.getElementById('correct_stock_fields');
+    const desiredStockInput = document.getElementById('desired_stock_input');
+    const stockDifference = document.getElementById('stock_difference');
+    const diffIcon = document.getElementById('diff_icon');
+    const diffText = document.getElementById('diff_text');
+
+    productSelect.addEventListener('change', function() {
+        const productId = this.value;
+        if (productId && productsStock[productId] !== undefined) {
+            currentStockValue.textContent = productsStock[productId];
+            currentStockDisplay.style.display = 'block';
+        } else {
+            currentStockDisplay.style.display = 'none';
+        }
+        updateDifference();
+    });
+
+    adjustmentMode.addEventListener('change', function() {
+        if (this.value === 'CORRECT_STOCK') {
+            addRemoveFields.style.display = 'none';
+            correctStockFields.style.display = 'block';
+        } else {
+            addRemoveFields.style.display = 'block';
+            correctStockFields.style.display = 'none';
+        }
+    });
+
+    desiredStockInput.addEventListener('input', updateDifference);
+
+    function updateDifference() {
+        const productId = productSelect.value;
+        const desired = parseInt(desiredStockInput.value);
+        if (productId && productsStock[productId] !== undefined && !isNaN(desired)) {
+            const current = productsStock[productId];
+            const diff = desired - current;
+            stockDifference.style.display = 'block';
+
+            // Clear previous classes
+            diffText.className = '';
+
+            if (diff > 0) {
+                diffText.className = 'text-success';
+                diffText.textContent = 'Se agregarian ' + diff + ' unidades';
+            } else if (diff < 0) {
+                diffText.className = 'text-danger';
+                diffText.textContent = 'Se quitarian ' + Math.abs(diff) + ' unidades';
+            } else {
+                diffText.className = 'text-muted';
+                diffText.textContent = 'Sin cambio';
+            }
+        } else {
+            stockDifference.style.display = 'none';
+        }
+    }
+
+    if (productSelect.value) {
+        productSelect.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %}
