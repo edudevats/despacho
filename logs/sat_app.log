@@ -1041,3 +1041,106 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-03-18 04:58:08 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-03-18 04:58:14 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-03-18 04:58:38 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 05:36:29 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:36:31 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:36:31 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 06:38:16 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:38:16 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 06:38:22 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:38:22 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 05:38:29 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:48:19 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:48:19 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 06:53:41 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:53:41 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 06:54:52 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:54:52 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 06:55:04 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:55:04 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 06:55:23 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 06:55:23 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 07:02:50 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 07:02:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-18 07:03:12 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-18 07:03:13 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-19 07:38:43 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-19 07:38:44 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-19 07:39:04 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-19 07:39:04 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:07:30 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:07:32 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:07:32 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:08:41 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:08:41 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:08:48 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:08:48 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:08:54 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:08:54 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:08:59 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:08:59 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:09:07 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:07 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:09:17 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:19 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:19 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:09:22 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:22 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:09:23 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:25 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:25 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:09:34 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:34 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:09:38 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:09:41 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:43 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:09:44 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:11:30 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:11:30 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:11:30 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:12:30 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 02:12:37 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:12:38 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:12:38 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:13:10 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:13:10 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:13:43 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:13:43 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:13:51 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:13:51 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:13:59 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:13:59 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:14:09 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:14:09 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:14:26 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:14:26 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:14:40 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:14:40 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:14:49 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:14:49 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:15:02 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:15:02 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:15:16 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:15:16 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:15:43 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:15:43 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:20:59 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 02:21:23 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 02:22:07 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 02:23:48 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:23:55 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:23:55 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:30:39 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:30:40 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:30:48 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:30:50 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:30:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 02:30:54 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 02:33:39 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:33:59 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:33:59 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 03:34:23 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 03:34:23 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-03-21 04:04:04 - __main__ - INFO - [app.py:1659] - Admin stock adjustment by admin: product 1, 20 -> 40, reason: equivocación pruebas
+2026-03-21 15:13:27 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-03-21 15:13:27 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!

@@ -14,7 +14,11 @@
         </div>
     </div>
 
-    <div class="card shadow-sm">
+    <!-- Datos del Laboratorio -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-info-circle"></i> Datos Generales</h5>
+        </div>
         <div class="card-body">
             <form method="POST">
                 {{ form.hidden_tag() }}
@@ -30,11 +34,12 @@
 
                     <div class="col-md-6 mb-3">
                         {{ form.sanitary_registration.label(class="form-label") }}
-                        {{ form.sanitary_registration(class="form-control", placeholder="Registro sanitario (opcional)") }}
+                        {{ form.sanitary_registration(class="form-control", placeholder="Registro sanitario principal (opcional)") }}
+                        <small class="text-muted">Puedes agregar registros adicionales abajo</small>
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-between mt-4">
+                <div class="d-flex justify-content-between mt-2">
                     <a href="{{ url_for('inventory_list', company_id=company.id, tab='laboratories') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left"></i> Cancelar
                     </a>
@@ -45,5 +50,73 @@
             </form>
         </div>
     </div>
+
+    {% if action == 'editar' and laboratory %}
+    <!-- Registros Sanitarios -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-id-card"></i> Registros Sanitarios</h5>
+        </div>
+        <div class="card-body">
+            <!-- Tabla de registros existentes -->
+            <div class="table-responsive mb-3">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>No. Registro</th>
+                            <th>Descripcion</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reg in registrations %}
+                        <tr>
+                            <td><code class="fs-6">{{ reg.registration_number }}</code></td>
+                            <td><small class="text-muted">{{ reg.description or '--' }}</small></td>
+                            <td class="text-center">
+                                <form method="POST"
+                                      action="{{ url_for('delete_lab_registration', company_id=company.id, laboratory_id=laboratory.id, reg_id=reg.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Eliminar este registro sanitario?')">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center py-3 text-muted">
+                                No hay registros sanitarios. Agregue uno abajo.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Formulario para agregar nuevo registro -->
+            <form method="POST" action="{{ url_for('add_lab_registration', company_id=company.id, laboratory_id=laboratory.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row align-items-end">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label">No. Registro Sanitario</label>
+                        <input type="text" name="registration_number" class="form-control" required placeholder="Ej: 0123M2020 SSA">
+                    </div>
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label">Descripcion (opcional)</label>
+                        <input type="text" name="description" class="form-control" placeholder="Ej: Para tabletas, Para inyectables">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-plus"></i> Agregar Registro
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -51,36 +51,60 @@
                     </thead>
                     <tbody>
                         {% for detail in order.details %}
+                        {% set product = detail.product %}
+                        {% set upp = product.units_per_package or 1 %}
+                        {% set requires_batch = product.category and product.category.requires_batch_tracking %}
                         <tr class="{{ 'table-danger' if detail.difference < 0 else ('table-warning' if detail.difference > 0 else 'table-success') }}">
                             <td>
-                                <strong>{{ detail.product.name }}</strong>
-                                {% if detail.product.sku %}
-                                <br><small class="text-muted">{{ detail.product.sku }}</small>
+                                <strong>{{ product.name }}</strong>
+                                {% if product.sku %}
+                                <br><small class="text-muted">{{ product.sku }}</small>
+                                {% endif %}
+                                {% if product.category %}
+                                <span class="badge bg-{{ 'primary' if product.category.requires_cofepris else 'secondary' }} ms-1">{{ product.category.name }}</span>
                                 {% endif %}
                             </td>
-                            <td class="text-center">{{ detail.quantity_requested }}</td>
-                            <td class="text-center fw-bold">{{ detail.quantity_received }}</td>
-                            <td>
-                                {% if detail.batch_number %}
-                                <code>{{ detail.batch_number }}</code>
-                                {% else %}
-                                <span class="text-muted">--</span>
+                            <td class="text-center">
+                                {{ detail.quantity_requested }} pzas
+                                {% if detail.order_unit == 'PAQUETE' and upp > 1 %}
+                                <br><small class="text-info">{{ detail.package_quantity or 0 }} {{ product.packaging_type or 'paq' }} + {{ detail.loose_quantity or 0 }} pzas</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center fw-bold">
+                                {{ detail.quantity_received }} pzas
+                                {% if detail.order_unit == 'PAQUETE' and upp > 1 %}
+                                <br><small class="text-info">{{ detail.packages_received or 0 }} {{ product.packaging_type or 'paq' }} + {{ detail.loose_received or 0 }} pzas</small>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if detail.expiration_date %}
-                                {{ detail.expiration_date.strftime('%d/%m/%Y') }}
+                                {% if requires_batch %}
+                                    {% if detail.batch_number %}
+                                    <code>{{ detail.batch_number }}</code>
+                                    {% else %}
+                                    <span class="text-warning"><i class="fas fa-exclamation-triangle"></i> Sin lote</span>
+                                    {% endif %}
                                 {% else %}
-                                <span class="text-muted">--</span>
+                                <small class="text-muted">No aplica</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if requires_batch %}
+                                    {% if detail.expiration_date %}
+                                    {{ detail.expiration_date.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                    <span class="text-muted">--</span>
+                                    {% endif %}
+                                {% else %}
+                                <small class="text-muted">No aplica</small>
                                 {% endif %}
                             </td>
                             <td class="text-center">
                                 {% if detail.difference == 0 %}
                                 <span class="badge bg-success"><i class="fas fa-check"></i> Completo</span>
                                 {% elif detail.difference < 0 %}
-                                <span class="badge bg-danger"><i class="fas fa-times"></i> Faltante</span>
+                                <span class="badge bg-danger"><i class="fas fa-times"></i> Faltante ({{ detail.difference }})</span>
                                 {% else %}
-                                <span class="badge bg-info"><i class="fas fa-plus"></i> Excedente</span>
+                                <span class="badge bg-info"><i class="fas fa-plus"></i> Excedente (+{{ detail.difference }})</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -95,8 +119,8 @@
         <div class="card-body text-center">
             <h4>Al completar esta orden:</h4>
             <ul class="list-unstyled mb-0">
-                <li><i class="fas fa-check text-success"></i> Se actualizara el stock de cada producto</li>
-                <li><i class="fas fa-check text-success"></i> Se crearan los lotes con numero y caducidad</li>
+                <li><i class="fas fa-check text-success"></i> Se actualizara el stock de cada producto (en piezas)</li>
+                <li><i class="fas fa-check text-success"></i> Se crearan lotes con numero y caducidad (solo para productos que lo requieran)</li>
                 <li><i class="fas fa-check text-success"></i> Se registraran las transacciones de inventario</li>
                 <li><i class="fas fa-check text-success"></i> La orden quedara cerrada permanentemente</li>
             </ul>

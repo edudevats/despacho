@@ -294,6 +294,51 @@ class Laboratory(db.Model):
         return f'<Laboratory {self.name}>'
 
 
+class LaboratorySanitaryRegistration(db.Model):
+    """
+    Registros sanitarios de laboratorios (un laboratorio puede tener varios)
+    """
+    __tablename__ = 'laboratory_sanitary_registration'
+
+    id = db.Column(db.Integer, primary_key=True)
+    laboratory_id = db.Column(db.Integer, db.ForeignKey('laboratory.id'), nullable=False)
+    registration_number = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(200), nullable=True)  # Ej: "para tabletas", "para inyectables"
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    laboratory = db.relationship('Laboratory', backref=db.backref('sanitary_registrations', lazy=True, order_by='LaboratorySanitaryRegistration.registration_number'))
+
+    def __repr__(self):
+        return f'<LaboratorySanitaryRegistration {self.registration_number}>'
+
+
+class ProductCategory(db.Model):
+    """
+    Categorías de producto (Medicamento, Insumo, etc.)
+    Controla si requiere campos COFEPRIS y tracking de lotes.
+    """
+    __tablename__ = 'product_category'
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    requires_cofepris = db.Column(db.Boolean, default=False)
+    requires_batch_tracking = db.Column(db.Boolean, default=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    company = db.relationship('Company', backref=db.backref('product_categories', lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint('company_id', 'name', name='unique_product_category_per_company'),
+    )
+
+    def __repr__(self):
+        return f'<ProductCategory {self.name}>'
+
+
 class Product(db.Model):
     """
     Producto/Medicamento para inventario
@@ -317,6 +362,12 @@ class Product(db.Model):
     # Relaciones con laboratorio y proveedor
     laboratory_id = db.Column(db.Integer, db.ForeignKey('laboratory.id'), nullable=True)
     preferred_supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=True)
+    category_id = db.Column(db.Integer, db.ForeignKey('product_category.id'), nullable=True)
+
+    # Empaque
+    packaging_type = db.Column(db.String(50), nullable=True)  # Caja, Paquete, Kit, Blister, etc.
+    units_per_package = db.Column(db.Integer, default=1)  # Piezas por empaque
+    sell_by = db.Column(db.String(10), default='UNIDAD')  # UNIDAD o PAQUETE
 
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -332,6 +383,7 @@ class Product(db.Model):
     company = db.relationship('Company', backref=db.backref('products', lazy=True))
     laboratory = db.relationship('Laboratory', backref=db.backref('products', lazy=True))
     preferred_supplier = db.relationship('Supplier', backref=db.backref('preferred_products', lazy=True))
+    category = db.relationship('ProductCategory', backref=db.backref('products', lazy=True))
 
     @property
     def calculated_selling_price(self):
@@ -597,6 +649,13 @@ class PurchaseOrderDetail(db.Model):
     # Batch/Lot information for COFEPRIS compliance
     batch_number = db.Column(db.String(50), nullable=True)  # Numero de lote
     expiration_date = db.Column(db.Date, nullable=True)  # Fecha de caducidad
+
+    # Empaque en orden de compra
+    order_unit = db.Column(db.String(10), default='UNIDAD')  # UNIDAD o PAQUETE
+    package_quantity = db.Column(db.Integer, nullable=True)  # Paquetes ordenados
+    loose_quantity = db.Column(db.Integer, default=0)  # Piezas sueltas ordenadas
+    packages_received = db.Column(db.Integer, nullable=True)  # Paquetes recibidos
+    loose_received = db.Column(db.Integer, default=0)  # Piezas sueltas recibidas
 
     order = db.relationship('PurchaseOrder', backref=db.backref('details', lazy=True, cascade='all, delete-orphan'))
     product = db.relationship('Product', backref=db.backref('order_details', lazy=True))

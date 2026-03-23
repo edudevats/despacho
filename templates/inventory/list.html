@@ -98,6 +98,12 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if active_tab == 'categories' else '' }}" id="categories-tab"
+                    data-bs-toggle="tab" data-bs-target="#categories" type="button" role="tab">
+                <i class="fas fa-tags"></i> Categorías
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link {{ 'active' if active_tab == 'orders' else '' }}" id="orders-tab"
                     data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
                 <i class="fas fa-clipboard-list"></i> Ordenes de Compra
@@ -139,7 +145,19 @@
         <!-- TAB: Medicamentos/Productos -->
         <div class="tab-pane fade {{ 'show active' if active_tab == 'products' else '' }}" id="products" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4>Medicamentos / Productos</h4>
+                <div class="d-flex align-items-center gap-3">
+                    <h4 class="mb-0">Productos</h4>
+                    <!-- Filtro por categoría -->
+                    <form method="GET" action="{{ url_for('inventory_list', company_id=company.id) }}" class="d-inline-flex align-items-center gap-2">
+                        <input type="hidden" name="tab" value="products">
+                        <select name="category_id" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                            <option value="">Todas las categorías</option>
+                            {% for cat in product_categories %}
+                            <option value="{{ cat.id }}" {{ 'selected' if category_filter == cat.id }}>{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </div>
                 {% if current_user.is_admin %}
                 <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Producto
@@ -174,6 +192,7 @@
                                 <tr>
                                     <th>SKU</th>
                                     <th>Producto</th>
+                                    <th>Categoría</th>
                                     <th>Laboratorio</th>
                                     <th class="text-end">Costo</th>
                                     <th class="text-end">Margen</th>
@@ -195,6 +214,16 @@
                                         {% endif %}
                                         {% if product.description %}
                                         <br><small class="text-muted">{{ product.description|truncate(40) }}</small>
+                                        {% endif %}
+                                        {% if product.units_per_package and product.units_per_package > 1 %}
+                                        <br><small class="text-info"><i class="fas fa-box"></i> {{ product.packaging_type or 'Paq' }}: {{ product.units_per_package }} pzas</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if product.category %}
+                                        <span class="badge bg-{{ 'primary' if product.category.requires_cofepris else 'secondary' }}">{{ product.category.name }}</span>
+                                        {% else %}
+                                        <small class="text-muted">--</small>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -239,7 +268,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="8" class="text-center py-4 text-muted">
+                                    <td colspan="9" class="text-center py-4 text-muted">
                                         <i class="fas fa-box-open fa-3x mb-3"></i><br>
                                         No hay productos registrados.
                                     </td>
@@ -304,6 +333,129 @@
                                     <td colspan="5" class="text-center py-4 text-muted">
                                         <i class="fas fa-flask fa-3x mb-3"></i><br>
                                         No hay laboratorios registrados.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Categorías -->
+        <div class="tab-pane fade {{ 'show active' if active_tab == 'categories' else '' }}" id="categories" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Categorías de Producto</h4>
+            </div>
+
+            {% if current_user.is_admin %}
+            <!-- Formulario inline para agregar categoría -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-plus-circle"></i> Nueva Categoría</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('add_product_category', company_id=company.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row align-items-end">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Nombre</label>
+                                <input type="text" name="name" class="form-control" required placeholder="Ej: Medicamento, Insumo">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Descripción</label>
+                                <input type="text" name="description" class="form-control" placeholder="Opcional">
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" name="requires_cofepris" class="form-check-input" id="newCatCofepris" value="y">
+                                    <label class="form-check-label" for="newCatCofepris">COFEPRIS</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" name="requires_batch_tracking" class="form-check-input" id="newCatBatch" value="y">
+                                    <label class="form-check-label" for="newCatBatch">Lotes</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-plus"></i> Agregar
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Req. COFEPRIS</th>
+                                    <th class="text-center">Req. Lotes</th>
+                                    <th class="text-center">Productos</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cat in product_categories %}
+                                <tr>
+                                    <td><strong>{{ cat.name }}</strong></td>
+                                    <td><small class="text-muted">{{ cat.description or '--' }}</small></td>
+                                    <td class="text-center">
+                                        {% if cat.requires_cofepris %}
+                                        <span class="badge bg-success"><i class="fas fa-check"></i> Sí</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if cat.requires_batch_tracking %}
+                                        <span class="badge bg-success"><i class="fas fa-check"></i> Sí</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary rounded-pill">{{ cat.products|length }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if cat.active %}
+                                        <span class="badge bg-success">Activa</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Inactiva</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if current_user.is_admin %}
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('edit_product_category', company_id=company.id, category_id=cat.id) }}"
+                                                class="btn btn-outline-secondary" title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <form method="POST" action="{{ url_for('toggle_product_category', company_id=company.id, category_id=cat.id) }}" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-outline-{{ 'danger' if cat.active else 'success' }}" title="{{ 'Desactivar' if cat.active else 'Activar' }}">
+                                                    <i class="fas fa-{{ 'ban' if cat.active else 'check' }}"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-muted">
+                                        <i class="fas fa-tags fa-3x mb-3"></i><br>
+                                        No hay categorías registradas.
                                     </td>
                                 </tr>
                                 {% endfor %}

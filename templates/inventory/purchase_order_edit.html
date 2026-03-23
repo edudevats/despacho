@@ -46,8 +46,23 @@
                                         {% if detail.product.sku %}
                                         <br><small class="text-muted">SKU: {{ detail.product.sku }}</small>
                                         {% endif %}
+                                        {% if detail.product.category %}
+                                        <span class="badge bg-{{ 'primary' if detail.product.category.requires_cofepris else 'secondary' }} ms-1">{{ detail.product.category.name }}</span>
+                                        {% endif %}
                                     </td>
-                                    <td class="text-center">{{ detail.quantity_requested }}</td>
+                                    <td class="text-center">
+                                        {% if detail.order_unit == 'PAQUETE' and detail.product.units_per_package and detail.product.units_per_package > 1 %}
+                                        <span title="{{ detail.package_quantity or 0 }} {{ detail.product.packaging_type or 'paq' }} x {{ detail.product.units_per_package }} + {{ detail.loose_quantity or 0 }} pzas">
+                                            {{ detail.quantity_requested }} pzas
+                                            <br><small class="text-info">
+                                                <i class="fas fa-box"></i> {{ detail.package_quantity or 0 }} {{ detail.product.packaging_type or 'paq' }}
+                                                {% if detail.loose_quantity %} + {{ detail.loose_quantity }} pzas{% endif %}
+                                            </small>
+                                        </span>
+                                        {% else %}
+                                        {{ detail.quantity_requested }}
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end">${{ detail.unit_cost|format_currency }}</td>
                                     <td class="text-end fw-bold">${{ (detail.quantity_requested * detail.unit_cost)|format_currency }}</td>
                                     <td class="text-center">
@@ -108,25 +123,58 @@
                     <h5 class="mb-0"><i class="fas fa-plus"></i> Agregar Producto</h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST">
+                    <form method="POST" id="addProductForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="add_product">
 
                         <div class="mb-3">
                             <label class="form-label">Producto</label>
-                            <select name="product_id" class="form-select" required>
-                                <option value="">-- Seleccionar --</option>
+                            <select name="product_id" class="form-select" required id="productSelect">
+                                <option value="" data-cost="0" data-upp="1" data-packaging="">-- Seleccionar --</option>
                                 {% for product in products %}
-                                <option value="{{ product.id }}" data-cost="{{ product.cost_price }}">
+                                <option value="{{ product.id }}"
+                                        data-cost="{{ product.cost_price }}"
+                                        data-upp="{{ product.units_per_package or 1 }}"
+                                        data-packaging="{{ product.packaging_type or '' }}">
                                     {{ product.name }} {% if product.sku %}({{ product.sku }}){% endif %}
+                                    {% if product.units_per_package and product.units_per_package > 1 %}
+                                    [{{ product.packaging_type or 'Paq' }}: {{ product.units_per_package }} pzas]
+                                    {% endif %}
                                 </option>
                                 {% endfor %}
                             </select>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Cantidad</label>
-                            <input type="number" name="quantity" class="form-control" value="1" min="1" required>
+                        <!-- Modo de orden: Unidad o Paquete -->
+                        <div class="mb-3" id="orderUnitSection" style="display:none;">
+                            <label class="form-label">Ordenar por</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="order_unit" value="UNIDAD" id="orderByUnit" checked>
+                                <label class="btn btn-outline-secondary" for="orderByUnit">Unidad/Pieza</label>
+                                <input type="radio" class="btn-check" name="order_unit" value="PAQUETE" id="orderByPackage">
+                                <label class="btn btn-outline-primary" for="orderByPackage" id="orderByPackageLabel">Paquete</label>
+                            </div>
+                        </div>
+
+                        <!-- Cantidad simple (por unidad) -->
+                        <div class="mb-3" id="simpleQtySection">
+                            <label class="form-label">Cantidad (piezas)</label>
+                            <input type="number" name="quantity" class="form-control" value="1" min="1" id="simpleQty">
+                        </div>
+
+                        <!-- Cantidad por paquete -->
+                        <div id="packageQtySection" style="display:none;">
+                            <div class="mb-2">
+                                <label class="form-label" id="packageLabel">Paquetes</label>
+                                <input type="number" name="package_quantity" class="form-control" value="1" min="0" id="packageQty">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Piezas sueltas</label>
+                                <input type="number" name="loose_quantity" class="form-control" value="0" min="0" id="looseQty">
+                            </div>
+                            <div class="alert alert-info py-2 mb-3" id="totalCalc" style="display:none;">
+                                <i class="fas fa-calculator"></i> Total: <strong id="totalPieces">0</strong> piezas
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -149,11 +197,66 @@
 </div>
 
 <script>
-// Auto-fill cost when product is selected
-document.querySelector('select[name="product_id"]').addEventListener('change', function() {
+const productSelect = document.getElementById('productSelect');
+const orderUnitSection = document.getElementById('orderUnitSection');
+const simpleQtySection = document.getElementById('simpleQtySection');
+const packageQtySection = document.getElementById('packageQtySection');
+const orderByUnit = document.getElementById('orderByUnit');
+const orderByPackage = document.getElementById('orderByPackage');
+const orderByPackageLabel = document.getElementById('orderByPackageLabel');
+const packageLabel = document.getElementById('packageLabel');
+const packageQty = document.getElementById('packageQty');
+const looseQty = document.getElementById('looseQty');
+const totalCalc = document.getElementById('totalCalc');
+const totalPieces = document.getElementById('totalPieces');
+
+let currentUPP = 1;
+
+// Auto-fill cost and show package options when product is selected
+productSelect.addEventListener('change', function() {
     const option = this.options[this.selectedIndex];
     const cost = option.getAttribute('data-cost') || 0;
+    const upp = parseInt(option.getAttribute('data-upp')) || 1;
+    const packaging = option.getAttribute('data-packaging') || 'Paquete';
+
     document.getElementById('unitCostInput').value = parseFloat(cost).toFixed(2);
+    currentUPP = upp;
+
+    if (upp > 1) {
+        orderUnitSection.style.display = 'block';
+        orderByPackageLabel.textContent = packaging || 'Paquete';
+        packageLabel.textContent = (packaging || 'Paquetes') + ' (x' + upp + ' pzas)';
+    } else {
+        orderUnitSection.style.display = 'none';
+        orderByUnit.checked = true;
+        toggleOrderMode();
+    }
+    toggleOrderMode();
 });
+
+function toggleOrderMode() {
+    if (orderByPackage.checked && currentUPP > 1) {
+        simpleQtySection.style.display = 'none';
+        packageQtySection.style.display = 'block';
+        updateTotalCalc();
+    } else {
+        simpleQtySection.style.display = 'block';
+        packageQtySection.style.display = 'none';
+    }
+}
+
+orderByUnit.addEventListener('change', toggleOrderMode);
+orderByPackage.addEventListener('change', toggleOrderMode);
+
+function updateTotalCalc() {
+    const pkgs = parseInt(packageQty.value) || 0;
+    const loose = parseInt(looseQty.value) || 0;
+    const total = (pkgs * currentUPP) + loose;
+    totalPieces.textContent = total;
+    totalCalc.style.display = total > 0 ? 'block' : 'none';
+}
+
+packageQty.addEventListener('input', updateTotalCalc);
+looseQty.addEventListener('input', updateTotalCalc);
 </script>
 {% endblock %}

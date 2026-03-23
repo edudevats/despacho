@@ -660,9 +660,11 @@ def get_physical_count_snapshot(company_id, current_user):
 @mobile_api_bp.route('/companies/<int:company_id>/physical-count/apply', methods=['POST'])
 @token_required
 def apply_physical_count(company_id, current_user):
-    """Apply physical count adjustments."""
+    """Apply physical count adjustments (admin only)."""
     if not current_user.can_access_company(company_id):
         return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+    if not current_user.is_admin:
+        return jsonify({'error': 'Solo administradores pueden aplicar conteos fisicos'}), 403
 
     data = request.get_json() or {}
     items = data.get('items', [])
@@ -746,9 +748,11 @@ VALID_ADJUSTMENT_TYPES = {'MERMA', 'DAÑO', 'CADUCADO', 'CORRECCION', 'OTRO'}
 @mobile_api_bp.route('/companies/<int:company_id>/adjustments', methods=['POST'])
 @token_required
 def create_adjustment(company_id, current_user):
-    """Create a stock adjustment for a product."""
+    """Create a stock adjustment for a product (admin only)."""
     if not current_user.can_access_company(company_id):
         return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+    if not current_user.is_admin:
+        return jsonify({'error': 'Solo administradores pueden realizar ajustes de inventario'}), 403
 
     data = request.get_json() or {}
     product_id = data.get('product_id')
@@ -925,9 +929,12 @@ def pos_list_exit_orders(current_user):
     for o in orders:
         result.append({
             'id': o.id,
+            'company_id': o.company_id,
             'recipient_name': o.recipient_name,
             'recipient_type': o.recipient_type,
+            'recipient_id': o.recipient_id,
             'status': o.status,
+            'notes': o.notes,
             'total_items': o.total_items,
             'created_at': o.created_at.isoformat() if o.created_at else None,
             'completed_at': o.completed_at.isoformat() if o.completed_at else None,
@@ -1196,6 +1203,67 @@ def pos_remove_item(order_id, current_user):
 
     order_total = sum(d.quantity for d in order.details)
     return jsonify({'success': True, 'order_total_items': order_total})
+
+
+@mobile_api_bp.route('/pos/exit-orders/<int:order_id>/update-quantity', methods=['POST'])
+@token_required
+def pos_update_item_quantity(order_id, current_user):
+    """Update the quantity of an item in a DRAFT exit order."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    detail_id = data.get('detail_id')
+    quantity = data.get('quantity')
+
+    if not detail_id or quantity is None:
+        return jsonify({'error': 'detail_id y quantity son requeridos'}), 400
+
+    quantity = int(quantity)
+    if quantity < 1:
+        return jsonify({'error': 'La cantidad debe ser al menos 1'}), 400
+
+    order = db.session.get(ExitOrder, order_id)
+    if not order:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+    if not current_user.can_access_company(order.company_id):
+        return jsonify({'error': 'Sin acceso'}), 403
+    if order.status != 'DRAFT':
+        return jsonify({'error': 'No se puede modificar una orden completada'}), 400
+
+    detail = db.session.get(ExitOrderDetail, detail_id)
+    if not detail or detail.order_id != order.id:
+        return jsonify({'error': 'Item no encontrado en esta orden'}), 404
+
+    # Check stock availability if increasing quantity
+    if detail.batch_id:
+        batch = db.session.get(ProductBatch, detail.batch_id)
+        if batch and quantity > batch.current_stock:
+            return jsonify({
+                'error': f'Stock insuficiente. Disponible: {batch.current_stock}',
+            }), 400
+    else:
+        product = db.session.get(Product, detail.product_id)
+        if product and quantity > product.current_stock:
+            return jsonify({
+                'error': f'Stock insuficiente. Disponible: {product.current_stock}',
+            }), 400
+
+    detail.quantity = quantity
+    db.session.commit()
+
+    order_total = sum(d.quantity for d in order.details)
+    logger.info(
+        f"POS: update qty order=#{order.id} detail=#{detail.id} "
+        f"qty={quantity} user={current_user.username}"
+    )
+
+    return jsonify({
+        'success': True,
+        'detail_id': detail.id,
+        'quantity': detail.quantity,
+        'order_total_items': order_total,
+    })
 
 
 @mobile_api_bp.route('/pos/exit-orders/<int:order_id>/complete', methods=['POST'])
@@ -1802,6 +1870,79 @@ def mobile_remove_received_item(company_id, order_id, current_user):
     })
 
 
+@mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/update-received-quantity', methods=['POST'])
+@token_required
+def mobile_update_received_quantity(company_id, order_id, current_user):
+    """Update the received quantity of an item in a purchase order during review."""
+    if not current_user.can_access_company(company_id):
+        return jsonify({'error': 'Sin acceso a esta empresa'}), 403
+
+    order = db.session.get(PurchaseOrder, order_id)
+    if not order or order.company_id != company_id:
+        return jsonify({'error': 'Orden no encontrada'}), 404
+
+    if order.status not in ['SENT', 'IN_REVIEW']:
+        return jsonify({'error': 'Solo se pueden modificar ordenes en revision o enviadas'}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Se requiere JSON'}), 400
+
+    detail_id = data.get('detail_id')
+    quantity = data.get('quantity')
+
+    if not detail_id or quantity is None:
+        return jsonify({'error': 'detail_id y quantity son requeridos'}), 400
+
+    quantity = int(quantity)
+    if quantity < 0:
+        return jsonify({'error': 'La cantidad no puede ser negativa'}), 400
+
+    detail = db.session.get(PurchaseOrderDetail, detail_id)
+    if not detail or detail.order_id != order.id:
+        return jsonify({'error': 'Item no encontrado en esta orden'}), 404
+
+    if quantity == 0 and detail.quantity_requested == 0:
+        # Unexpected item with 0 received - remove entirely
+        db.session.delete(detail)
+    else:
+        detail.quantity_received = quantity
+
+    # Transition SENT → IN_REVIEW if not already
+    if order.status == 'SENT':
+        order.status = 'IN_REVIEW'
+        order.received_at = now_mexico()
+
+    db.session.commit()
+
+    # Recalculate order totals
+    total_ordered = sum(d.quantity_requested for d in order.details)
+    total_received = sum(d.quantity_received or 0 for d in order.details)
+    items_complete = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) == d.quantity_requested)
+    items_partial = sum(1 for d in order.details if d.quantity_requested > 0 and 0 < (d.quantity_received or 0) < d.quantity_requested)
+    items_excess = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) > d.quantity_requested)
+    items_missing = sum(1 for d in order.details if d.quantity_requested > 0 and (d.quantity_received or 0) == 0)
+
+    logger.info(
+        f"Mobile: PO #{order.id} update-received-qty detail=#{detail_id} "
+        f"qty={quantity} user={current_user.username}"
+    )
+
+    return jsonify({
+        'success': True,
+        'detail_id': detail_id,
+        'quantity_received': quantity,
+        'order_totals': {
+            'total_items_ordered': total_ordered,
+            'total_items_received': total_received,
+            'items_complete': items_complete,
+            'items_partial': items_partial,
+            'items_excess': items_excess,
+            'items_missing': items_missing,
+        },
+    })
+
+
 @mobile_api_bp.route('/companies/<int:company_id>/purchase-orders/<int:order_id>/complete', methods=['POST'])
 @token_required
 def mobile_complete_purchase_order(company_id, order_id, current_user):
@@ -2044,7 +2185,9 @@ def catalog_add_product(current_user):
     company_id = data.get('company_id')
     if not company_id or not current_user.can_access_company(company_id):
         return jsonify({'error': 'Sin acceso a esta empresa'}), 403
-    
+    if not current_user.is_admin:
+        return jsonify({'error': 'Solo administradores pueden agregar productos'}), 403
+
     # Validate required fields
     sku = (data.get('sku') or '').strip()
     name = (data.get('name') or '').strip()

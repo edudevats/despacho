@@ -8,7 +8,7 @@
         <div class="col-md-10">
             <div class="card shadow">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0"><i class="fas fa-pills"></i> Agregar Nuevo Producto/Medicamento</h4>
+                    <h4 class="mb-0"><i class="fas fa-pills"></i> Agregar Nuevo Producto</h4>
                 </div>
                 <div class="card-body">
                     <form method="POST">
@@ -17,16 +17,20 @@
                         <!-- Informacion Basica -->
                         <h5 class="mb-3"><i class="fas fa-info-circle"></i> Informacion Basica</h5>
                         <div class="row mb-3">
-                            <div class="col-md-8">
+                            <div class="col-md-6">
                                 {{ form.name.label(class="form-label") }}
                                 {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
                                 {% if form.name.errors %}
                                 <div class="invalid-feedback">{{ form.name.errors[0] }}</div>
                                 {% endif %}
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 {{ form.sku.label(class="form-label") }}
                                 {{ form.sku(class="form-control", placeholder="Codigo de barras o SKU") }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ form.category_id.label(class="form-label") }}
+                                {{ form.category_id(class="form-select", id="categorySelect") }}
                             </div>
                         </div>
 
@@ -39,13 +43,43 @@
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 {{ form.laboratory_id.label(class="form-label") }}
-                                {{ form.laboratory_id(class="form-select") }}
+                                {{ form.laboratory_id(class="form-select", id="laboratorySelect") }}
                                 <small class="text-muted">Fabricante del producto</small>
+                                <!-- Dropdown de registros sanitarios del laboratorio -->
+                                <div id="labRegSection" class="mt-2" style="display:none;">
+                                    <label class="form-label text-primary"><i class="fas fa-id-card"></i> Registro Sanitario del Laboratorio</label>
+                                    <select id="labRegSelect" class="form-select form-select-sm">
+                                        <option value="">-- Seleccionar registro --</option>
+                                    </select>
+                                    <small class="text-muted">Selecciona para auto-llenar el registro sanitario</small>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 {{ form.preferred_supplier_id.label(class="form-label") }}
                                 {{ form.preferred_supplier_id(class="form-select") }}
                                 <small class="text-muted">Proveedor principal para compras</small>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Empaque -->
+                        <h5 class="mb-3"><i class="fas fa-box"></i> Empaque y Presentacion</h5>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                {{ form.packaging_type.label(class="form-label") }}
+                                {{ form.packaging_type(class="form-control", placeholder="Ej: Caja, Paquete, Kit, Blister") }}
+                                <small class="text-muted">Tipo de empaque del proveedor</small>
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.units_per_package.label(class="form-label") }}
+                                {{ form.units_per_package(class="form-control", id="unitsPerPackage") }}
+                                <small class="text-muted">Piezas individuales por empaque</small>
+                            </div>
+                            <div class="col-md-4">
+                                {{ form.sell_by.label(class="form-label") }}
+                                {{ form.sell_by(class="form-select") }}
+                                <small class="text-muted">Como se vende al cliente</small>
                             </div>
                         </div>
 
@@ -112,35 +146,41 @@
 
                         <hr class="my-4">
 
-                        <!-- COFEPRIS Section -->
-                        <div class="card bg-light mb-3">
-                            <div class="card-body">
-                                <h5 class="card-title text-primary"><i class="fas fa-shield-alt"></i> Datos Sanitarios (COFEPRIS)</h5>
-                                <div class="row mb-3">
-                                    <div class="col-md-6 d-flex align-items-center">
-                                        <div class="form-check form-switch">
-                                            {{ form.is_controlled(class="form-check-input") }}
-                                            {{ form.is_controlled.label(class="form-check-label") }}
+                        <!-- COFEPRIS Section (conditional) -->
+                        <div id="cofeprisSection">
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title text-primary"><i class="fas fa-shield-alt"></i> Datos Sanitarios (COFEPRIS)</h5>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            {{ form.sanitary_registration.label(class="form-label") }}
+                                            {{ form.sanitary_registration(class="form-control", id="sanitaryRegInput") }}
+                                        </div>
+                                        <div class="col-md-6 d-flex align-items-center">
+                                            <div class="form-check form-switch">
+                                                {{ form.is_controlled(class="form-check-input") }}
+                                                {{ form.is_controlled.label(class="form-check-label") }}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        {{ form.active_ingredient.label(class="form-label") }}
-                                        {{ form.active_ingredient(class="form-control") }}
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            {{ form.active_ingredient.label(class="form-label") }}
+                                            {{ form.active_ingredient(class="form-control") }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            {{ form.presentation.label(class="form-label") }}
+                                            {{ form.presentation(class="form-control") }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            {{ form.unit_measure.label(class="form-label") }}
+                                            {{ form.unit_measure(class="form-select") }}
+                                        </div>
                                     </div>
-                                    <div class="col-md-3">
-                                        {{ form.presentation.label(class="form-label") }}
-                                        {{ form.presentation(class="form-control") }}
+                                    <div class="mb-3">
+                                        {{ form.therapeutic_group.label(class="form-label") }}
+                                        {{ form.therapeutic_group(class="form-control") }}
                                     </div>
-                                    <div class="col-md-3">
-                                        {{ form.unit_measure.label(class="form-label") }}
-                                        {{ form.unit_measure(class="form-select") }}
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    {{ form.therapeutic_group.label(class="form-label") }}
-                                    {{ form.therapeutic_group(class="form-control") }}
                                 </div>
                             </div>
                         </div>
@@ -170,8 +210,76 @@ function calculatePrice() {
 
 document.getElementById('costPrice').addEventListener('input', calculatePrice);
 document.getElementById('profitMargin').addEventListener('input', calculatePrice);
-
-// Calculate on page load
 calculatePrice();
+
+// Show/hide COFEPRIS section based on category
+const categorySelect = document.getElementById('categorySelect');
+const cofeprisSection = document.getElementById('cofeprisSection');
+
+function updateCofeprisVisibility() {
+    const catId = categorySelect.value;
+    if (catId && catId !== '0') {
+        fetch('/api/product-category/' + catId)
+            .then(r => r.json())
+            .then(data => {
+                cofeprisSection.style.display = data.requires_cofepris ? 'block' : 'none';
+            })
+            .catch(() => { cofeprisSection.style.display = 'block'; });
+    } else {
+        // Sin categoría: mostrar COFEPRIS por defecto
+        cofeprisSection.style.display = 'block';
+    }
+}
+
+categorySelect.addEventListener('change', updateCofeprisVisibility);
+updateCofeprisVisibility();
+
+// Lab registration dropdown
+const laboratorySelect = document.getElementById('laboratorySelect');
+const labRegSection = document.getElementById('labRegSection');
+const labRegSelect = document.getElementById('labRegSelect');
+const sanitaryRegInput = document.getElementById('sanitaryRegInput');
+
+function resetLabRegSelect() {
+    while (labRegSelect.firstChild) labRegSelect.removeChild(labRegSelect.firstChild);
+    const defOpt = document.createElement('option');
+    defOpt.value = '';
+    defOpt.textContent = '-- Seleccionar registro --';
+    labRegSelect.appendChild(defOpt);
+}
+
+function loadLabRegistrations() {
+    const labId = laboratorySelect.value;
+    if (labId && labId !== '0') {
+        fetch('/api/laboratory/' + labId + '/registrations')
+            .then(r => r.json())
+            .then(data => {
+                resetLabRegSelect();
+                if (data.length > 0) {
+                    data.forEach(reg => {
+                        const opt = document.createElement('option');
+                        opt.value = reg.registration_number;
+                        opt.textContent = reg.registration_number + (reg.description ? ' (' + reg.description + ')' : '');
+                        labRegSelect.appendChild(opt);
+                    });
+                    labRegSection.style.display = 'block';
+                } else {
+                    labRegSection.style.display = 'none';
+                }
+            })
+            .catch(() => { labRegSection.style.display = 'none'; });
+    } else {
+        labRegSection.style.display = 'none';
+    }
+}
+
+labRegSelect.addEventListener('change', function() {
+    if (this.value && sanitaryRegInput) {
+        sanitaryRegInput.value = this.value;
+    }
+});
+
+laboratorySelect.addEventListener('change', loadLabRegistrations);
+loadLabRegistrations();
 </script>
 {% endblock %}

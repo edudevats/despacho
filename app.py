@@ -10,15 +10,16 @@ from config import Config
 from extensions import db, login_manager, migrate, mail, cache, csrf, init_extensions
 from models import (Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product,
                     InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer,
-                    Laboratory, Service, PurchaseOrder, PurchaseOrderDetail, InvoiceTemplate, InvoiceTemplateItem,
-                    UserCompanyAccess, ExitOrder, ExitOrderDetail, InventoryRequest)
+                    Laboratory, LaboratorySanitaryRegistration, Service, PurchaseOrder, PurchaseOrderDetail,
+                    InvoiceTemplate, InvoiceTemplateItem,
+                    UserCompanyAccess, ExitOrder, ExitOrderDetail, InventoryRequest, ProductCategory)
 from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm,
                    CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm,
                    FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm,
                    CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm,
                    LaboratoryForm, ServiceForm, SupplierManualForm, PurchaseOrderForm, InvoiceTemplateForm,
                    UserForm, UserCompanyAccessForm, ExitOrderForm,
-                   InitialStockRequestForm, AdjustmentRequestForm)
+                   InitialStockRequestForm, AdjustmentRequestForm, ProductCategoryForm)
 from functools import wraps
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1421,11 +1422,21 @@ def create_app(config_class=Config):
         """Listado de productos e inventario con tabs"""
         company = Company.query.get_or_404(company_id)
 
+        # Asegurar categorías por defecto
+        _ensure_default_product_categories(company_id)
+
         # Obtener el tab activo desde URL params
         active_tab = request.args.get('tab', 'products')
 
-        # Cargar productos
-        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        # Cargar categorías de producto
+        product_categories = ProductCategory.query.filter_by(company_id=company_id, active=True).order_by(ProductCategory.name).all()
+
+        # Cargar productos con filtro opcional por categoría
+        products_query = Product.query.filter_by(company_id=company_id, active=True)
+        category_filter = request.args.get('category_id', type=int)
+        if category_filter:
+            products_query = products_query.filter(Product.category_id == category_filter)
+        products = products_query.order_by(Product.name).all()
         total_inventory_value = sum(p.current_stock * p.cost_price for p in products)
         total_items = sum(p.current_stock for p in products)
 
@@ -1497,7 +1508,9 @@ def create_app(config_class=Config):
                                today=today,
                                pending_requests_count=pending_requests_count,
                                inventory_requests=inventory_requests,
-                               perms=perms)
+                               perms=perms,
+                               product_categories=product_categories,
+                               category_filter=category_filter)
 
     @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
     @admin_required
@@ -1506,12 +1519,14 @@ def create_app(config_class=Config):
         company = Company.query.get_or_404(company_id)
         form = ProductForm()
 
-        # Cargar opciones de laboratorios y proveedores
+        # Cargar opciones de laboratorios, proveedores y categorías
         laboratories = Laboratory.query.filter_by(company_id=company_id, active=True).order_by(Laboratory.name).all()
         suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        categories = ProductCategory.query.filter_by(company_id=company_id, active=True).order_by(ProductCategory.name).all()
 
         form.laboratory_id.choices = [(0, '-- Sin laboratorio --')] + [(l.id, l.name) for l in laboratories]
         form.preferred_supplier_id.choices = [(0, '-- Sin proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+        form.category_id.choices = [(0, '-- Sin categoría --')] + [(c.id, c.name) for c in categories]
 
         if form.validate_on_submit():
             new_product = Product(
@@ -1519,13 +1534,18 @@ def create_app(config_class=Config):
                 name=form.name.data,
                 sku=form.sku.data,
                 description=form.description.data,
+                category_id=form.category_id.data if form.category_id.data != 0 else None,
                 cost_price=form.cost_price.data or 0,
                 selling_price=form.selling_price.data or 0,
                 profit_margin=form.profit_margin.data or 0,
                 laboratory_id=form.laboratory_id.data if form.laboratory_id.data != 0 else None,
                 preferred_supplier_id=form.preferred_supplier_id.data if form.preferred_supplier_id.data != 0 else None,
-                current_stock=0,  # Stock starts at 0, only increases through purchase orders
+                current_stock=0,
                 min_stock_level=form.min_stock_level.data or 0,
+                # Empaque
+                packaging_type=form.packaging_type.data or None,
+                units_per_package=form.units_per_package.data or 1,
+                sell_by=form.sell_by.data,
                 # COFEPRIS Fields
                 is_controlled=form.is_controlled.data,
                 active_ingredient=form.active_ingredient.data,
@@ -1554,23 +1574,31 @@ def create_app(config_class=Config):
 
         form = ProductForm(obj=product)
 
-        # Cargar opciones de laboratorios y proveedores
+        # Cargar opciones de laboratorios, proveedores y categorías
         laboratories = Laboratory.query.filter_by(company_id=company_id, active=True).order_by(Laboratory.name).all()
         suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        categories = ProductCategory.query.filter_by(company_id=company_id, active=True).order_by(ProductCategory.name).all()
 
         form.laboratory_id.choices = [(0, '-- Sin laboratorio --')] + [(l.id, l.name) for l in laboratories]
         form.preferred_supplier_id.choices = [(0, '-- Sin proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+        form.category_id.choices = [(0, '-- Sin categoría --')] + [(c.id, c.name) for c in categories]
 
         if form.validate_on_submit():
             product.name = form.name.data
             product.sku = form.sku.data
             product.description = form.description.data
+            product.category_id = form.category_id.data if form.category_id.data != 0 else None
             product.cost_price = form.cost_price.data or 0
             product.selling_price = form.selling_price.data or 0
             product.profit_margin = form.profit_margin.data or 0
             product.laboratory_id = form.laboratory_id.data if form.laboratory_id.data != 0 else None
             product.preferred_supplier_id = form.preferred_supplier_id.data if form.preferred_supplier_id.data != 0 else None
             product.min_stock_level = form.min_stock_level.data or 0
+            # Empaque
+            product.packaging_type = form.packaging_type.data or None
+            product.units_per_package = form.units_per_package.data or 1
+            product.sell_by = form.sell_by.data
+            # COFEPRIS
             product.sanitary_registration = form.sanitary_registration.data
             product.is_controlled = form.is_controlled.data
             product.active_ingredient = form.active_ingredient.data
@@ -1807,9 +1835,172 @@ def create_app(config_class=Config):
             form.populate_obj(laboratory)
             db.session.commit()
             flash(f'Laboratorio "{laboratory.name}" actualizado.', 'success')
+            return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
+
+        registrations = LaboratorySanitaryRegistration.query.filter_by(
+            laboratory_id=laboratory_id
+        ).order_by(LaboratorySanitaryRegistration.registration_number).all()
+
+        return render_template('inventory/laboratory_form.html', company=company, form=form,
+                               laboratory=laboratory, action='editar', registrations=registrations)
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/registrations/add', methods=['POST'])
+    @admin_required
+    def add_lab_registration(company_id, laboratory_id):
+        """Agregar registro sanitario a laboratorio"""
+        laboratory = Laboratory.query.get_or_404(laboratory_id)
+        if laboratory.company_id != company_id:
+            flash('Laboratorio no encontrado.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
 
-        return render_template('inventory/laboratory_form.html', company=company, form=form, laboratory=laboratory, action='editar')
+        reg_number = request.form.get('registration_number', '').strip()
+        description = request.form.get('description', '').strip()
+
+        if not reg_number:
+            flash('El número de registro sanitario es requerido.', 'error')
+        else:
+            reg = LaboratorySanitaryRegistration(
+                laboratory_id=laboratory_id,
+                registration_number=reg_number,
+                description=description or None
+            )
+            db.session.add(reg)
+            db.session.commit()
+            flash(f'Registro sanitario "{reg_number}" agregado.', 'success')
+
+        return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/registrations/<int:reg_id>/delete', methods=['POST'])
+    @admin_required
+    def delete_lab_registration(company_id, laboratory_id, reg_id):
+        """Eliminar registro sanitario de laboratorio"""
+        reg = LaboratorySanitaryRegistration.query.get_or_404(reg_id)
+        if reg.laboratory_id != laboratory_id:
+            flash('Registro no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        reg_number = reg.registration_number
+        db.session.delete(reg)
+        db.session.commit()
+        flash(f'Registro sanitario "{reg_number}" eliminado.', 'success')
+        return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
+
+    @app.route('/api/laboratory/<int:laboratory_id>/registrations')
+    @login_required
+    def get_lab_registrations(laboratory_id):
+        """API: obtener registros sanitarios de un laboratorio"""
+        regs = LaboratorySanitaryRegistration.query.filter_by(
+            laboratory_id=laboratory_id, active=True
+        ).order_by(LaboratorySanitaryRegistration.registration_number).all()
+        return jsonify([{
+            'id': r.id,
+            'registration_number': r.registration_number,
+            'description': r.description
+        } for r in regs])
+
+    # ==================== PRODUCT CATEGORY ROUTES ====================
+
+    def _ensure_default_product_categories(company_id):
+        """Crear categorías por defecto si no existen para esta empresa"""
+        defaults = [
+            {'name': 'Medicamento', 'description': 'Medicamentos y fármacos',
+             'requires_cofepris': True, 'requires_batch_tracking': True},
+            {'name': 'Insumo', 'description': 'Insumos médicos y materiales',
+             'requires_cofepris': False, 'requires_batch_tracking': False},
+        ]
+        created = False
+        for d in defaults:
+            existing = ProductCategory.query.filter_by(company_id=company_id, name=d['name']).first()
+            if not existing:
+                cat = ProductCategory(company_id=company_id, **d)
+                db.session.add(cat)
+                created = True
+        if created:
+            db.session.commit()
+
+    @app.route('/companies/<int:company_id>/inventory/categories/add', methods=['POST'])
+    @admin_required
+    def add_product_category(company_id):
+        """Agregar nueva categoría de producto"""
+        company = Company.query.get_or_404(company_id)
+        form = ProductCategoryForm()
+
+        if form.validate_on_submit():
+            # Verificar nombre único
+            existing = ProductCategory.query.filter_by(company_id=company_id, name=form.name.data).first()
+            if existing:
+                flash(f'Ya existe una categoría con el nombre "{form.name.data}".', 'error')
+                return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+            category = ProductCategory(
+                company_id=company_id,
+                name=form.name.data,
+                description=form.description.data,
+                requires_cofepris=form.requires_cofepris.data,
+                requires_batch_tracking=form.requires_batch_tracking.data
+            )
+            db.session.add(category)
+            db.session.commit()
+            flash(f'Categoría "{category.name}" creada correctamente.', 'success')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f'{error}', 'error')
+
+        return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+    @app.route('/companies/<int:company_id>/inventory/categories/<int:category_id>/edit', methods=['GET', 'POST'])
+    @admin_required
+    def edit_product_category(company_id, category_id):
+        """Editar categoría de producto"""
+        company = Company.query.get_or_404(company_id)
+        category = ProductCategory.query.get_or_404(category_id)
+
+        if category.company_id != company_id:
+            flash('Categoría no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+        form = ProductCategoryForm(obj=category)
+
+        if form.validate_on_submit():
+            category.name = form.name.data
+            category.description = form.description.data
+            category.requires_cofepris = form.requires_cofepris.data
+            category.requires_batch_tracking = form.requires_batch_tracking.data
+            db.session.commit()
+            flash(f'Categoría "{category.name}" actualizada.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+        return render_template('inventory/category_form.html', company=company, form=form, category=category)
+
+    @app.route('/companies/<int:company_id>/inventory/categories/<int:category_id>/toggle', methods=['POST'])
+    @admin_required
+    def toggle_product_category(company_id, category_id):
+        """Activar/desactivar categoría de producto"""
+        company = Company.query.get_or_404(company_id)
+        category = ProductCategory.query.get_or_404(category_id)
+
+        if category.company_id != company_id:
+            flash('Categoría no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+        category.active = not category.active
+        db.session.commit()
+        status = 'activada' if category.active else 'desactivada'
+        flash(f'Categoría "{category.name}" {status}.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+    @app.route('/api/product-category/<int:category_id>')
+    @login_required
+    def get_product_category_info(category_id):
+        """API: obtener info de categoría para JS dinámico"""
+        cat = ProductCategory.query.get_or_404(category_id)
+        return jsonify({
+            'id': cat.id,
+            'name': cat.name,
+            'requires_cofepris': cat.requires_cofepris,
+            'requires_batch_tracking': cat.requires_batch_tracking,
+        })
 
     # ==================== SERVICE ROUTES ====================
 
@@ -1974,14 +2165,30 @@ def create_app(config_class=Config):
 
             if action == 'add_product':
                 product_id = int(request.form.get('product_id'))
-                quantity = int(request.form.get('quantity', 1))
                 unit_cost = float(request.form.get('unit_cost', 0))
+                order_unit = request.form.get('order_unit', 'UNIDAD')
+
+                product_obj = Product.query.get(product_id)
+                upp = product_obj.units_per_package or 1
+
+                if order_unit == 'PAQUETE' and upp > 1:
+                    pkg_qty = int(request.form.get('package_quantity', 0))
+                    loose_qty = int(request.form.get('loose_quantity', 0))
+                    quantity = (pkg_qty * upp) + loose_qty
+                else:
+                    order_unit = 'UNIDAD'
+                    quantity = int(request.form.get('quantity', 1))
+                    pkg_qty = None
+                    loose_qty = 0
 
                 detail = PurchaseOrderDetail(
                     order_id=order.id,
                     product_id=product_id,
                     quantity_requested=quantity,
-                    unit_cost=unit_cost
+                    unit_cost=unit_cost,
+                    order_unit=order_unit,
+                    package_quantity=pkg_qty,
+                    loose_quantity=loose_qty
                 )
                 db.session.add(detail)
 
@@ -2036,16 +2243,33 @@ def create_app(config_class=Config):
         if request.method == 'POST':
             # Actualizar cantidades recibidas y datos de lote
             for detail in order.details:
-                received = request.form.get(f'received_{detail.id}')
-                batch_number = request.form.get(f'batch_{detail.id}')
-                expiration_str = request.form.get(f'expiration_{detail.id}')
+                product_obj = detail.product
+                upp = product_obj.units_per_package or 1
 
-                if received is not None:
-                    detail.quantity_received = int(received)
-                detail.batch_number = batch_number if batch_number else None
-                if expiration_str:
-                    detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                # Manejar recepción por paquete o unidad
+                if detail.order_unit == 'PAQUETE' and upp > 1:
+                    pkgs = int(request.form.get(f'packages_received_{detail.id}', 0))
+                    loose = int(request.form.get(f'loose_received_{detail.id}', 0))
+                    detail.packages_received = pkgs
+                    detail.loose_received = loose
+                    detail.quantity_received = (pkgs * upp) + loose
                 else:
+                    received = request.form.get(f'received_{detail.id}')
+                    if received is not None:
+                        detail.quantity_received = int(received)
+
+                # Lote y caducidad solo si la categoría lo requiere
+                requires_batch = (product_obj.category and product_obj.category.requires_batch_tracking)
+                if requires_batch:
+                    batch_number = request.form.get(f'batch_{detail.id}')
+                    expiration_str = request.form.get(f'expiration_{detail.id}')
+                    detail.batch_number = batch_number if batch_number else None
+                    if expiration_str:
+                        detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                    else:
+                        detail.expiration_date = None
+                else:
+                    detail.batch_number = None
                     detail.expiration_date = None
 
             order.status = 'IN_REVIEW'
@@ -2079,8 +2303,9 @@ def create_app(config_class=Config):
                     previous_stock = product.current_stock
                     batch_id = None
 
-                    # Crear lote si hay informacion de lote
-                    if detail.batch_number:
+                    # Crear lote solo si la categoría requiere batch tracking y hay datos de lote
+                    requires_batch = (product.category and product.category.requires_batch_tracking)
+                    if requires_batch and detail.batch_number:
                         batch = ProductBatch(
                             product_id=product.id,
                             batch_number=detail.batch_number,
@@ -2090,10 +2315,16 @@ def create_app(config_class=Config):
                             acquisition_date=now_mexico().date()
                         )
                         db.session.add(batch)
-                        db.session.flush()  # Get batch.id
+                        db.session.flush()
                         batch_id = batch.id
 
                     # Crear transaccion de inventario
+                    notes_parts = ['Recepcion de orden de compra']
+                    if detail.batch_number:
+                        notes_parts.append(f'Lote: {detail.batch_number}')
+                    if detail.order_unit == 'PAQUETE' and (product.units_per_package or 1) > 1:
+                        notes_parts.append(f'{detail.packages_received or 0} {product.packaging_type or "paq"} + {detail.loose_received or 0} pzas sueltas')
+
                     transaction = InventoryTransaction(
                         product_id=product.id,
                         batch_id=batch_id,
@@ -2102,7 +2333,7 @@ def create_app(config_class=Config):
                         previous_stock=previous_stock,
                         new_stock=previous_stock + detail.quantity_received,
                         reference=f'Orden Compra #{order.id}',
-                        notes=f'Recepcion de orden de compra' + (f' - Lote: {detail.batch_number}' if detail.batch_number else ''),
+                        notes=' - '.join(notes_parts),
                         created_by_id=current_user.id
                     )
                     db.session.add(transaction)

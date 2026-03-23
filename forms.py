@@ -208,6 +208,20 @@ class InvoiceSearchForm(FlaskForm):
     max_amount = FloatField('Monto máximo', validators=[Optional()])
 
 # Inventory Forms
+class ProductCategoryForm(FlaskForm):
+    """Form for creating/editing product categories"""
+    name = StringField('Nombre', validators=[
+        DataRequired(message='El nombre es requerido'),
+        Length(max=100)
+    ])
+    description = TextAreaField('Descripción', validators=[
+        Optional(),
+        Length(max=500)
+    ])
+    requires_cofepris = BooleanField('Requiere datos COFEPRIS (Registro Sanitario, Principio Activo, etc.)')
+    requires_batch_tracking = BooleanField('Requiere control de lotes y caducidad')
+
+
 class ProductForm(FlaskForm):
     """Form for creating/editing products"""
     name = StringField('Nombre del Producto', validators=[
@@ -219,6 +233,9 @@ class ProductForm(FlaskForm):
         Length(max=50)
     ])
     description = TextAreaField('Descripción', validators=[Optional()])
+
+    # Categoría
+    category_id = SelectField('Categoría de Producto', coerce=int, validators=[Optional()])
 
     cost_price = FloatField('Costo Real', validators=[
         NumberRange(min=0, message='El costo debe ser positivo'),
@@ -248,6 +265,20 @@ class ProductForm(FlaskForm):
     # Relaciones
     laboratory_id = SelectField('Laboratorio', coerce=int, validators=[Optional()])
     preferred_supplier_id = SelectField('Proveedor Preferido', coerce=int, validators=[Optional()])
+
+    # Empaque
+    packaging_type = StringField('Tipo de Empaque', validators=[
+        Optional(),
+        Length(max=50)
+    ])
+    units_per_package = IntegerField('Unidades por Empaque', validators=[
+        Optional(),
+        NumberRange(min=1, message='Debe ser al menos 1')
+    ], default=1)
+    sell_by = SelectField('Se vende por', choices=[
+        ('UNIDAD', 'Unidad individual'),
+        ('PAQUETE', 'Paquete/Caja completa')
+    ], default='UNIDAD')
 
     # COFEPRIS Fields
     sanitary_registration = StringField('Registro Sanitario', validators=[
