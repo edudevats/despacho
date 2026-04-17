@@ -1144,3 +1144,23 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-03-21 04:04:04 - __main__ - INFO - [app.py:1659] - Admin stock adjustment by admin: product 1, 20 -> 40, reason: equivocación pruebas
 2026-03-21 15:13:27 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-03-21 15:13:27 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 14:11:04 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:11:06 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:11:06 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:17:23 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:17:24 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:20:57 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:20:57 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:25:11 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:25:11 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:25:26 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:25:26 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:25:29 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:25:29 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:33:28 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:33:28 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 15:33:33 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 15:33:33 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-17 14:33:43 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 14:33:47 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-17 14:33:52 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO

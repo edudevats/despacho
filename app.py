@@ -1623,27 +1623,105 @@ def create_app(config_class=Config):
             flash('Producto no encontrado.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id))
 
+        requires_batches = bool(product.category and product.category.requires_batch_tracking)
+
+        active_batches = ProductBatch.query.filter(
+            ProductBatch.product_id == product.id,
+            ProductBatch.current_stock > 0,
+            ProductBatch.is_active == True
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
         if request.method == 'POST':
             adjustment_type = request.form.get('type', 'IN')
             quantity = request.form.get('quantity', type=int)
             notes = request.form.get('notes', '').strip()
 
+            def render_form():
+                return render_template(
+                    'inventory/adjust.html',
+                    company=company,
+                    product=product,
+                    active_batches=active_batches,
+                    requires_batches=requires_batches,
+                )
+
             if not notes:
                 flash('Debe escribir una nota explicando el motivo de la corrección.', 'error')
-                return render_template('inventory/adjust.html', company=company, product=product)
+                return render_form()
 
             if not quantity or quantity <= 0:
                 flash('La cantidad debe ser mayor a cero.', 'error')
-                return render_template('inventory/adjust.html', company=company, product=product)
+                return render_form()
 
             previous_stock = product.current_stock
+            batch = None
+
             if adjustment_type == 'IN':
+                if requires_batches:
+                    batch_number = request.form.get('batch_number', '').strip()
+                    expiration_str = request.form.get('expiration_date', '').strip()
+
+                    if not batch_number:
+                        flash('Debe ingresar el número de lote.', 'error')
+                        return render_form()
+                    if not expiration_str:
+                        flash('Debe ingresar la fecha de caducidad.', 'error')
+                        return render_form()
+                    try:
+                        expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        flash('Fecha de caducidad inválida.', 'error')
+                        return render_form()
+
+                    existing = ProductBatch.query.filter_by(
+                        product_id=product.id,
+                        batch_number=batch_number,
+                        expiration_date=expiration_date
+                    ).first()
+
+                    if existing:
+                        existing.current_stock += quantity
+                        existing.initial_stock = (existing.initial_stock or 0) + quantity
+                        existing.is_active = True
+                        batch = existing
+                    else:
+                        batch = ProductBatch(
+                            product_id=product.id,
+                            batch_number=batch_number,
+                            expiration_date=expiration_date,
+                            initial_stock=quantity,
+                            current_stock=quantity,
+                            acquisition_date=now_mexico().date(),
+                            is_active=True,
+                        )
+                        db.session.add(batch)
+                        db.session.flush()
+
                 new_stock = previous_stock + quantity
             else:
+                if requires_batches:
+                    batch_id = request.form.get('batch_id', type=int)
+                    if not batch_id:
+                        flash('Debe seleccionar el lote del que se descontará.', 'error')
+                        return render_form()
+
+                    batch = ProductBatch.query.filter_by(id=batch_id, product_id=product.id).first()
+                    if not batch:
+                        flash('Lote no encontrado.', 'error')
+                        return render_form()
+                    if quantity > batch.current_stock:
+                        flash(f'El lote seleccionado solo tiene {batch.current_stock} unidades.', 'error')
+                        return render_form()
+
+                    batch.current_stock -= quantity
+                    if batch.current_stock <= 0:
+                        batch.is_active = False
+
                 new_stock = max(0, previous_stock - quantity)
 
             transaction = InventoryTransaction(
                 product_id=product.id,
+                batch_id=batch.id if batch else None,
                 type='ADJUSTMENT',
                 quantity=quantity,
                 previous_stock=previous_stock,
@@ -1660,7 +1738,13 @@ def create_app(config_class=Config):
             flash(f'Corrección registrada. Stock: {previous_stock} → {new_stock}', 'success')
             return redirect(url_for('inventory_list', company_id=company_id))
 
-        return render_template('inventory/adjust.html', company=company, product=product)
+        return render_template(
+            'inventory/adjust.html',
+            company=company,
+            product=product,
+            active_batches=active_batches,
+            requires_batches=requires_batches,
+        )
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/history')
     @admin_required

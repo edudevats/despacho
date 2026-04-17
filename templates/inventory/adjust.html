@@ -43,6 +43,50 @@
                                 name="quantity" min="1" required placeholder="0">
                         </div>
 
+                        {% if requires_batches %}
+                        <!-- Campos para IN (nuevo lote) -->
+                        <div id="in_fields">
+                            <div class="mb-3">
+                                <label for="batch_number" class="form-label fw-bold">
+                                    Número de Lote <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="batch_number" name="batch_number"
+                                    placeholder="Ej. A1234567">
+                                <div class="form-text text-muted">Si el lote ya existe se sumarán las unidades al mismo.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="expiration_date" class="form-label fw-bold">
+                                    Fecha de Caducidad <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" class="form-control" id="expiration_date" name="expiration_date">
+                            </div>
+                        </div>
+
+                        <!-- Campos para OUT (seleccionar lote existente) -->
+                        <div id="out_fields" style="display:none;">
+                            <div class="mb-3">
+                                <label for="batch_id" class="form-label fw-bold">
+                                    Lote a descontar <span class="text-danger">*</span>
+                                </label>
+                                {% if active_batches %}
+                                <select class="form-select" id="batch_id" name="batch_id">
+                                    <option value="">-- Selecciona un lote --</option>
+                                    {% for b in active_batches %}
+                                    <option value="{{ b.id }}">
+                                        Lote {{ b.batch_number }} — Vence {{ b.expiration_date.strftime('%d/%m/%Y') }} — {{ b.current_stock }} disponibles
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                <div class="alert alert-warning mb-0">
+                                    <i class="fas fa-exclamation-circle me-1"></i>
+                                    Este producto no tiene lotes activos con stock disponible.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
                         <div class="mb-3">
                             <label for="notes" class="form-label fw-bold">
                                 Motivo de la corrección <span class="text-danger">*</span>
@@ -66,4 +110,29 @@
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    const typeIn = document.getElementById('type_in');
+    const typeOut = document.getElementById('type_out');
+    const inFields = document.getElementById('in_fields');
+    const outFields = document.getElementById('out_fields');
+    const batchNumber = document.getElementById('batch_number');
+    const expirationDate = document.getElementById('expiration_date');
+    const batchId = document.getElementById('batch_id');
+
+    function toggle() {
+        const isIn = typeIn.checked;
+        if (inFields) inFields.style.display = isIn ? '' : 'none';
+        if (outFields) outFields.style.display = isIn ? 'none' : '';
+        if (batchNumber) batchNumber.required = isIn;
+        if (expirationDate) expirationDate.required = isIn;
+        if (batchId) batchId.required = !isIn;
+    }
+
+    typeIn.addEventListener('change', toggle);
+    typeOut.addEventListener('change', toggle);
+    toggle();
+})();
+</script>
 {% endblock %}

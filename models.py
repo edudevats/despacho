@@ -39,7 +39,8 @@ class User(UserMixin, db.Model):
             return {
                 'dashboard': True, 'sync': True, 'inventory': True,
                 'invoices': True, 'ppd': True, 'taxes': True,
-                'sales': True, 'facturacion': True
+                'sales': True, 'facturacion': True,
+                'inventory_admin': True
             }
         for access in self.company_access:
             if access.company_id == company_id:
@@ -51,9 +52,19 @@ class User(UserMixin, db.Model):
                     'ppd': access.perm_ppd,
                     'taxes': access.perm_taxes,
                     'sales': access.perm_sales,
-                    'facturacion': access.perm_facturacion
+                    'facturacion': access.perm_facturacion,
+                    'inventory_admin': access.perm_inventory_admin
                 }
         return {}
+
+    def is_inventory_admin_for(self, company_id):
+        """True if user is global admin or has inventory_admin perm on this company."""
+        if self.is_admin:
+            return True
+        for access in self.company_access:
+            if access.company_id == company_id and access.perm_inventory_admin:
+                return True
+        return False
 
     def get_accessible_companies(self):
         """Get list of companies user can access"""
@@ -79,6 +90,9 @@ class UserCompanyAccess(db.Model):
     perm_taxes = db.Column(db.Boolean, default=False)
     perm_sales = db.Column(db.Boolean, default=False)
     perm_facturacion = db.Column(db.Boolean, default=False)
+    # Admin-like access scoped only to inventory (productos, lotes, órdenes,
+    # laboratorios, categorías, proveedores, plantillas, ajustes de stock)
+    perm_inventory_admin = db.Column(db.Boolean, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

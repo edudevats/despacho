@@ -203,7 +203,11 @@
                             </thead>
                             <tbody>
                                 {% for product in products %}
-                                <tr {% if product.current_stock <= product.min_stock_level %}class="table-warning border-start border-warning border-4"{% endif %}>
+                                <tr class="product-batches-link {% if product.current_stock <= product.min_stock_level %}table-warning border-start border-warning border-4{% endif %}"
+                                    style="cursor: pointer;"
+                                    data-product-id="{{ product.id }}"
+                                    data-product-name="{{ product.name }}"
+                                    data-product-stock="{{ product.current_stock }}">
                                     <td><small class="text-muted">{{ product.sku or '--' }}</small></td>
                                     <td>
                                         <strong>{{ product.name }}</strong>
@@ -247,7 +251,7 @@
                                             {{ product.current_stock }}
                                         </span>
                                     </td>
-                                    <td class="text-center">
+                                    <td class="text-center" onclick="event.stopPropagation();">
                                         {% if current_user.is_admin %}
                                         <div class="btn-group btn-group-sm">
                                             <a href="{{ url_for('product_history', company_id=company.id, product_id=product.id) }}"
@@ -935,6 +939,49 @@
     </div>
 </div>
 
+<!-- Modal de Lotes del Producto -->
+<div class="modal fade" id="productBatchesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-boxes me-2"></i>
+                    <span id="pbmProductName">Lotes</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="text-muted">Stock total:</span>
+                    <span class="badge bg-success fs-6" id="pbmProductStock">0</span>
+                </div>
+                <div id="pbmLoading" class="text-center py-3 text-muted">
+                    <i class="fas fa-spinner fa-spin me-1"></i> Cargando lotes...
+                </div>
+                <div id="pbmContent" style="display:none;">
+                    <table class="table table-sm table-striped align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Lote</th>
+                                <th>Caducidad</th>
+                                <th class="text-center">Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pbmBatches"></tbody>
+                    </table>
+                </div>
+                <div id="pbmEmpty" class="alert alert-warning mb-0" style="display:none;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Este producto no tiene lotes registrados con stock disponible.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de Confirmación para Eliminar Orden -->
 <div class="modal fade" id="deleteOrderModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -1005,6 +1052,75 @@ function confirmDeleteExitOrder(orderId, recipientName) {
     var deleteModal = new bootstrap.Modal(document.getElementById('deleteExitOrderModal'));
     deleteModal.show();
 }
+
+// Popup de lotes al hacer click sobre el nombre del producto
+document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('productBatchesModal');
+    if (!modalEl) return;
+    const modal = new bootstrap.Modal(modalEl);
+    const nameEl = document.getElementById('pbmProductName');
+    const stockEl = document.getElementById('pbmProductStock');
+    const loadingEl = document.getElementById('pbmLoading');
+    const contentEl = document.getElementById('pbmContent');
+    const emptyEl = document.getElementById('pbmEmpty');
+    const tbody = document.getElementById('pbmBatches');
+
+    document.querySelectorAll('.product-batches-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const productId = this.dataset.productId;
+            const productName = this.dataset.productName;
+            const productStock = this.dataset.productStock;
+
+            nameEl.textContent = productName;
+            stockEl.textContent = productStock;
+            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+            loadingEl.style.display = '';
+            contentEl.style.display = 'none';
+            emptyEl.style.display = 'none';
+            modal.show();
+
+            fetch(`/api/companies/{{ company.id }}/products/${productId}/batches`)
+                .then(r => r.json())
+                .then(batches => {
+                    loadingEl.style.display = 'none';
+                    if (!batches || batches.length === 0) {
+                        emptyEl.style.display = '';
+                        return;
+                    }
+                    batches.forEach(b => {
+                        const tr = document.createElement('tr');
+
+                        const tdLote = document.createElement('td');
+                        const codeEl = document.createElement('code');
+                        codeEl.textContent = b.batch_number || '';
+                        tdLote.appendChild(codeEl);
+
+                        const tdExp = document.createElement('td');
+                        tdExp.textContent = b.expiration_date || '--';
+
+                        const tdQty = document.createElement('td');
+                        tdQty.className = 'text-center';
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-success rounded-pill';
+                        badge.textContent = String(b.current_stock ?? 0);
+                        tdQty.appendChild(badge);
+
+                        tr.appendChild(tdLote);
+                        tr.appendChild(tdExp);
+                        tr.appendChild(tdQty);
+                        tbody.appendChild(tr);
+                    });
+                    contentEl.style.display = '';
+                })
+                .catch(() => {
+                    loadingEl.style.display = 'none';
+                    emptyEl.textContent = 'Error al cargar los lotes.';
+                    emptyEl.style.display = '';
+                });
+        });
+    });
+});
 
 // Maintain tab state via URL parameter
 document.addEventListener('DOMContentLoaded', function() {

@@ -248,7 +248,7 @@ class ProductForm(FlaskForm):
     ], default=0.0)
 
     profit_margin = FloatField('Margen de Ganancia (%)', validators=[
-        NumberRange(min=0, max=1000, message='El margen debe ser entre 0 y 1000%'),
+        NumberRange(min=0, max=1000, message='El margen debe ser entre 0 y 1000%%'),
         Optional()
     ], default=0.0)
 
