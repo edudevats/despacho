@@ -9,7 +9,7 @@
             <h2><i class="fas fa-warehouse text-primary"></i> Inventario: {{ company.name }}</h2>
         </div>
         <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2 flex-wrap">
-            {% if not current_user.is_admin and perms.get('perm_inventory') %}
+            {% if not (current_user.is_admin or is_inv_admin(company.id)) and perms.get('perm_inventory') %}
             <div class="btn-group btn-group-sm">
                 <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-outline-info" title="Solicitar Ingreso Inicial">
                     <i class="fas fa-box-open"></i> Ingreso Inicial
@@ -18,12 +18,12 @@
                     <i class="fas fa-balance-scale"></i> Solicitar Ajuste
                 </a>
             </div>
-            {% elif not current_user.is_admin %}
+            {% elif not (current_user.is_admin or is_inv_admin(company.id)) %}
             <span class="badge bg-secondary py-2 px-3">
                 <i class="fas fa-eye me-1"></i> Solo lectura
             </span>
             {% endif %}
-            {% if current_user.is_admin %}
+            {% if (current_user.is_admin or is_inv_admin(company.id)) %}
             <a href="{{ url_for('inventory_movements', company_id=company.id) }}" class="btn btn-outline-info">
                 <i class="fas fa-exchange-alt"></i> Movimientos
             </a>
@@ -127,7 +127,7 @@
                 <i class="fas fa-file-medical"></i> Plantillas
             </button>
         </li>
-        {% if current_user.is_admin or perms.get('perm_inventory') %}
+        {% if (current_user.is_admin or is_inv_admin(company.id)) or perms.get('perm_inventory') %}
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ 'active' if active_tab == 'requests' else '' }}" id="requests-tab"
                     data-bs-toggle="tab" data-bs-target="#requests" type="button" role="tab">
@@ -158,7 +158,7 @@
                         </select>
                     </form>
                 </div>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Producto
                 </a>
@@ -252,7 +252,7 @@
                                         </span>
                                     </td>
                                     <td class="text-center" onclick="event.stopPropagation();">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <div class="btn-group btn-group-sm">
                                             <a href="{{ url_for('product_history', company_id=company.id, product_id=product.id) }}"
                                                 class="btn btn-outline-info" title="Ver Historial">
@@ -289,7 +289,7 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'laboratories' else '' }}" id="laboratories" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Laboratorios</h4>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_laboratory', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Laboratorio
                 </a>
@@ -324,7 +324,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <a href="{{ url_for('edit_laboratory', company_id=company.id, laboratory_id=lab.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
@@ -353,7 +353,7 @@
                 <h4>Categorías de Producto</h4>
             </div>
 
-            {% if current_user.is_admin %}
+            {% if (current_user.is_admin or is_inv_admin(company.id)) %}
             <!-- Formulario inline para agregar categoría -->
             <div class="card shadow-sm mb-3">
                 <div class="card-header bg-light">
@@ -439,7 +439,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <div class="btn-group btn-group-sm">
                                             <a href="{{ url_for('edit_product_category', company_id=company.id, category_id=cat.id) }}"
                                                 class="btn btn-outline-secondary" title="Editar">
@@ -474,7 +474,7 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'suppliers' else '' }}" id="suppliers" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Proveedores</h4>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_supplier_manual', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Proveedor
                 </a>
@@ -516,7 +516,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <a href="{{ url_for('edit_supplier_inventory', company_id=company.id, supplier_id=supplier.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
@@ -543,7 +543,7 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'orders' else '' }}" id="orders" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Ordenes de Compra</h4>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_purchase_order', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Orden
                 </a>
@@ -582,7 +582,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                             {% if order.status == 'DRAFT' or order.status == 'SENT' %}
                                             <a href="{{ url_for('edit_purchase_order', company_id=company.id, order_id=order.id) }}"
                                                 class="btn btn-sm btn-outline-primary" title="Editar">
@@ -606,7 +606,7 @@
                                             class="btn btn-sm btn-outline-secondary" title="Ver Detalles">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar"
                                             onclick="confirmDeleteOrder('{{ order.id }}', '{{ order.supplier.business_name }}')">
                                             <i class="fas fa-trash"></i>
@@ -633,7 +633,7 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'exits' else '' }}" id="exits" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Ordenes de Salida</h4>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_exit_order', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Salida
                 </a>
@@ -687,7 +687,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin and order.status == 'DRAFT' %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) and order.status == 'DRAFT' %}
                                         <a href="{{ url_for('edit_exit_order', company_id=company.id, order_id=order.id) }}"
                                             class="btn btn-sm btn-outline-primary" title="Editar">
                                             <i class="fas fa-edit"></i>
@@ -722,7 +722,7 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'services' else '' }}" id="services" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Servicios Medicos</h4>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_service', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Servicio
                 </a>
@@ -757,7 +757,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <a href="{{ url_for('edit_service', company_id=company.id, service_id=service.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
@@ -784,7 +784,7 @@
         <div class="tab-pane fade {{ 'show active' if active_tab == 'templates' else '' }}" id="templates" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Plantillas de Factura</h4>
-                {% if current_user.is_admin %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                 <a href="{{ url_for('add_invoice_template', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Plantilla
                 </a>
@@ -819,7 +819,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if current_user.is_admin %}
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <a href="{{ url_for('edit_invoice_template', company_id=company.id, template_id=template.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
@@ -847,11 +847,11 @@
         </div>
 
         <!-- TAB: Solicitudes de Inventario -->
-        {% if current_user.is_admin or perms.get('perm_inventory') %}
+        {% if (current_user.is_admin or is_inv_admin(company.id)) or perms.get('perm_inventory') %}
         <div class="tab-pane fade {{ 'show active' if active_tab == 'requests' else '' }}" id="requests" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Solicitudes de Inventario</h4>
-                {% if current_user.is_admin or perms.get('perm_inventory') %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) or perms.get('perm_inventory') %}
                 <div class="btn-group">
                     <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-info text-white">
                         <i class="fas fa-box-open"></i> Ingreso Inicial

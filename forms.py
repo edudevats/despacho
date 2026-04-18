@@ -667,6 +667,7 @@ class UserCompanyAccessForm(FlaskForm):
     perm_taxes = BooleanField('Impuestos')
     perm_sales = BooleanField('Análisis de Ventas')
     perm_facturacion = BooleanField('Facturación')
+    perm_inventory_admin = BooleanField('Admin de Inventario')
 
 
 # ==================== EXIT ORDER FORMS ====================

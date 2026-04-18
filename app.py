@@ -138,6 +138,29 @@ def create_app(config_class=Config):
             return f(*args, **kwargs)
         return decorated_function
 
+    @app.context_processor
+    def inject_inventory_admin_helper():
+        def is_inv_admin(company_id):
+            if not current_user.is_authenticated:
+                return False
+            return current_user.is_inventory_admin_for(company_id)
+        return {'is_inv_admin': is_inv_admin}
+
+    def inventory_admin_required(f):
+        """Permite global admins o usuarios con perm_inventory_admin en la empresa."""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('login'))
+            company_id = kwargs.get('company_id')
+            if current_user.is_admin:
+                return f(*args, **kwargs)
+            if company_id is not None and current_user.is_inventory_admin_for(company_id):
+                return f(*args, **kwargs)
+            flash('Acceso denegado. Se requieren permisos de administrador de inventario.', 'error')
+            return redirect(url_for('index'))
+        return decorated_function
+
     @app.route('/login', methods=['GET', 'POST'])
     def login():
         if request.method == 'POST':
@@ -234,7 +257,8 @@ def create_app(config_class=Config):
                         perm_ppd=request.form.get(f'perm_ppd_{company.id}') == 'on',
                         perm_taxes=request.form.get(f'perm_taxes_{company.id}') == 'on',
                         perm_sales=request.form.get(f'perm_sales_{company.id}') == 'on',
-                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on'
+                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on',
+                        perm_inventory_admin=request.form.get(f'perm_inventory_admin_{company.id}') == 'on'
                     )
                     db.session.add(access)
 
@@ -295,7 +319,8 @@ def create_app(config_class=Config):
                         perm_ppd=request.form.get(f'perm_ppd_{company.id}') == 'on',
                         perm_taxes=request.form.get(f'perm_taxes_{company.id}') == 'on',
                         perm_sales=request.form.get(f'perm_sales_{company.id}') == 'on',
-                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on'
+                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on',
+                        perm_inventory_admin=request.form.get(f'perm_inventory_admin_{company.id}') == 'on'
                     )
                     db.session.add(access)
 
@@ -1513,7 +1538,7 @@ def create_app(config_class=Config):
                                category_filter=category_filter)
 
     @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_product(company_id):
         """Agregar nuevo producto"""
         company = Company.query.get_or_404(company_id)
@@ -1562,7 +1587,7 @@ def create_app(config_class=Config):
         return render_template('inventory/add.html', company=company, form=form)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_product(company_id, product_id):
         """Editar producto"""
         company = Company.query.get_or_404(company_id)
@@ -1613,7 +1638,7 @@ def create_app(config_class=Config):
         return render_template('inventory/edit.html', company=company, product=product, form=form)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/adjust', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def adjust_stock(company_id, product_id):
         """Corrección manual de stock - solo para administradores"""
         company = Company.query.get_or_404(company_id)
@@ -1747,7 +1772,7 @@ def create_app(config_class=Config):
         )
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/history')
-    @admin_required
+    @inventory_admin_required
     def product_history(company_id, product_id):
         """Historial de movimientos de un producto"""
         company = Company.query.get_or_404(company_id)
@@ -1763,7 +1788,7 @@ def create_app(config_class=Config):
         return render_template('inventory/history.html', company=company, product=product, transactions=transactions)
 
     @app.route('/companies/<int:company_id>/inventory/movements')
-    @admin_required
+    @inventory_admin_required
     def inventory_movements(company_id):
         """Registro completo de movimientos de inventario de la empresa"""
         company = Company.query.get_or_404(company_id)
@@ -1831,7 +1856,7 @@ def create_app(config_class=Config):
                              today=today)
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/receive', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def receive_batch(company_id, product_id):
         """Recibir stock con lote y caducidad"""
         company = Company.query.get_or_404(company_id)
@@ -1883,7 +1908,7 @@ def create_app(config_class=Config):
     # ==================== LABORATORY ROUTES ====================
 
     @app.route('/companies/<int:company_id>/inventory/laboratories/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_laboratory(company_id):
         """Agregar nuevo laboratorio"""
         company = Company.query.get_or_404(company_id)
@@ -1903,7 +1928,7 @@ def create_app(config_class=Config):
         return render_template('inventory/laboratory_form.html', company=company, form=form, action='crear')
 
     @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_laboratory(company_id, laboratory_id):
         """Editar laboratorio"""
         company = Company.query.get_or_404(company_id)
@@ -1929,7 +1954,7 @@ def create_app(config_class=Config):
                                laboratory=laboratory, action='editar', registrations=registrations)
 
     @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/registrations/add', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def add_lab_registration(company_id, laboratory_id):
         """Agregar registro sanitario a laboratorio"""
         laboratory = Laboratory.query.get_or_404(laboratory_id)
@@ -1955,7 +1980,7 @@ def create_app(config_class=Config):
         return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
 
     @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/registrations/<int:reg_id>/delete', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def delete_lab_registration(company_id, laboratory_id, reg_id):
         """Eliminar registro sanitario de laboratorio"""
         reg = LaboratorySanitaryRegistration.query.get_or_404(reg_id)
@@ -2003,7 +2028,7 @@ def create_app(config_class=Config):
             db.session.commit()
 
     @app.route('/companies/<int:company_id>/inventory/categories/add', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def add_product_category(company_id):
         """Agregar nueva categoría de producto"""
         company = Company.query.get_or_404(company_id)
@@ -2034,7 +2059,7 @@ def create_app(config_class=Config):
         return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
 
     @app.route('/companies/<int:company_id>/inventory/categories/<int:category_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_product_category(company_id, category_id):
         """Editar categoría de producto"""
         company = Company.query.get_or_404(company_id)
@@ -2058,7 +2083,7 @@ def create_app(config_class=Config):
         return render_template('inventory/category_form.html', company=company, form=form, category=category)
 
     @app.route('/companies/<int:company_id>/inventory/categories/<int:category_id>/toggle', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def toggle_product_category(company_id, category_id):
         """Activar/desactivar categoría de producto"""
         company = Company.query.get_or_404(company_id)
@@ -2089,7 +2114,7 @@ def create_app(config_class=Config):
     # ==================== SERVICE ROUTES ====================
 
     @app.route('/companies/<int:company_id>/inventory/services/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_service(company_id):
         """Agregar nuevo servicio"""
         company = Company.query.get_or_404(company_id)
@@ -2112,7 +2137,7 @@ def create_app(config_class=Config):
         return render_template('inventory/service_form.html', company=company, form=form, action='crear')
 
     @app.route('/companies/<int:company_id>/inventory/services/<int:service_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_service(company_id, service_id):
         """Editar servicio"""
         company = Company.query.get_or_404(company_id)
@@ -2135,7 +2160,7 @@ def create_app(config_class=Config):
     # ==================== SUPPLIER MANUAL ROUTES ====================
 
     @app.route('/companies/<int:company_id>/inventory/suppliers/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_supplier_manual(company_id):
         """Agregar proveedor manualmente"""
         company = Company.query.get_or_404(company_id)
@@ -2170,7 +2195,7 @@ def create_app(config_class=Config):
         return render_template('inventory/supplier_form.html', company=company, form=form, action='crear')
 
     @app.route('/companies/<int:company_id>/inventory/suppliers/<int:supplier_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_supplier_inventory(company_id, supplier_id):
         """Editar proveedor desde inventario"""
         company = Company.query.get_or_404(company_id)
@@ -2202,7 +2227,7 @@ def create_app(config_class=Config):
     # ==================== PURCHASE ORDER ROUTES ====================
 
     @app.route('/companies/<int:company_id>/inventory/orders/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_purchase_order(company_id):
         """Crear nueva orden de compra"""
         company = Company.query.get_or_404(company_id)
@@ -2227,7 +2252,7 @@ def create_app(config_class=Config):
         return render_template('inventory/purchase_order_form.html', company=company, form=form, action='crear')
 
     @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_purchase_order(company_id, order_id):
         """Editar orden de compra (agregar/quitar productos)"""
         company = Company.query.get_or_404(company_id)
@@ -2310,7 +2335,7 @@ def create_app(config_class=Config):
         return render_template('inventory/purchase_order_view.html', company=company, order=order)
 
     @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/review', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def review_purchase_order(company_id, order_id):
         """Revisar/recibir orden de compra (Fase 2)"""
         company = Company.query.get_or_404(company_id)
@@ -2365,7 +2390,7 @@ def create_app(config_class=Config):
         return render_template('inventory/purchase_order_review.html', company=company, order=order)
 
     @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/complete', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def complete_purchase_order(company_id, order_id):
         """Completar orden de compra (Fase 3) - Ajustar inventario"""
         company = Company.query.get_or_404(company_id)
@@ -2434,7 +2459,7 @@ def create_app(config_class=Config):
         return render_template('inventory/purchase_order_complete.html', company=company, order=order)
 
     @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/delete', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def delete_purchase_order(company_id, order_id):
         """Eliminar orden de compra"""
         company = Company.query.get_or_404(company_id)
@@ -2454,7 +2479,7 @@ def create_app(config_class=Config):
     # ==================== EXIT ORDER ROUTES ====================
 
     @app.route('/companies/<int:company_id>/inventory/exits/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_exit_order(company_id):
         """Crear nueva orden de salida"""
         company = Company.query.get_or_404(company_id)
@@ -2477,7 +2502,7 @@ def create_app(config_class=Config):
         return render_template('inventory/exit_order_form.html', company=company, form=form, action='crear')
 
     @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_exit_order(company_id, order_id):
         """Editar orden de salida (agregar productos)"""
         company = Company.query.get_or_404(company_id)
@@ -2546,7 +2571,7 @@ def create_app(config_class=Config):
         return render_template('inventory/exit_order_edit.html', company=company, order=order, form=form, products=products)
 
     @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/complete', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def complete_exit_order(company_id, order_id):
         """Completar orden de salida - descuenta del inventario"""
         company = Company.query.get_or_404(company_id)
@@ -2617,7 +2642,7 @@ def create_app(config_class=Config):
         return render_template('inventory/exit_order_view.html', company=company, order=order)
 
     @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/delete', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def delete_exit_order(company_id, order_id):
         """Eliminar orden de salida (solo borradores)"""
         company = Company.query.get_or_404(company_id)
@@ -2775,7 +2800,7 @@ def create_app(config_class=Config):
         return render_template('inventory/request_detail.html', company=company, inv_request=inv_request)
 
     @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>/approve', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def approve_inventory_request(company_id, request_id):
         """Aprobar solicitud de inventario (solo admin)"""
         company = Company.query.get_or_404(company_id)
@@ -2885,7 +2910,7 @@ def create_app(config_class=Config):
         return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
 
     @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>/reject', methods=['POST'])
-    @admin_required
+    @inventory_admin_required
     def reject_inventory_request(company_id, request_id):
         """Rechazar solicitud de inventario (solo admin)"""
         company = Company.query.get_or_404(company_id)
@@ -2911,7 +2936,7 @@ def create_app(config_class=Config):
     # ==================== INVOICE TEMPLATE ROUTES ====================
 
     @app.route('/companies/<int:company_id>/inventory/templates/add', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def add_invoice_template(company_id):
         """Crear nueva plantilla de factura"""
         company = Company.query.get_or_404(company_id)
@@ -2931,7 +2956,7 @@ def create_app(config_class=Config):
         return render_template('inventory/template_form.html', company=company, form=form, action='crear')
 
     @app.route('/companies/<int:company_id>/inventory/templates/<int:template_id>/edit', methods=['GET', 'POST'])
-    @admin_required
+    @inventory_admin_required
     def edit_invoice_template(company_id, template_id):
         """Editar plantilla de factura (agregar/quitar items)"""
         company = Company.query.get_or_404(company_id)

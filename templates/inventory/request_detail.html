@@ -184,7 +184,7 @@
                 </div>
 
                 <!-- Botones de accion para admin -->
-                {% if current_user.is_admin and inv_request.status == 'PENDING' %}
+                {% if (current_user.is_admin or is_inv_admin(company.id)) and inv_request.status == 'PENDING' %}
                 <div class="card-footer bg-light">
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
@@ -202,7 +202,7 @@
 </div>
 
 <!-- Modal Aprobar -->
-{% if current_user.is_admin and inv_request.status == 'PENDING' %}
+{% if (current_user.is_admin or is_inv_admin(company.id)) and inv_request.status == 'PENDING' %}
 <div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
