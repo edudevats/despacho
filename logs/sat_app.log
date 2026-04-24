@@ -1170,3 +1170,51 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-04-18 00:55:40 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-04-18 01:55:42 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-04-18 01:55:42 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 19:42:36 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 19:43:42 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 19:43:53 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 20:02:08 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 21:02:09 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 21:02:09 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 21:05:48 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 21:05:48 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 21:13:30 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 21:13:30 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 22:07:02 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 22:07:02 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 23:00:06 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 23:00:06 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 23:00:50 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 23:00:50 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-22 23:31:10 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-22 23:31:10 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-23 01:20:18 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF token has expired.
+2026-04-23 01:20:22 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF token has expired.
+2026-04-23 01:23:48 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF token has expired.
+2026-04-23 01:24:52 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-23 01:24:52 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-23 01:24:57 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-23 01:24:57 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-23 01:28:03 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-23 01:28:03 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-23 01:29:09 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 17:13:03 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 18:13:05 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 18:13:05 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-24 18:13:21 - flask_wtf.csrf - INFO - [csrf.py:263] - The CSRF token is missing.
+2026-04-24 18:13:46 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2026-04-24 18:13:46 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2026-04-24 18:13:46 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2026-04-24 18:14:45 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2026-04-24 18:14:45 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2026-04-24 18:14:45 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2026-04-24 18:16:01 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2026-04-24 18:16:01 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2026-04-24 18:16:01 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2026-04-24 18:17:25 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 18:17:26 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-24 18:17:32 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 18:17:32 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-24 17:17:52 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 18:17:53 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-24 18:17:54 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!

@@ -13,4 +13,20 @@ document.addEventListener('DOMContentLoaded', function () {
             link.classList.add('active');
         }
     });
+
+    // Initialize Tom Select for product/material dropdowns
+    const productSelects = document.querySelectorAll('select[name="product_id"], select[name="material_id"]');
+    if (productSelects.length > 0 && typeof TomSelect !== 'undefined') {
+        productSelects.forEach(select => {
+            new TomSelect(select, {
+                create: false,
+                sortField: {
+                    field: "text",
+                    direction: "asc"
+                },
+                placeholder: "-- Seleccionar --",
+                allowEmptyOption: true
+            });
+        });
+    }
 });

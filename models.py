@@ -1,3 +1,4 @@
+import os
 from flask_login import UserMixin
 from datetime import datetime
 from extensions import db
@@ -114,6 +115,12 @@ class Company(db.Model):
     fiel_key_path = db.Column(db.String(256), nullable=True)
     fiel_password_enc = db.Column(db.String(256), nullable=True) # Encrypted password
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def logo_filename(self):
+        if not self.logo_path:
+            return None
+        return os.path.basename(self.logo_path.replace('\\', '/'))
 
 class Category(db.Model):
     """
@@ -245,6 +252,9 @@ class Invoice(db.Model):
     ppd_fecha_acreditacion = db.Column(db.DateTime, nullable=True)  # Cuándo se acreditó
     ppd_mes_acreditado = db.Column(db.Integer, nullable=True)  # Mes al que se acredita (1-12)
     ppd_anio_acreditado = db.Column(db.Integer, nullable=True)  # Año al que se acredita
+
+    # Estado de la factura ante el SAT
+    status_sat = db.Column(db.String(20), default='VIGENTE')  # VIGENTE, CANCELADO
 
     company = db.relationship('Company', backref=db.backref('invoices', lazy=True))
 

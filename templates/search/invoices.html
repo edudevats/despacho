@@ -167,9 +167,19 @@
 
                         <td class="text-end">
                             <a href="/companies/{{ company.id }}/invoices/{{ invoice.id }}"
-                                class="btn btn-sm btn-outline-primary" title="Ver Detalles">
+                                class="btn btn-sm btn-outline-primary mb-1" title="Ver Detalles">
                                 <i class="fas fa-eye"></i>
                             </a>
+                            {% if invoice.issuer_rfc == company.rfc %}
+                                {% if invoice.status_sat != 'CANCELADO' %}
+                                <a href="{{ url_for('facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}"
+                                    class="btn btn-sm btn-outline-danger mb-1" title="Cancelar Factura">
+                                    <i class="fas fa-ban"></i>
+                                </a>
+                                {% else %}
+                                <span class="badge bg-danger d-block mt-1">CANCELADA</span>
+                                {% endif %}
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

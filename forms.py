@@ -737,6 +737,37 @@ class InitialStockRequestForm(FlaskForm):
         return True
 
 
+class CancelarFacturaForm(FlaskForm):
+    """Formulario para cancelar un CFDI"""
+    fiel_cer = FileField('Certificado FIEL (.cer)', validators=[
+        DataRequired(message='El certificado FIEL es requerido'),
+        FileAllowed(['cer'], 'Solo archivos .cer')
+    ], render_kw={'accept': '.cer'})
+    fiel_key = FileField('Llave Privada FIEL (.key)', validators=[
+        DataRequired(message='La llave privada FIEL es requerida'),
+        FileAllowed(['key'], 'Solo archivos .key')
+    ], render_kw={'accept': '.key'})
+    fiel_password = PasswordField('Contraseña FIEL', validators=[
+        DataRequired(message='La contraseña FIEL es requerida')
+    ])
+    motivo = SelectField('Motivo de Cancelación', choices=[
+        ('01', '01 - Comprobante emitido con errores con relación'),
+        ('02', '02 - Comprobante emitido con errores sin relación'),
+        ('03', '03 - No se llevó a cabo la operación'),
+        ('04', '04 - Operación nominativa relacionada en una factura global')
+    ], validators=[DataRequired()], default='02')
+    sustitucion_uuid = StringField('Folio Fiscal Sustituto (UUID)', validators=[
+        Optional(),
+        Length(min=36, max=36, message='El UUID debe tener 36 caracteres')
+    ])
+
+    def validate(self, extra_validators=None):
+        if not super().validate(extra_validators):
+            return False
+        if self.motivo.data == '01' and not self.sustitucion_uuid.data:
+            self.sustitucion_uuid.errors.append('El UUID de sustitución es requerido cuando el motivo es 01.')
+            return False
+        return True
 class AdjustmentRequestForm(FlaskForm):
     """Form para solicitar ajuste de stock"""
     product_id = SelectField('Producto', coerce=int, validators=[

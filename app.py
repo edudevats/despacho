@@ -15,7 +15,7 @@ from models import (Company, Movement, Invoice, User, Category, Supplier, TaxPay
                     UserCompanyAccess, ExitOrder, ExitOrderDetail, InventoryRequest, ProductCategory)
 from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm,
                    CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm,
-                   FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm,
+                   FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm, CancelarFacturaForm,
                    CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm,
                    LaboratoryForm, ServiceForm, SupplierManualForm, PurchaseOrderForm, InvoiceTemplateForm,
                    UserForm, UserCompanyAccessForm, ExitOrderForm,
@@ -23,6 +23,7 @@ from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, Sy
 from functools import wraps
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf.csrf import CSRFError
 from services.sat_service import SATService, SATError
 from services.qr_service import QRService
 from sqlalchemy import func, extract
@@ -34,6 +35,98 @@ logger = logging.getLogger(__name__)
 # Define project root directory (absolute path to the directory containing app.py)
 # This ensures correct paths even in WSGI context where os.getcwd() returns wrong directory
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def find_company_invoice_xml_path(company_rfc, uuid, project_root=None):
+    """Find a generated invoice XML by UUID inside xml/<company_rfc>/."""
+    if not company_rfc or not uuid:
+        return None
+
+    base_dir = project_root or PROJECT_ROOT
+    xml_dir = os.path.join(base_dir, 'xml', company_rfc)
+    if not os.path.isdir(xml_dir):
+        return None
+
+    target_uuid = uuid.lower()
+    for filename in os.listdir(xml_dir):
+        if not filename.lower().endswith('.xml'):
+            continue
+        if filename.lower().startswith('acuse_cancelacion_'):
+            continue
+
+        stem = filename[:-4]
+        filename_uuid = stem.split('_', 1)[1] if '_' in stem else stem
+        if filename_uuid.lower() == target_uuid:
+            return os.path.join(xml_dir, filename)
+
+    return None
+
+
+def parse_invoice_xml_for_db(xml_content, fallback_uuid=None):
+    """Extract the fields required to persist a generated CFDI as Invoice."""
+    from lxml import etree
+
+    if isinstance(xml_content, bytes):
+        xml_bytes = xml_content
+        xml_text = xml_content.decode('utf-8', errors='replace')
+    else:
+        xml_text = xml_content
+        xml_bytes = xml_content.encode('utf-8')
+
+    root = etree.fromstring(xml_bytes)
+    ns = {
+        'cfdi': root.nsmap.get(None) or root.nsmap.get('cfdi') or 'http://www.sat.gob.mx/cfd/4',
+        'tfd': 'http://www.sat.gob.mx/TimbreFiscalDigital',
+    }
+
+    emisor = root.find('cfdi:Emisor', ns)
+    receptor = root.find('cfdi:Receptor', ns)
+    timbre = root.find('.//tfd:TimbreFiscalDigital', ns)
+    impuestos = root.find('cfdi:Impuestos', ns)
+
+    def as_float(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    fecha = root.get('Fecha')
+    date_value = datetime.fromisoformat(fecha) if fecha else now_mexico()
+    tax_value = as_float(impuestos.get('TotalImpuestosTrasladados')) if impuestos is not None else 0.0
+
+    return {
+        'uuid': (timbre.get('UUID') if timbre is not None else None) or fallback_uuid,
+        'date': date_value,
+        'total': as_float(root.get('Total')),
+        'subtotal': as_float(root.get('SubTotal')),
+        'tax': tax_value,
+        'type': root.get('TipoDeComprobante'),
+        'issuer_rfc': emisor.get('Rfc') if emisor is not None else None,
+        'issuer_name': emisor.get('Nombre') if emisor is not None else None,
+        'receiver_rfc': receptor.get('Rfc') if receptor is not None else None,
+        'receiver_name': receptor.get('Nombre') if receptor is not None else None,
+        'forma_pago': root.get('FormaPago'),
+        'metodo_pago': root.get('MetodoPago'),
+        'uso_cfdi': receptor.get('UsoCFDI') if receptor is not None else None,
+        'xml_content': xml_text,
+        'currency': root.get('Moneda'),
+        'exchange_rate': as_float(root.get('TipoCambio'), None),
+        'exportation': root.get('Exportacion'),
+        'version': root.get('Version'),
+        'serie': root.get('Serie'),
+        'folio': root.get('Folio'),
+        'lugar_expedicion': root.get('LugarExpedicion'),
+        'no_certificado': root.get('NoCertificado'),
+        'sello': root.get('Sello'),
+        'certificado': root.get('Certificado'),
+        'regimen_fiscal_emisor': emisor.get('RegimenFiscal') if emisor is not None else None,
+        'regimen_fiscal_receptor': receptor.get('RegimenFiscalReceptor') if receptor is not None else None,
+        'domicilio_fiscal_receptor': receptor.get('DomicilioFiscalReceptor') if receptor is not None else None,
+        'fecha_timbrado': datetime.fromisoformat(timbre.get('FechaTimbrado')) if timbre is not None and timbre.get('FechaTimbrado') else None,
+        'rfc_prov_certif': timbre.get('RfcProvCertif') if timbre is not None else None,
+        'sello_sat': timbre.get('SelloSAT') if timbre is not None else None,
+        'no_certificado_sat': timbre.get('NoCertificadoSAT') if timbre is not None else None,
+    }
 
 
 def get_or_create_supplier(company_id, rfc, business_name):
@@ -126,6 +219,11 @@ def create_app(config_class=Config):
     def load_user(user_id):
         return db.session.get(User, int(user_id))
 
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        flash('La página expiró por inactividad. Hemos recargado la página para que puedas continuar de forma segura.', 'warning')
+        return redirect(request.referrer or request.url)
+
     # Admin required decorator
     def admin_required(f):
         @wraps(f)
@@ -169,6 +267,8 @@ def create_app(config_class=Config):
             user = User.query.filter_by(username=username).first()
             
             if user and check_password_hash(user.password_hash, password):
+                user.last_login = now_mexico()
+                db.session.commit()
                 login_user(user)
                 return redirect(url_for('index'))
             else:
@@ -2469,11 +2569,14 @@ def create_app(config_class=Config):
             flash('Orden no encontrada.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
 
+        # Guardar el nombre del proveedor antes de eliminar
+        supplier_name = order.supplier.business_name if order.supplier else f"#{order_id}"
+
         # Eliminar la orden (los detalles se eliminan automáticamente por cascade)
         db.session.delete(order)
         db.session.commit()
 
-        flash(f'Orden #{order_id} eliminada correctamente.', 'success')
+        flash(f'Orden para {supplier_name} eliminada correctamente.', 'success')
         return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
 
     # ==================== EXIT ORDER ROUTES ====================
@@ -2656,11 +2759,14 @@ def create_app(config_class=Config):
             flash('Solo se pueden eliminar ordenes en borrador.', 'error')
             return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
 
+        # Guardar el nombre del destinatario antes de eliminar
+        recipient_name = order.recipient_name or f"#{order_id}"
+
         ExitOrderDetail.query.filter_by(order_id=order_id).delete()
         db.session.delete(order)
         db.session.commit()
 
-        flash(f'Orden #{order_id} eliminada.', 'success')
+        flash(f'Orden para {recipient_name} eliminada.', 'success')
         return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
 
     @app.route('/api/companies/<int:company_id>/products/<int:product_id>/batches')
@@ -3747,10 +3853,75 @@ def create_app(config_class=Config):
         has_credentials = credentials is not None
         environment = credentials.environment if credentials else None
         
+        # Get issued invoices from XML files on disk
+        facturas_generadas = []
+        xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+        
+        if os.path.exists(xml_dir):
+            try:
+                from datetime import datetime as dt_util
+                for filename in os.listdir(xml_dir):
+                    if filename.endswith('.xml'):
+                        file_path = os.path.join(xml_dir, filename)
+                        file_stat = os.stat(file_path)
+                        
+                        # Extract UUID from filename (format: SERIEFOLIO_UUID.xml)
+                        uuid_val = None
+                        if '_' in filename:
+                            uuid_val = filename.split('_', 1)[1].replace('.xml', '')
+                        
+                        # Try to extract basic info from XML
+                        receptor_name = ''
+                        receptor_rfc = ''
+                        total = 0.0
+                        fecha = dt_util.fromtimestamp(file_stat.st_ctime)
+                        status_sat = 'VIGENTE'
+                        
+                        try:
+                            from lxml import etree
+                            tree = etree.parse(file_path)
+                            root = tree.getroot()
+                            ns = {'cfdi': 'http://www.sat.gob.mx/cfd/4'}
+                            
+                            total = float(root.get('Total', 0))
+                            fecha_str = root.get('Fecha', '')
+                            if fecha_str:
+                                fecha = dt_util.fromisoformat(fecha_str)
+                            
+                            receptor = root.find('cfdi:Receptor', ns)
+                            if receptor is not None:
+                                receptor_name = receptor.get('Nombre', '')
+                                receptor_rfc = receptor.get('Rfc', '')
+                            
+                            # Check if cancelled in DB
+                            if uuid_val:
+                                db_invoice = Invoice.query.filter_by(uuid=uuid_val).first()
+                                if db_invoice and db_invoice.status_sat == 'CANCELADO':
+                                    status_sat = 'CANCELADO'
+                        except Exception:
+                            pass
+                        
+                        facturas_generadas.append({
+                            'filename': filename,
+                            'uuid': uuid_val,
+                            'path': file_path,
+                            'size': file_stat.st_size,
+                            'created': fecha,
+                            'receiver_name': receptor_name,
+                            'receiver_rfc': receptor_rfc,
+                            'total': total,
+                            'status_sat': status_sat
+                        })
+                
+                facturas_generadas.sort(key=lambda x: x['created'], reverse=True)
+            except Exception as e:
+                logger.error(f'Error al listar facturas emitidas: {str(e)}')
+        
         return render_template('facturacion/facturacion_dashboard.html',
             company=company,
             has_credentials=has_credentials,
-            environment=environment
+            environment=environment,
+            invoices=facturas_generadas
         )
     
     @app.route('/companies/<int:company_id>/facturacion/credenciales', methods=['GET', 'POST'])
@@ -3826,7 +3997,72 @@ def create_app(config_class=Config):
             as_attachment=True,
             download_name=f"{result['uuid']}.{file_type}"
         )
-    
+
+    @app.route('/companies/<int:company_id>/facturacion/pdf/<path:filename>')
+    @login_required
+    def facturacion_invoice_pdf(company_id, filename):
+        """Genera un PDF del CFDI a partir del XML usando satcfdi, con logo de la empresa."""
+        from flask import send_file, abort
+        from io import BytesIO
+        import base64
+        import mimetypes
+        from werkzeug.utils import secure_filename
+        from satcfdi.cfdi import CFDI
+        from satcfdi import render as cfdi_render
+
+        company = Company.query.get_or_404(company_id)
+
+        safe_name = secure_filename(filename)
+        if not safe_name.endswith('.xml'):
+            abort(404)
+
+        xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+        xml_path = os.path.realpath(os.path.join(xml_dir, safe_name))
+        if not xml_path.startswith(os.path.realpath(xml_dir) + os.sep) or not os.path.exists(xml_path):
+            abort(404)
+
+        with open(xml_path, 'rb') as f:
+            xml_bytes = f.read()
+        cfdi = CFDI.from_string(xml_bytes)
+
+        html = cfdi_render.html_str(cfdi)
+
+        logo_tag = ''
+        if company.logo_path and os.path.exists(company.logo_path):
+            try:
+                with open(company.logo_path, 'rb') as lf:
+                    logo_b64 = base64.b64encode(lf.read()).decode('ascii')
+                mime = mimetypes.guess_type(company.logo_path)[0] or 'image/png'
+                logo_tag = (
+                    f'<div style="text-align:center;padding:8px 0;">'
+                    f'<img src="data:{mime};base64,{logo_b64}" '
+                    f'style="max-height:90px;max-width:280px;"/>'
+                    f'</div>'
+                )
+            except Exception as e:
+                logger.warning(f'No se pudo incrustar logo para {company.rfc}: {e}')
+
+        if logo_tag:
+            if '<body>' in html:
+                html = html.replace('<body>', '<body>' + logo_tag, 1)
+            else:
+                html = logo_tag + html
+
+        import weasyprint
+        pdf_bytes = weasyprint.HTML(string=html).write_pdf(stylesheets=[cfdi_render.PDF_CSS])
+
+        uuid_val = None
+        if '_' in safe_name:
+            uuid_val = safe_name.split('_', 1)[1].replace('.xml', '')
+        download_name = f"{uuid_val or safe_name.replace('.xml', '')}.pdf"
+
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=download_name
+        )
+
     @app.route('/companies/<int:company_id>/facturacion/estado', methods=['GET', 'POST'])
     @login_required
     def facturacion_estado(company_id):
@@ -3955,6 +4191,89 @@ def create_app(config_class=Config):
             company=company,
             form=form
         )
+
+    @app.route('/companies/<int:company_id>/facturacion/actualizar_estado/<string:uuid>', methods=['POST'])
+    @login_required
+    def facturacion_actualizar_estado_db(company_id, uuid):
+        """Actualiza el estado de una factura específica consultando al SAT."""
+        company = Company.query.get_or_404(company_id)
+        if not current_user.can_access_company(company_id):
+            flash('No tienes acceso a esta empresa', 'error')
+            return redirect(url_for('index'))
+            
+        invoice = Invoice.query.filter_by(company_id=company.id, uuid=uuid).first()
+        xml_content = invoice.xml_content if invoice and invoice.xml_content else None
+        created_from_xml = False
+
+        if not xml_content:
+            xml_path = find_company_invoice_xml_path(company.rfc, uuid)
+            if xml_path:
+                with open(xml_path, 'r', encoding='utf-8') as f:
+                    xml_content = f.read()
+
+        if not invoice and xml_content:
+            try:
+                invoice_data = parse_invoice_xml_for_db(xml_content, fallback_uuid=uuid)
+                invoice = Invoice(company_id=company.id, status_sat='VIGENTE', **invoice_data)
+                db.session.add(invoice)
+                db.session.flush()
+                created_from_xml = True
+            except Exception as e:
+                logger.warning(f"No se pudo registrar la factura {uuid} desde XML: {str(e)}")
+
+        if not invoice and not xml_content:
+            flash('No se encontrÃ³ la factura en la base de datos ni el XML emitido para consultar su estado.', 'warning')
+            return redirect(url_for('facturacion_dashboard', company_id=company.id))
+        
+        try:
+            from services.facturacion_service import FacturacionService
+            service = FacturacionService()
+            
+            # Use the XML to check status if available
+            result = None
+            if xml_content:
+                result = service.consultar_estado(cfdi_xml=xml_content)
+            elif invoice and invoice.issuer_rfc and invoice.receiver_rfc and invoice.total is not None:
+                result = service.consultar_estado(
+                    uuid=uuid,
+                    rfc_emisor=invoice.issuer_rfc,
+                    rfc_receptor=invoice.receiver_rfc,
+                    total=str(invoice.total)
+                )
+            else:
+                flash('No hay suficientes datos (XML o RFCs/Total) para consultar al SAT.', 'warning')
+                return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                
+            if result and result['success']:
+                estado = result.get('estado', '').upper()
+                if estado == 'CANCELADO':
+                    if invoice:
+                        invoice.status_sat = 'CANCELADO'
+                        db.session.commit()
+                    flash(f'El SAT confirmó que la factura {uuid[:8]} está CANCELADA.', 'success')
+                elif estado == 'VIGENTE':
+                    # Si estaba en proceso de cancelación pero el SAT dice vigente, puede que haya sido rechazada o siga en proceso
+                    # El SAT también devuelve un campo EstatusCancelacion si se solicita
+                    if invoice:
+                        invoice.status_sat = 'VIGENTE'
+                        db.session.commit()
+                    flash(f'El SAT indica que la factura {uuid[:8]} sigue VIGENTE.', 'info')
+                else:
+                    if created_from_xml:
+                        db.session.commit()
+                    flash(f'Estado devuelto por el SAT: {estado}', 'info')
+            else:
+                if created_from_xml:
+                    db.session.commit()
+                flash(f'Error al consultar el SAT: {result.get("message", "Error desconocido")}', 'error')
+                
+        except Exception as e:
+            if created_from_xml:
+                db.session.rollback()
+            logger.error(f"Error actualizando estado de {uuid}: {str(e)}")
+            flash(f'Error al conectar con el SAT: {str(e)}', 'error')
+            
+        return redirect(url_for('facturacion_dashboard', company_id=company.id))
 
     # ==================== GENERADOR DE CFDI ROUTES ====================
     
@@ -4266,6 +4585,97 @@ def create_app(config_class=Config):
             logger.error(f'Error al generar y timbrar: {str(e)}')
             flash(f'Error: {str(e)}', 'error')
             return redirect(url_for('crear_factura', company_id=company.id))
+
+    @app.route('/companies/<int:company_id>/facturacion/cancelar/<string:uuid>', methods=['GET', 'POST'])
+    @login_required
+    def facturacion_cancelar(company_id, uuid):
+        company = Company.query.get_or_404(company_id)
+        if not current_user.can_access_company(company_id):
+            flash('No tienes acceso a esta empresa', 'error')
+            return redirect(url_for('index'))
+            
+        perms = current_user.get_company_permissions(company_id)
+        if not perms.get('facturacion'):
+            flash('No tienes permiso para facturación', 'error')
+            return redirect(url_for('dashboard', company_id=company_id))
+
+        invoice = Invoice.query.filter_by(company_id=company.id, uuid=uuid).first_or_404()
+        
+        # We need the credentials environment
+        credentials = FinkokCredentials.query.filter_by(company_id=company.id, active=True).first()
+        if not credentials:
+            flash('Credenciales de Finkok no configuradas.', 'error')
+            return redirect(url_for('facturacion_dashboard', company_id=company.id))
+
+        form = CancelarFacturaForm()
+        if form.validate_on_submit():
+            try:
+                from services.facturacion_service import FacturacionService
+                from utils.crypto import decrypt_password
+                from satcfdi.models import Signer
+                
+                fiel_cer_file = form.fiel_cer.data
+                fiel_key_file = form.fiel_key.data
+                fiel_password = form.fiel_password.data
+                motivo = form.motivo.data
+                sustitucion_uuid = form.sustitucion_uuid.data if form.sustitucion_uuid.data else None
+
+                # Leer archivos en memoria directamente
+                cer_bytes = fiel_cer_file.read()
+                key_bytes = fiel_key_file.read()
+
+                try:
+                    signer = Signer.load(cer_bytes, key_bytes, fiel_password)
+                    password = decrypt_password(credentials.password_enc)
+                    
+                    facturacion_service = FacturacionService(
+                        finkok_username=credentials.username,
+                        finkok_password=password,
+                        environment=credentials.environment,
+                        signer=signer
+                    )
+                    
+                    # Llamar a cancelar
+                    result = facturacion_service.cancelar_factura(
+                        cfdi_xml=invoice.xml_content,
+                        reason=motivo,
+                        substitution_uuid=sustitucion_uuid
+                    )
+                    
+                    if result['success']:
+                        # Guardar el acuse de cancelación
+                        if 'acuse' in result and result['acuse']:
+                            xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+                            os.makedirs(xml_dir, exist_ok=True)
+                            acuse_path = os.path.join(xml_dir, f"acuse_cancelacion_{uuid}.xml")
+                            with open(acuse_path, 'w', encoding='utf-8') as f:
+                                f.write(result['acuse'])
+                            logger.info(f"Acuse de cancelación guardado en {acuse_path}")
+                        
+                        # Marcar en proceso, ya que requiere consultar el estado después
+                        invoice.status_sat = 'EN_PROCESO_CANCELACION'
+                        db.session.commit()
+                        flash('Solicitud de cancelación enviada al SAT. El estado se actualizará a EN_PROCESO_CANCELACION. Consulte el estado más tarde.', 'success')
+                        return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                    else:
+                        error_msg = result.get('message', '').lower()
+                        if 'timeout' in error_msg or 'time out' in error_msg:
+                            invoice.status_sat = 'VERIFICACION_PENDIENTE'
+                            db.session.commit()
+                            flash('La solicitud tardó mucho en responder (Timeout). Se marcó como VERIFICACION_PENDIENTE. Por favor consulte el estado más tarde.', 'warning')
+                            return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                        else:
+                            flash(f'Error al cancelar factura: {result["message"]}', 'error')
+
+                except ValueError as ve:
+                    # Error al cargar la FIEL por contraseña incorrecta
+                    flash(f'Error con los archivos FIEL o contraseña: {str(ve)}', 'error')
+                    
+            except Exception as e:
+                logger.error(f'Error cancelando factura: {str(e)}')
+                flash(f'Error inesperado: {str(e)}', 'error')
+
+        return render_template('facturacion/cancelar_factura.html', company=company, form=form, invoice=invoice)
 
     # Register mobile API blueprint
     from routes.mobile_api import mobile_api_bp

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Cancelar Factura - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>
+                <i class="fas fa-ban text-danger"></i>
+                Cancelar Factura
+            </h2>
+            <h5 class="text-muted">{{ company.name }} - {{ company.rfc }}</h5>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-5">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Detalles de Factura</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>UUID:</strong> <span class="user-select-all">{{ invoice.uuid }}</span></p>
+                    <p><strong>Receptor:</strong> {{ invoice.receiver_name or invoice.receiver_rfc }}</p>
+                    <p><strong>Total:</strong> ${{ "{:,.2f}".format(invoice.total) }}</p>
+                    <p><strong>Fecha:</strong> {{ invoice.date.strftime('%d/%m/%Y %H:%M') }}</p>
+                </div>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> <strong>Recuerde:</strong>
+                Para cancelar una factura ante el SAT, necesita su Certificado de Sello Digital (CSD) o su e.firma (FIEL), con sus respectivos archivos (.cer y .key) y su contraseña.
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.csrf_token }}
+                        
+                        <h5 class="border-bottom pb-2 mb-3">1. Credenciales (CSD / FIEL)</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.fiel_cer.label(class="form-label") }}
+                                {{ form.fiel_cer(class="form-control", accept=".cer") }}
+                                {% for error in form.fiel_cer.errors %}
+                                    <div class="text-danger small">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                {{ form.fiel_key.label(class="form-label") }}
+                                {{ form.fiel_key(class="form-control", accept=".key") }}
+                                {% for error in form.fiel_key.errors %}
+                                    <div class="text-danger small">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            {{ form.fiel_password.label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.fiel_password(class="form-control") }}
+                                <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            {% for error in form.fiel_password.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <h5 class="border-bottom pb-2 mb-3">2. Motivo de Cancelación</h5>
+                        
+                        <div class="mb-3">
+                            {{ form.motivo.label(class="form-label fw-bold") }}
+                            {{ form.motivo(class="form-select", id="motivoSelect") }}
+                            {% for error in form.motivo.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                            <div class="form-text mt-2">Seleccione el motivo de cancelación de acuerdo al catálogo del SAT.</div>
+                        </div>
+
+                        <div class="mb-4" id="sustitucionContainer" style="display: none;">
+                            {{ form.sustitucion_uuid.label(class="form-label fw-bold text-primary") }}
+                            {{ form.sustitucion_uuid(class="form-control border-primary", placeholder="Ej: 12345678-1234-1234-1234-123456789012") }}
+                            {% for error in form.sustitucion_uuid.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                            <div class="form-text">Si seleccionó el motivo '01', debe indicar el UUID de la factura que sustituye a la actual.</div>
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Volver
+                            </a>
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('¿Está seguro de querer cancelar esta factura? Esta acción es irreversible ante el SAT.');">
+                                <i class="fas fa-ban"></i> Procesar Cancelación
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle password visibility
+        const togglePassword = document.getElementById('togglePassword');
+        const passwordField = document.getElementById('fiel_password');
+        
+        togglePassword.addEventListener('click', function() {
+            const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordField.setAttribute('type', type);
+            this.querySelector('i').classList.toggle('fa-eye');
+            this.querySelector('i').classList.toggle('fa-eye-slash');
+        });
+
+        // Show/hide substitution UUID field based on selected reason
+        const motivoSelect = document.getElementById('motivoSelect');
+        const sustitucionContainer = document.getElementById('sustitucionContainer');
+        const sustitucionInput = document.getElementById('sustitucion_uuid');
+
+        function toggleSustitucion() {
+            if (motivoSelect.value === '01') {
+                sustitucionContainer.style.display = 'block';
+                sustitucionInput.setAttribute('required', 'required');
+            } else {
+                sustitucionContainer.style.display = 'none';
+                sustitucionInput.removeAttribute('required');
+                sustitucionInput.value = ''; // Clear value
+            }
+        }
+
+        motivoSelect.addEventListener('change', toggleSustitucion);
+        toggleSustitucion(); // Initialize on load
+    });
+</script>
+{% endblock %}

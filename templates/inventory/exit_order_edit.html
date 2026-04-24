@@ -198,9 +198,13 @@ function loadBatches() {
     }
 
     // Show stock available
-    const selectedOption = productSelect.options[productSelect.selectedIndex];
-    const stock = selectedOption.dataset.stock;
-    stockInfo.textContent = `Stock disponible: ${stock}`;
+    if (productSelect.selectedIndex >= 0) {
+        const selectedOption = productSelect.options[productSelect.selectedIndex];
+        const stock = selectedOption.dataset.stock;
+        if (stock !== undefined) {
+            stockInfo.textContent = `Stock disponible: ${stock}`;
+        }
+    }
 
     // Fetch batches from API
     fetch(`/api/companies/{{ company.id }}/products/${productId}/batches`)

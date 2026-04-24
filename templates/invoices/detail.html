@@ -189,7 +189,18 @@
             <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}" class="btn btn-danger">
                 <i class="fas fa-file-pdf"></i> Descargar PDF
             </a>
-            <a href="/companies/{{ company.id }}/search" class="btn btn-secondary">
+            {% if invoice.issuer_rfc == company.rfc %}
+                {% if invoice.status_sat != 'CANCELADO' %}
+                <a href="{{ url_for('facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}" class="btn btn-outline-danger">
+                    <i class="fas fa-ban"></i> Cancelar Factura
+                </a>
+                {% else %}
+                <div class="alert alert-danger text-center p-2 mb-0 mt-2">
+                    <i class="fas fa-times-circle"></i> FACTURA CANCELADA
+                </div>
+                {% endif %}
+            {% endif %}
+            <a href="/companies/{{ company.id }}/search" class="btn btn-secondary mt-2">
                 <i class="fas fa-arrow-left"></i> Volver a Búsqueda
             </a>
         </div>

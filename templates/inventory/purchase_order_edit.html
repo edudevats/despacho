@@ -214,7 +214,10 @@ let currentUPP = 1;
 
 // Auto-fill cost and show package options when product is selected
 productSelect.addEventListener('change', function() {
+    if (this.selectedIndex < 0) return;
     const option = this.options[this.selectedIndex];
+    if (!option.value) return; // Ignore empty selection
+    
     const cost = option.getAttribute('data-cost') || 0;
     const upp = parseInt(option.getAttribute('data-upp')) || 1;
     const packaging = option.getAttribute('data-packaging') || 'Paquete';

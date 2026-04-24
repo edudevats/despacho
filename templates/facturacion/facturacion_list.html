@@ -20,10 +20,10 @@
             <div class="card shadow-sm h-100 hover-shadow">
                 <div class="card-body text-center">
                     <div class="mb-3">
-                        {% if company.logo_path %}
-                        <img src="{{ url_for('serve_logo', filename=company.logo_path.split('/')[-1]) }}" 
-                             alt="{{ company.name }}" 
-                             class="img-fluid rounded" 
+                        {% if company.logo_filename %}
+                        <img src="{{ url_for('serve_logo', filename=company.logo_filename) }}"
+                             alt="{{ company.name }}"
+                             class="img-fluid rounded"
                              style="max-height: 80px;">
                         {% else %}
                         <i class="fas fa-building fa-4x text-primary"></i>

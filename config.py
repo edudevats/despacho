@@ -43,7 +43,7 @@ class Config:
     
     # Flask-WTF (CSRF Protection)
     WTF_CSRF_ENABLED = True
-    WTF_CSRF_TIME_LIMIT = 3600  # 1 hora
+    WTF_CSRF_TIME_LIMIT = None  # El token durará lo que dure la sesión (7 días)
     
     # Flask-Caching
     CACHE_TYPE = os.environ.get('CACHE_TYPE') or 'SimpleCache'
@@ -61,7 +61,7 @@ class Config:
     MAIL_SUPPRESS_SEND = os.environ.get('MAIL_SUPPRESS_SEND', 'true').lower() in ['true', '1', 'yes']  # True for dev
     
     # Session
-    PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     
     # Security
     SESSION_COOKIE_SECURE = False  # Set True in production with HTTPS
