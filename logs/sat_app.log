@@ -1218,3 +1218,11 @@ utils.crypto.CryptoKeyError: FERNET_KEY environment variable not set. Generate o
 2026-04-24 17:17:52 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-04-24 18:17:53 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
 2026-04-24 18:17:54 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-25 05:58:31 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-25 06:58:33 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-25 06:58:33 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!
+2026-04-25 06:58:40 - weasyprint - WARNING - [__init__.py:188] - Ignored `vertical-align: center` at 138:2, invalid value.
+2026-04-25 06:58:40 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-bottom: none` at 152:2, invalid value.
+2026-04-25 06:58:40 - weasyprint - WARNING - [__init__.py:188] - Ignored `padding-right: none` at 155:2, invalid value.
+2026-04-25 07:02:31 - app - INFO - [logging_config.py:77] - Logging configured: level=INFO
+2026-04-25 07:02:31 - werkzeug - WARNING - [_internal.py:97] -  * Debugger is active!

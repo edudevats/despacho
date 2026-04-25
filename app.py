@@ -4028,11 +4028,21 @@ def create_app(config_class=Config):
         html = cfdi_render.html_str(cfdi)
 
         logo_tag = ''
-        if company.logo_path and os.path.exists(company.logo_path):
+        resolved_logo = None
+        if company.logo_path:
+            if os.path.exists(company.logo_path):
+                resolved_logo = company.logo_path
+            else:
+                fallback = os.path.join(PROJECT_ROOT, 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
+                if os.path.exists(fallback):
+                    resolved_logo = fallback
+                else:
+                    logger.warning(f'Logo no encontrado para {company.rfc}: stored={company.logo_path!r} fallback={fallback!r}')
+        if resolved_logo:
             try:
-                with open(company.logo_path, 'rb') as lf:
+                with open(resolved_logo, 'rb') as lf:
                     logo_b64 = base64.b64encode(lf.read()).decode('ascii')
-                mime = mimetypes.guess_type(company.logo_path)[0] or 'image/png'
+                mime = mimetypes.guess_type(resolved_logo)[0] or 'image/png'
                 logo_tag = (
                     f'<div style="text-align:center;padding:8px 0;">'
                     f'<img src="data:{mime};base64,{logo_b64}" '
