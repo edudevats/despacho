@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Etiquetas - {{ company.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .lbl-page { --pri:#2563EB; --bg:#F8FAFC; --text:#1E293B; --muted:#64748B; }
+    .lbl-header h2 { font-size:1.4rem; font-weight:600; color:var(--text); margin:0; letter-spacing:-0.01em; }
+    .lbl-header .company-tag { color:var(--muted); font-size:.85rem; }
+
+    .toolbar { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:1rem;
+               display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .toolbar label { font-size:.78rem; font-weight:600; color:#475569; margin:0; }
+    .toolbar .form-select-sm, .toolbar .form-control-sm { width:auto; min-width:140px; }
+
+    .labels-grid { display:grid; gap:8px; }
+    .labels-grid.size-small  { grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); }
+    .labels-grid.size-medium { grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); }
+    .labels-grid.size-large  { grid-template-columns:repeat(auto-fill, minmax(360px,1fr)); }
+
+    .label-card { background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:10px;
+                  display:flex; gap:10px; align-items:center; page-break-inside:avoid; break-inside:avoid; }
+    .label-card .qr-wrap { flex-shrink:0; }
+    .label-card .qr-wrap img { display:block; width:100%; height:auto; }
+    .size-small  .label-card .qr-wrap { width:64px; }
+    .size-medium .label-card .qr-wrap { width:88px; }
+    .size-large  .label-card .qr-wrap { width:120px; }
+    .label-card .info { flex:1; min-width:0; font-size:.78rem; line-height:1.3; }
+    .size-large .label-card .info { font-size:.88rem; }
+    .label-card .info .name { font-weight:700; color:#0F172A; margin-bottom:2px; word-wrap:break-word;
+                              overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+    .label-card .info .meta { color:#475569; font-variant-numeric:tabular-nums; }
+    .label-card .info .meta-row { display:flex; justify-content:space-between; gap:6px; }
+    .label-card .info .ctrl-pill { display:inline-block; background:#FEE2E2; color:#991B1B; padding:1px 6px; border-radius:4px;
+                                   font-size:.65rem; font-weight:700; margin-top:2px; }
+
+    .empty-block { padding:48px 16px; text-align:center; color:var(--muted); background:#fff; border:1px dashed #CBD5E1; border-radius:10px; }
+    .empty-block i { font-size:2.5rem; opacity:.35; margin-bottom:.75rem; display:block; }
+
+    .filter-chip { background:#F1F5F9; color:#334155; border:1px solid transparent; padding:5px 12px; border-radius:999px;
+                   font-size:.82rem; font-weight:500; cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px; }
+    .filter-chip:hover { background:#E2E8F0; }
+    .filter-chip.active { background:var(--pri); color:#fff; }
+
+    @media print {
+        @page { margin: 8mm; }
+        body { background:#fff !important; }
+        .no-print, .navbar, .sidebar, footer, .toolbar, .lbl-header, details { display:none !important; }
+        .label-card { border:1px solid #000; box-shadow:none; }
+        .labels-grid { gap:4px; }
+        .lbl-page { padding:0 !important; margin:0 !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lbl-page">
+
+    <!-- Header -->
+    <div class="lbl-header d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2 no-print">
+        <div>
+            <h2><i class="fas fa-tags text-primary me-2"></i>Etiquetas con QR</h2>
+            <div class="company-tag">{{ company.name }} · {{ labels|length }} etiqueta(s) generadas</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Inventario
+            </a>
+            <button id="printBtn" class="btn btn-primary btn-sm" aria-label="Imprimir">
+                <i class="fas fa-print me-1"></i>Imprimir
+            </button>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <form method="get" class="toolbar no-print" id="filterForm">
+        <label>Modo:</label>
+        <div class="d-flex gap-2">
+            <span class="filter-chip {% if mode == 'batches' %}active{% endif %}" data-mode="batches" role="button" tabindex="0">
+                <i class="fas fa-layer-group"></i> Lotes
+            </span>
+            <span class="filter-chip {% if mode == 'products' %}active{% endif %}" data-mode="products" role="button" tabindex="0">
+                <i class="fas fa-box"></i> Productos
+            </span>
+            <input type="hidden" name="mode" id="modeInput" value="{{ mode }}">
+        </div>
+
+        <label class="ms-2">Tamaño:</label>
+        <select name="size" class="form-select form-select-sm" onchange="document.getElementById('filterForm').submit();">
+            <option value="small"  {% if size == 'small'  %}selected{% endif %}>Pequeño</option>
+            <option value="medium" {% if size == 'medium' %}selected{% endif %}>Mediano</option>
+            <option value="large"  {% if size == 'large'  %}selected{% endif %}>Grande</option>
+        </select>
+
+        <label class="ms-2">Producto:</label>
+        <select name="product_id" class="form-select form-select-sm" onchange="document.getElementById('filterForm').submit();">
+            <option value="">Todos</option>
+            {% for p in all_products %}
+                <option value="{{ p.id }}" {% if product_filter == p.id %}selected{% endif %}>
+                    {{ p.name }}{% if p.sku %} ({{ p.sku }}){% endif %}
+                </option>
+            {% endfor %}
+        </select>
+
+        <div class="ms-auto small text-muted">
+            <i class="fas fa-info-circle me-1"></i>
+            QR codifica: empresa · producto · lote · vencimiento
+        </div>
+    </form>
+
+    {% if labels %}
+        <div class="labels-grid size-{{ size }}" id="labelsGrid">
+            {% for l in labels %}
+                <div class="label-card" data-product-id="{{ l.product.id }}">
+                    <div class="qr-wrap">
+                        <img src="data:image/png;base64,{{ l.qr }}" alt="QR {{ l.title }}">
+                    </div>
+                    <div class="info">
+                        <div class="name" title="{{ l.title }}">{{ l.title }}</div>
+                        {% if l.sku %}<div class="meta-row"><span>SKU:</span><span>{{ l.sku }}</span></div>{% endif %}
+                        {% if l.batch_number %}<div class="meta-row"><span>Lote:</span><span>{{ l.batch_number }}</span></div>{% endif %}
+                        {% if l.expiration %}
+                            <div class="meta-row"><span>Vence:</span><span>{{ l.expiration.strftime('%d/%m/%Y') }}</span></div>
+                        {% endif %}
+                        <div class="meta-row"><span>Stock:</span><span>{{ l.stock|int }}</span></div>
+                        {% if l.is_controlled %}<span class="ctrl-pill">CONTROLADO</span>{% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-block">
+            <i class="fas fa-tag"></i>
+            <h5 class="text-dark">Sin etiquetas</h5>
+            <p>
+                {% if mode == 'batches' %}
+                    No se encontraron lotes con stock para los filtros seleccionados.
+                {% else %}
+                    No se encontraron productos activos para los filtros seleccionados.
+                {% endif %}
+            </p>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+    document.querySelectorAll('.filter-chip[data-mode]').forEach(chip => {
+        const submit = () => {
+            document.getElementById('modeInput').value = chip.dataset.mode;
+            document.getElementById('filterForm').submit();
+        };
+        chip.addEventListener('click', submit);
+        chip.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); submit(); }
+        });
+    });
+
+    document.getElementById('printBtn')?.addEventListener('click', () => window.print());
+
+    document.addEventListener('keydown', e => {
+        if (e.target.matches('input,textarea,select')) return;
+        if (e.key === 'p') { e.preventDefault(); window.print(); }
+    });
+})();
+</script>
+{% endblock %}

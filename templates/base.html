@@ -22,6 +22,69 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 
+    <style>
+        /* Búsqueda global del navbar */
+        .navbar-search-wrap input[type="search"] {
+            border-radius: 8px;
+            background: rgba(255,255,255,0.92);
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        .navbar-search-wrap input[type="search"]:focus {
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.25);
+            border-color: #fff;
+        }
+        #globalSearchResults {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 4px;
+            padding: 4px;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            background: #fff;
+            z-index: 1080;
+        }
+        #globalSearchResults .gs-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #1E293B;
+            text-decoration: none;
+            font-size: 0.88rem;
+        }
+        #globalSearchResults .gs-item:hover,
+        #globalSearchResults .gs-item.gs-active {
+            background: #EFF6FF;
+        }
+        #globalSearchResults .gs-name { font-weight: 600; }
+        #globalSearchResults .gs-meta { font-size: 0.75rem; color: #64748B; }
+        #globalSearchResults .gs-stock {
+            font-variant-numeric: tabular-nums;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #F1F5F9;
+            color: #334155;
+            white-space: nowrap;
+        }
+        #globalSearchResults .gs-stock.low { background: #FEF3C7; color: #92400E; }
+        #globalSearchResults .gs-stock.zero { background: #FEE2E2; color: #991B1B; }
+        #globalSearchResults .gs-empty,
+        #globalSearchResults .gs-loading {
+            padding: 12px; color: #64748B; font-size: 0.85rem; text-align: center;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #globalSearchResults .gs-item { transition: none; }
+        }
+    </style>
+
     {% block extra_css %}{% endblock %}
 </head>
 
@@ -38,6 +101,21 @@
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
+                {% set _navbar_company = company or selected_company %}
+                {% if _navbar_company and current_user.is_authenticated %}
+                <div class="navbar-search-wrap mx-auto position-relative" style="min-width:280px; max-width:520px; flex:1;">
+                    <input type="search" id="globalProductSearch"
+                           class="form-control form-control-sm"
+                           placeholder="Buscar producto en {{ _navbar_company.name|truncate(28, true) }}…   (atajo: Ctrl+K)"
+                           autocomplete="off"
+                           aria-label="Búsqueda global de productos"
+                           data-company-id="{{ _navbar_company.id }}"
+                           data-search-url="{{ url_for('api_global_product_search', company_id=_navbar_company.id) }}">
+                    <div id="globalSearchResults" class="dropdown-menu w-100 shadow-sm"
+                         style="max-height:420px; overflow:auto; display:none;"
+                         role="listbox" aria-label="Resultados de búsqueda"></div>
+                </div>
+                {% endif %}
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button"
@@ -69,6 +147,7 @@
             <!-- Sidebar -->
             <nav class="col-md-2 d-md-block bg-light sidebar vh-100 position-sticky top-0">
                 <div class="position-sticky pt-3">
+                    {% set nav_is_admin = current_user.is_authenticated and current_user.is_admin %}
                     <h6 class="sidebar-heading px-3 text-muted">
                         MENÚ PRINCIPAL
                     </h6>
@@ -78,18 +157,23 @@
                                 <i class="fas fa-home"></i> Dashboard
                             </a>
                         </li>
+                        {% if nav_is_admin or current_user.company_access %}
                         <li class="nav-item">
                             <a class="nav-link" href="/companies">
                                 <i class="fas fa-building"></i> Empresas
                             </a>
                         </li>
+                        {% endif %}
+                        {% if has_any_perm('sync') %}
                         <li class="nav-item">
                             <a class="nav-link" href="/sync">
                                 <i class="fas fa-sync"></i> Sincronización
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
 
+                    {% if has_any_perm('inventory', 'inventory_admin') %}
                     <h6 class="sidebar-heading px-3 mt-4 text-muted">
                         CONFIGURACIÓN
                     </h6>
@@ -110,7 +194,9 @@
                             </a>
                         </li>
                     </ul>
+                    {% endif %}
 
+                    {% if has_any_perm('invoices', 'ppd') %}
                     <h6 class="sidebar-heading px-3 mt-4 text-muted">
                         FACTURAS
                     </h6>
@@ -120,7 +206,7 @@
                                 <i class="fas fa-file-invoice"></i> Facturas y Movimientos
                             </a>
                             {% set nav_company = company or selected_company %}
-                            {% if nav_company %}
+                            {% if nav_company and (nav_is_admin or has_company_perm(nav_company.id, 'ppd', 'invoices')) %}
                             <ul class="nav flex-column ms-3">
                                 <li class="nav-item">
                                     <a class="nav-link py-1"
@@ -132,7 +218,9 @@
                             {% endif %}
                         </li>
                     </ul>
+                    {% endif %}
 
+                    {% if has_any_perm('taxes') %}
                     <h6 class="sidebar-heading px-3 mt-4 text-muted">
                         IMPUESTOS
                     </h6>
@@ -143,7 +231,9 @@
                             </a>
                         </li>
                     </ul>
+                    {% endif %}
 
+                    {% if has_any_perm('sales') %}
                     <h6 class="sidebar-heading px-3 mt-4 text-muted">
                         ANÁLISIS
                     </h6>
@@ -154,7 +244,9 @@
                             </a>
                         </li>
                     </ul>
+                    {% endif %}
 
+                    {% if has_any_perm('facturacion') %}
                     <h6 class="sidebar-heading px-3 mt-4 text-muted">
                         FACTURACIÓN
                     </h6>
@@ -165,6 +257,7 @@
                             </a>
                         </li>
                     </ul>
+                    {% endif %}
 
                     {% if current_user.is_authenticated and current_user.is_admin %}
                     <h6 class="sidebar-heading px-3 mt-4 text-muted">
@@ -208,6 +301,150 @@
 
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <script>
+    /* Búsqueda global de productos (navbar) */
+    (function() {
+        const input = document.getElementById('globalProductSearch');
+        const results = document.getElementById('globalSearchResults');
+        if (!input || !results) return;
+
+        const url = input.dataset.searchUrl;
+        let debounceId;
+        let activeIdx = -1;
+        let items = [];
+        let currentReq = 0;
+
+        function show()  { results.style.display = 'block'; }
+        function hide()  { results.style.display = 'none'; activeIdx = -1; }
+        function clearItems() { results.textContent = ''; items = []; activeIdx = -1; }
+
+        function renderEmpty(text) {
+            clearItems();
+            const div = document.createElement('div');
+            div.className = 'gs-empty';
+            div.textContent = text;
+            results.appendChild(div);
+            show();
+        }
+        function renderLoading() {
+            clearItems();
+            const div = document.createElement('div');
+            div.className = 'gs-loading';
+            div.textContent = 'Buscando…';
+            results.appendChild(div);
+            show();
+        }
+        function renderResults(data) {
+            clearItems();
+            if (!data.results || data.results.length === 0) {
+                renderEmpty('Sin resultados para "' + (data.query || '') + '"');
+                return;
+            }
+            data.results.forEach((p, idx) => {
+                const a = document.createElement('a');
+                a.className = 'gs-item';
+                a.href = p.url;
+                a.setAttribute('role', 'option');
+                a.dataset.idx = String(idx);
+
+                const left = document.createElement('div');
+                left.className = 'gs-left';
+                const name = document.createElement('div');
+                name.className = 'gs-name';
+                name.textContent = p.name;
+                const meta = document.createElement('div');
+                meta.className = 'gs-meta';
+                meta.textContent = (p.sku ? 'SKU: ' + p.sku : 'Sin SKU');
+                left.appendChild(name);
+                left.appendChild(meta);
+
+                const stockBadge = document.createElement('span');
+                let cls = 'gs-stock';
+                if ((p.stock || 0) <= 0) cls += ' zero';
+                else if (p.is_low) cls += ' low';
+                stockBadge.className = cls;
+                stockBadge.textContent = 'Stock: ' + (p.stock != null ? p.stock : 0);
+
+                a.appendChild(left);
+                a.appendChild(stockBadge);
+                results.appendChild(a);
+                items.push(a);
+            });
+            show();
+        }
+
+        function setActive(i) {
+            items.forEach(el => el.classList.remove('gs-active'));
+            if (i >= 0 && i < items.length) {
+                items[i].classList.add('gs-active');
+                items[i].scrollIntoView({ block: 'nearest' });
+            }
+            activeIdx = i;
+        }
+
+        async function doSearch(q) {
+            const reqId = ++currentReq;
+            try {
+                const r = await fetch(url + '?q=' + encodeURIComponent(q), {
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (reqId !== currentReq) return;
+                if (!r.ok) { renderEmpty('Error de búsqueda'); return; }
+                const data = await r.json();
+                if (reqId !== currentReq) return;
+                renderResults(data);
+            } catch (e) {
+                if (reqId !== currentReq) return;
+                renderEmpty('Error de red');
+            }
+        }
+
+        input.addEventListener('input', function() {
+            clearTimeout(debounceId);
+            const q = this.value.trim();
+            if (q.length < 2) { hide(); return; }
+            renderLoading();
+            debounceId = setTimeout(() => doSearch(q), 220);
+        });
+        input.addEventListener('focus', function() {
+            if (this.value.trim().length >= 2 && items.length > 0) show();
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown') {
+                if (results.style.display === 'none' || items.length === 0) return;
+                e.preventDefault();
+                setActive(Math.min(activeIdx + 1, items.length - 1));
+            } else if (e.key === 'ArrowUp') {
+                if (items.length === 0) return;
+                e.preventDefault();
+                setActive(Math.max(activeIdx - 1, 0));
+            } else if (e.key === 'Enter') {
+                if (activeIdx >= 0 && items[activeIdx]) {
+                    e.preventDefault();
+                    window.location.href = items[activeIdx].href;
+                }
+            } else if (e.key === 'Escape') {
+                hide();
+                this.blur();
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target) && !results.contains(e.target)) hide();
+        });
+
+        // Atajo Ctrl+K / Cmd+K
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+                e.preventDefault();
+                input.focus();
+                input.select();
+            }
+        });
+    })();
+    </script>
 
     {% block extra_js %}{% endblock %}
 </body>

@@ -1,0 +1,478 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis de Inventario - {{ company.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .anly-page { --pri:#2563EB; --bg:#F8FAFC; --text:#1E293B; --muted:#64748B; }
+    .anly-header h2 { font-size:1.4rem; font-weight:600; color:var(--text); margin:0; letter-spacing:-0.01em; }
+    .anly-header .company-tag { color:var(--muted); font-size:.85rem; }
+
+    .kpi-strip { display:grid; gap:12px; margin-bottom:1.25rem; }
+    .kpi-strip.cols-3 { grid-template-columns:repeat(3,1fr); }
+    .kpi-strip.cols-4 { grid-template-columns:repeat(4,1fr); }
+    .kpi-strip.cols-5 { grid-template-columns:repeat(5,1fr); }
+    @media (max-width:992px){ .kpi-strip.cols-3, .kpi-strip.cols-4, .kpi-strip.cols-5 { grid-template-columns:repeat(2,1fr); } }
+    .kpi-card { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; }
+    .kpi-card .kpi-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; font-weight:600; }
+    .kpi-card .kpi-value { font-size:1.45rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:var(--text); }
+    .kpi-card .kpi-sub   { font-size:.78rem; color:var(--muted); margin-top:4px; }
+    .kpi-card.kpi-A      { border-top:3px solid #2563EB; }
+    .kpi-card.kpi-A .kpi-value { color:#1E40AF; }
+    .kpi-card.kpi-B      { border-top:3px solid #0891B2; }
+    .kpi-card.kpi-B .kpi-value { color:#0E7490; }
+    .kpi-card.kpi-C      { border-top:3px solid #94A3B8; }
+    .kpi-card.kpi-C .kpi-value { color:#475569; }
+    .kpi-card.kpi-fast   { border-top:3px solid #059669; }
+    .kpi-card.kpi-fast .kpi-value { color:#047857; }
+    .kpi-card.kpi-slow   { border-top:3px solid #D97706; }
+    .kpi-card.kpi-slow .kpi-value { color:#B45309; }
+    .kpi-card.kpi-dead   { border-top:3px solid #DC2626; }
+    .kpi-card.kpi-dead .kpi-value { color:#991B1B; }
+    .kpi-card.kpi-risk   { border-top:3px solid #7C2D12; background:#FFF7ED; }
+    .kpi-card.kpi-risk .kpi-value { color:#7C2D12; }
+
+    .nav-tabs.anly-tabs { border-bottom:1px solid #E2E8F0; gap:2px; margin-bottom:1rem; }
+    .nav-tabs.anly-tabs .nav-link { color:#475569; font-weight:500; font-size:.9rem; padding:.6rem 1rem; border-radius:8px 8px 0 0; }
+    .nav-tabs.anly-tabs .nav-link:hover { background:#F8FAFC; color:#0F172A; }
+    .nav-tabs.anly-tabs .nav-link.active { color:#2563EB; background:#fff; border-color:#E2E8F0 #E2E8F0 #fff; font-weight:600; }
+
+    .anly-table thead th { position:sticky; top:0; background:#F8FAFC; z-index:2; font-size:.78rem;
+                           text-transform:uppercase; letter-spacing:.04em; color:#475569; font-weight:600;
+                           border-bottom:2px solid #E2E8F0 !important; }
+    .anly-table td { font-size:.88rem; }
+    .anly-table .num { font-variant-numeric:tabular-nums; }
+
+    .abc-pill { display:inline-block; min-width:28px; padding:2px 10px; border-radius:6px; font-weight:700; font-size:.78rem; text-align:center; }
+    .abc-pill.A { background:#DBEAFE; color:#1E40AF; }
+    .abc-pill.B { background:#CFFAFE; color:#0E7490; }
+    .abc-pill.C { background:#F1F5F9; color:#475569; }
+
+    .rot-pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:6px; font-size:.78rem; font-weight:600; }
+    .rot-pill.fast  { background:#DCFCE7; color:#166534; }
+    .rot-pill.slow  { background:#FEF3C7; color:#92400E; }
+    .rot-pill.dead  { background:#FEE2E2; color:#991B1B; }
+    .rot-pill.empty { background:#F1F5F9; color:#475569; }
+
+    .age-bar-wrap { display:flex; height:24px; border-radius:6px; overflow:hidden; background:#F1F5F9; margin-bottom:1rem; }
+    .age-bar { display:flex; align-items:center; justify-content:center; color:#fff; font-size:.72rem; font-weight:600; transition:flex .3s; }
+    .age-bar.fresh     { background:#10B981; }
+    .age-bar.b30_90    { background:#3B82F6; }
+    .age-bar.b90_180   { background:#F59E0B; }
+    .age-bar.b180_365  { background:#F97316; }
+    .age-bar.over_year { background:#DC2626; }
+
+    .age-pill { display:inline-block; padding:2px 8px; border-radius:6px; font-size:.75rem; font-weight:600; }
+    .age-pill.fresh     { background:#D1FAE5; color:#065F46; }
+    .age-pill.b30_90    { background:#DBEAFE; color:#1E40AF; }
+    .age-pill.b90_180   { background:#FEF3C7; color:#92400E; }
+    .age-pill.b180_365  { background:#FED7AA; color:#9A3412; }
+    .age-pill.over_year { background:#FEE2E2; color:#991B1B; }
+
+    .filter-chip { background:#F1F5F9; color:#334155; border:1px solid transparent; padding:5px 12px; border-radius:999px;
+                   font-size:.82rem; font-weight:500; cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px; }
+    .filter-chip:hover { background:#E2E8F0; }
+    .filter-chip.active { background:var(--pri); color:#fff; }
+    .filter-chip .count { font-weight:600; opacity:.8; font-variant-numeric:tabular-nums; }
+
+    .empty-block { padding:48px 16px; text-align:center; color:var(--muted); }
+    .empty-block i { font-size:2.5rem; opacity:.35; margin-bottom:.75rem; display:block; }
+
+    .help-tip { background:#F8FAFC; border:1px solid #E2E8F0; border-left:3px solid var(--pri); border-radius:6px;
+                padding:10px 14px; font-size:.85rem; color:#475569; margin-bottom:1rem; }
+    .help-tip strong { color:var(--text); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4 anly-page">
+    <!-- Header -->
+    <div class="anly-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+            <h2><i class="fas fa-chart-line text-primary me-1"></i> Análisis de Inventario <span class="company-tag">· {{ company.name }}</span></h2>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <form method="GET" class="d-flex align-items-center gap-2 mb-0">
+                <label for="windowSelect" class="small text-muted mb-0">Ventana:</label>
+                <select name="window" id="windowSelect" class="form-select form-select-sm" onchange="this.form.submit()" style="width:auto;">
+                    <option value="30"  {{ 'selected' if window_days == 30  }}>30 días</option>
+                    <option value="60"  {{ 'selected' if window_days == 60  }}>60 días</option>
+                    <option value="90"  {{ 'selected' if window_days == 90  }}>90 días</option>
+                    <option value="180" {{ 'selected' if window_days == 180 }}>180 días</option>
+                    <option value="365" {{ 'selected' if window_days == 365 }}>365 días</option>
+                </select>
+            </form>
+            <button type="button" id="anlyExport" class="btn btn-sm btn-outline-secondary" title="Exportar reporte activo a CSV (atajo: e)">
+                <i class="fas fa-file-csv me-1"></i> Exportar
+            </button>
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Inventario
+            </a>
+        </div>
+    </div>
+
+    <!-- Tabs de reportes -->
+    <ul class="nav nav-tabs anly-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-abc"      data-bs-toggle="tab" data-bs-target="#pane-abc"      type="button" role="tab">
+                <i class="fas fa-chart-pie me-1"></i> ABC / Pareto
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-rotation" data-bs-toggle="tab" data-bs-target="#pane-rotation" type="button" role="tab">
+                <i class="fas fa-rotate me-1"></i> Rotación
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-aging"    data-bs-toggle="tab" data-bs-target="#pane-aging"    type="button" role="tab">
+                <i class="fas fa-hourglass-half me-1"></i> Antigüedad de lotes
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- ============================ ABC / PARETO ============================ -->
+        <div class="tab-pane fade show active" id="pane-abc" role="tabpanel">
+            <div class="help-tip">
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>Análisis ABC (regla 80/20):</strong> identifica qué productos concentran el valor de tu inventario.
+                <strong>Clase A</strong> ≈ 80% del valor (foco máximo) · <strong>B</strong> ≈ siguiente 15% · <strong>C</strong> ≈ último 5% (poco crítico).
+            </div>
+
+            <div class="kpi-strip cols-4">
+                <div class="kpi-card">
+                    <div class="kpi-label">Valor Total</div>
+                    <div class="kpi-value">${{ abc_summary.total_value|format_currency }}</div>
+                    <div class="kpi-sub">{{ abc_summary.total_count }} productos activos</div>
+                </div>
+                <div class="kpi-card kpi-A">
+                    <div class="kpi-label">Clase A</div>
+                    <div class="kpi-value">{{ abc_summary.A.count }}</div>
+                    <div class="kpi-sub">${{ abc_summary.A.value|format_currency }} · {{ ((abc_summary.A.value / abc_summary.total_value * 100) if abc_summary.total_value else 0)|round(1) }}% del valor</div>
+                </div>
+                <div class="kpi-card kpi-B">
+                    <div class="kpi-label">Clase B</div>
+                    <div class="kpi-value">{{ abc_summary.B.count }}</div>
+                    <div class="kpi-sub">${{ abc_summary.B.value|format_currency }} · {{ ((abc_summary.B.value / abc_summary.total_value * 100) if abc_summary.total_value else 0)|round(1) }}% del valor</div>
+                </div>
+                <div class="kpi-card kpi-C">
+                    <div class="kpi-label">Clase C</div>
+                    <div class="kpi-value">{{ abc_summary.C.count }}</div>
+                    <div class="kpi-sub">${{ abc_summary.C.value|format_currency }} · {{ ((abc_summary.C.value / abc_summary.total_value * 100) if abc_summary.total_value else 0)|round(1) }}% del valor</div>
+                </div>
+            </div>
+
+            <div class="mb-3 d-flex gap-2 flex-wrap" role="tablist" aria-label="Filtrar por clase">
+                <button type="button" class="filter-chip active" data-class="all">Todas <span class="count">{{ abc_summary.total_count }}</span></button>
+                <button type="button" class="filter-chip" data-class="A">Clase A <span class="count">{{ abc_summary.A.count }}</span></button>
+                <button type="button" class="filter-chip" data-class="B">Clase B <span class="count">{{ abc_summary.B.count }}</span></button>
+                <button type="button" class="filter-chip" data-class="C">Clase C <span class="count">{{ abc_summary.C.count }}</span></button>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle anly-table mb-0" id="abcTable">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">Clase</th>
+                                    <th>SKU</th>
+                                    <th>Producto</th>
+                                    <th class="text-end num">Stock</th>
+                                    <th class="text-end num">Costo</th>
+                                    <th class="text-end num">Valor</th>
+                                    <th class="text-end num">% Valor</th>
+                                    <th class="text-end num">% Acumulado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in abc_rows %}
+                                <tr data-class="{{ r.abc_class }}">
+                                    <td class="text-center"><span class="abc-pill {{ r.abc_class }}">{{ r.abc_class }}</span></td>
+                                    <td><small class="text-muted">{{ r.product.sku or '--' }}</small></td>
+                                    <td>
+                                        <strong>{{ r.product.name }}</strong>
+                                        {% if r.product.is_controlled %}
+                                        <span class="badge bg-danger-subtle text-danger-emphasis ms-1" title="Controlado"><i class="fas fa-shield-halved"></i></span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end num">{{ r.stock }}</td>
+                                    <td class="text-end num text-muted">${{ r.cost|format_currency }}</td>
+                                    <td class="text-end num fw-bold">${{ r.value|format_currency }}</td>
+                                    <td class="text-end num">{{ r.value_pct|round(2) }}%</td>
+                                    <td class="text-end num">
+                                        <div class="d-flex align-items-center justify-content-end gap-2">
+                                            <div class="progress" style="width:60px; height:6px;">
+                                                <div class="progress-bar" style="width: {{ r.cum_pct|round(1) }}%; background:#2563EB;"></div>
+                                            </div>
+                                            <span>{{ r.cum_pct|round(1) }}%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="8"><div class="empty-block"><i class="fas fa-chart-pie"></i>No hay productos para analizar.</div></td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================ ROTACIÓN ============================ -->
+        <div class="tab-pane fade" id="pane-rotation" role="tabpanel">
+            <div class="help-tip">
+                <i class="fas fa-info-circle me-1"></i>
+                Salidas (transacciones tipo OUT) en los últimos <strong>{{ window_days }} días</strong>.
+                <strong>Rápido</strong>: salidas ≥ stock actual · <strong>Lento</strong>: con movimiento pero menor · <strong>Sin movimiento</strong>: stock disponible pero 0 salidas.
+            </div>
+
+            <div class="kpi-strip cols-4">
+                <div class="kpi-card kpi-fast">
+                    <div class="kpi-label">Rápidos</div>
+                    <div class="kpi-value">{{ rotation_summary.fast }}</div>
+                    <div class="kpi-sub">Reposición prioritaria</div>
+                </div>
+                <div class="kpi-card kpi-slow">
+                    <div class="kpi-label">Lentos</div>
+                    <div class="kpi-value">{{ rotation_summary.slow }}</div>
+                    <div class="kpi-sub">Vigilar consumo</div>
+                </div>
+                <div class="kpi-card kpi-dead">
+                    <div class="kpi-label">Sin movimiento</div>
+                    <div class="kpi-value">{{ rotation_summary.dead }}</div>
+                    <div class="kpi-sub">Sin OUT en {{ window_days }} días</div>
+                </div>
+                <div class="kpi-card kpi-risk">
+                    <div class="kpi-label">Valor inmovilizado</div>
+                    <div class="kpi-value">${{ rotation_summary.value_at_risk|format_currency }}</div>
+                    <div class="kpi-sub">Costo de productos sin salida</div>
+                </div>
+            </div>
+
+            <div class="mb-3 d-flex gap-2 flex-wrap" role="tablist" aria-label="Filtrar por rotación">
+                <button type="button" class="filter-chip active" data-rot="all">Todos</button>
+                <button type="button" class="filter-chip" data-rot="dead">Sin movimiento <span class="count">{{ rotation_summary.dead }}</span></button>
+                <button type="button" class="filter-chip" data-rot="slow">Lentos <span class="count">{{ rotation_summary.slow }}</span></button>
+                <button type="button" class="filter-chip" data-rot="fast">Rápidos <span class="count">{{ rotation_summary.fast }}</span></button>
+                <button type="button" class="filter-chip" data-rot="empty">Sin stock <span class="count">{{ rotation_summary.empty }}</span></button>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle anly-table mb-0" id="rotTable">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-end num">Stock</th>
+                                    <th class="text-end num">Salidas {{ window_days }}d</th>
+                                    <th class="text-end num">Tasa/mes</th>
+                                    <th class="text-end num">Última salida</th>
+                                    <th class="text-end num">Valor inmov.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in rotation_rows %}
+                                <tr data-rot="{{ r.class }}">
+                                    <td>
+                                        <strong>{{ r.product.name }}</strong>
+                                        {% if r.product.sku %}<br><small class="text-muted">{{ r.product.sku }}</small>{% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if r.class == 'fast' %}<span class="rot-pill fast"><i class="fas fa-rocket"></i> Rápido</span>
+                                        {% elif r.class == 'slow' %}<span class="rot-pill slow"><i class="fas fa-walking"></i> Lento</span>
+                                        {% elif r.class == 'dead' %}<span class="rot-pill dead"><i class="fas fa-pause"></i> Sin mov.</span>
+                                        {% else %}<span class="rot-pill empty"><i class="fas fa-ban"></i> Sin stock</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end num">{{ r.stock }}</td>
+                                    <td class="text-end num">{{ r.qty_out }}</td>
+                                    <td class="text-end num">{{ r.monthly_rate|round(1) }}</td>
+                                    <td class="text-end num">
+                                        {% if r.last_out %}
+                                            {{ r.last_out.strftime('%d/%m/%Y') }}
+                                            {% if r.days_since_last is not none %}<br><small class="text-muted">hace {{ r.days_since_last }}d</small>{% endif %}
+                                        {% else %}<small class="text-muted">--</small>{% endif %}
+                                    </td>
+                                    <td class="text-end num">
+                                        {% if r.value_at_risk %}<span class="text-danger fw-bold">${{ r.value_at_risk|format_currency }}</span>
+                                        {% else %}<small class="text-muted">--</small>{% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="7"><div class="empty-block"><i class="fas fa-rotate"></i>Sin datos de rotación.</div></td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================ ANTIGÜEDAD ============================ -->
+        <div class="tab-pane fade" id="pane-aging" role="tabpanel">
+            <div class="help-tip">
+                <i class="fas fa-info-circle me-1"></i>
+                Días que cada lote (con stock vigente) lleva en almacén desde su fecha de adquisición.
+                Útil para detectar capital atrapado y aplicar <strong>FEFO</strong> (First-Expire, First-Out).
+            </div>
+
+            <div class="kpi-strip cols-5">
+                <div class="kpi-card">
+                    <div class="kpi-label">Frescos (&lt; 30d)</div>
+                    <div class="kpi-value">{{ aging_summary.fresh }}</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">30 – 90 días</div>
+                    <div class="kpi-value">{{ aging_summary['30_90'] }}</div>
+                </div>
+                <div class="kpi-card kpi-slow">
+                    <div class="kpi-label">90 – 180 días</div>
+                    <div class="kpi-value">{{ aging_summary['90_180'] }}</div>
+                </div>
+                <div class="kpi-card kpi-slow">
+                    <div class="kpi-label">180 – 365 días</div>
+                    <div class="kpi-value">{{ aging_summary['180_365'] }}</div>
+                </div>
+                <div class="kpi-card kpi-dead">
+                    <div class="kpi-label">Más de 1 año</div>
+                    <div class="kpi-value">{{ aging_summary.over_year }}</div>
+                    <div class="kpi-sub">Capital antiguo: ${{ aging_summary.old_value|format_currency }}</div>
+                </div>
+            </div>
+
+            {% set total_lotes = (aging_summary.fresh + aging_summary['30_90'] + aging_summary['90_180'] + aging_summary['180_365'] + aging_summary.over_year) %}
+            {% if total_lotes > 0 %}
+            <div class="age-bar-wrap" title="Distribución de antigüedad">
+                {% set fresh_pct     = (aging_summary.fresh     / total_lotes * 100) %}
+                {% set b30_90_pct    = (aging_summary['30_90']  / total_lotes * 100) %}
+                {% set b90_180_pct   = (aging_summary['90_180'] / total_lotes * 100) %}
+                {% set b180_365_pct  = (aging_summary['180_365']/ total_lotes * 100) %}
+                {% set over_year_pct = (aging_summary.over_year / total_lotes * 100) %}
+                {% if fresh_pct > 0 %}    <div class="age-bar fresh"     style="flex:{{ fresh_pct }};">{{ fresh_pct|round(0)|int }}%</div>{% endif %}
+                {% if b30_90_pct > 0 %}   <div class="age-bar b30_90"    style="flex:{{ b30_90_pct }};">{{ b30_90_pct|round(0)|int }}%</div>{% endif %}
+                {% if b90_180_pct > 0 %}  <div class="age-bar b90_180"   style="flex:{{ b90_180_pct }};">{{ b90_180_pct|round(0)|int }}%</div>{% endif %}
+                {% if b180_365_pct > 0 %} <div class="age-bar b180_365"  style="flex:{{ b180_365_pct }};">{{ b180_365_pct|round(0)|int }}%</div>{% endif %}
+                {% if over_year_pct > 0 %}<div class="age-bar over_year" style="flex:{{ over_year_pct }};">{{ over_year_pct|round(0)|int }}%</div>{% endif %}
+            </div>
+            {% endif %}
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle anly-table mb-0" id="agingTable">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Lote</th>
+                                    <th class="text-end num">Adquirido</th>
+                                    <th class="text-end num">En almacén</th>
+                                    <th class="text-end num">Caducidad</th>
+                                    <th class="text-end num">Stock</th>
+                                    <th class="text-end num">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in aging_rows %}
+                                <tr>
+                                    <td><strong>{{ r.product.name }}</strong>
+                                        {% if r.product.sku %}<br><small class="text-muted">{{ r.product.sku }}</small>{% endif %}
+                                    </td>
+                                    <td><code>{{ r.batch.batch_number }}</code></td>
+                                    <td class="text-end num">{{ r.acq_date.strftime('%d/%m/%Y') }}</td>
+                                    <td class="text-end num">
+                                        <span class="age-pill {% if r.bucket == 'fresh' %}fresh{% elif r.bucket == '30_90' %}b30_90{% elif r.bucket == '90_180' %}b90_180{% elif r.bucket == '180_365' %}b180_365{% else %}over_year{% endif %}">
+                                            {{ r.days_in_stock }}d
+                                        </span>
+                                    </td>
+                                    <td class="text-end num">
+                                        {% if r.batch.expiration_date %}
+                                            {{ r.batch.expiration_date.strftime('%d/%m/%Y') }}
+                                            {% if r.days_to_expire is not none %}
+                                                {% if r.days_to_expire < 0 %}<br><small class="text-danger">caducado hace {{ -r.days_to_expire }}d</small>
+                                                {% elif r.days_to_expire <= 30 %}<br><small class="text-warning">vence en {{ r.days_to_expire }}d</small>
+                                                {% else %}<br><small class="text-muted">en {{ r.days_to_expire }}d</small>{% endif %}
+                                            {% endif %}
+                                        {% else %}<small class="text-muted">--</small>{% endif %}
+                                    </td>
+                                    <td class="text-end num">{{ r.batch.current_stock }}</td>
+                                    <td class="text-end num fw-bold">${{ r.value|format_currency }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="7"><div class="empty-block"><i class="fas fa-hourglass-half"></i>No hay lotes con stock vigente.</div></td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Filter chips ABC
+    const abcChips = document.querySelectorAll('#pane-abc .filter-chip');
+    const abcRows  = document.querySelectorAll('#abcTable tbody tr[data-class]');
+    abcChips.forEach(c => c.addEventListener('click', () => {
+        abcChips.forEach(x => x.classList.remove('active'));
+        c.classList.add('active');
+        const cls = c.dataset.class;
+        abcRows.forEach(r => { r.style.display = (cls === 'all' || r.dataset.class === cls) ? '' : 'none'; });
+    }));
+
+    // Filter chips Rotación
+    const rotChips = document.querySelectorAll('#pane-rotation .filter-chip');
+    const rotRows  = document.querySelectorAll('#rotTable tbody tr[data-rot]');
+    rotChips.forEach(c => c.addEventListener('click', () => {
+        rotChips.forEach(x => x.classList.remove('active'));
+        c.classList.add('active');
+        const cls = c.dataset.rot;
+        rotRows.forEach(r => { r.style.display = (cls === 'all' || r.dataset.rot === cls) ? '' : 'none'; });
+    }));
+
+    // Export CSV de la pestaña activa
+    function activeTableInfo() {
+        const active = document.querySelector('.tab-pane.active');
+        if (!active) return null;
+        const table = active.querySelector('table');
+        if (!table) return null;
+        const name = active.id.replace('pane-','');
+        return { table, name };
+    }
+    function exportCsv() {
+        const info = activeTableInfo(); if (!info) return;
+        const escape = v => {
+            const s = (v == null ? '' : String(v)).replace(/\s+/g,' ').trim();
+            return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+        };
+        const headers = Array.from(info.table.querySelectorAll('thead th')).map(th => th.innerText);
+        const lines = [headers.map(escape).join(',')];
+        info.table.querySelectorAll('tbody tr').forEach(tr => {
+            if (tr.style.display === 'none') return;
+            const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
+            if (cells.length === headers.length) lines.push(cells.map(escape).join(','));
+        });
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `analisis-${info.name}-{{ company.id }}-${ts}.csv`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+    }
+    document.getElementById('anlyExport').addEventListener('click', exportCsv);
+
+    // Atajo de teclado
+    document.addEventListener('keydown', e => {
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === 'e' || e.key === 'E') { e.preventDefault(); exportCsv(); }
+    });
+})();
+</script>
+{% endblock %}

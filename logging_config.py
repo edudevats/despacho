@@ -73,6 +73,10 @@ def setup_logging(app):
     # Reduce noise from third-party libraries
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
     logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+    logging.getLogger('weasyprint').setLevel(logging.ERROR)
+    logging.getLogger('fontTools').setLevel(logging.ERROR)
+    logging.getLogger('fontTools.subset').setLevel(logging.ERROR)
+    logging.getLogger('fontTools.ttLib').setLevel(logging.ERROR)
     
     app.logger.info(f"Logging configured: level={log_level}")
 

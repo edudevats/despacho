@@ -242,7 +242,22 @@ def create_app(config_class=Config):
             if not current_user.is_authenticated:
                 return False
             return current_user.is_inventory_admin_for(company_id)
-        return {'is_inv_admin': is_inv_admin}
+
+        def has_any_perm(*perm_names):
+            if not current_user.is_authenticated:
+                return False
+            return current_user.has_any_perm(*perm_names)
+
+        def has_company_perm(company_id, *perm_names):
+            if not current_user.is_authenticated:
+                return False
+            return current_user.has_company_perm(company_id, *perm_names)
+
+        return {
+            'is_inv_admin': is_inv_admin,
+            'has_any_perm': has_any_perm,
+            'has_company_perm': has_company_perm,
+        }
 
     def inventory_admin_required(f):
         """Permite global admins o usuarios con perm_inventory_admin en la empresa."""
@@ -258,6 +273,29 @@ def create_app(config_class=Config):
             flash('Acceso denegado. Se requieren permisos de administrador de inventario.', 'error')
             return redirect(url_for('index'))
         return decorated_function
+
+    def require_company_perm(*perm_names):
+        """Permite global admins o usuarios con AL MENOS UNO de los perms en la empresa
+        identificada por kwargs['company_id']. Si no hay company_id, se exige que el
+        usuario tenga el perm en ALGUNA empresa (caso rutas listadoras)."""
+        def decorator(f):
+            @wraps(f)
+            def decorated_function(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    return redirect(url_for('login'))
+                if current_user.is_admin:
+                    return f(*args, **kwargs)
+                company_id = kwargs.get('company_id')
+                if company_id is not None:
+                    if current_user.has_company_perm(company_id, *perm_names):
+                        return f(*args, **kwargs)
+                else:
+                    if current_user.has_any_perm(*perm_names):
+                        return f(*args, **kwargs)
+                flash('Acceso denegado. No tienes permiso para acceder a esta sección.', 'error')
+                return redirect(url_for('index'))
+            return decorated_function
+        return decorator
 
     @app.route('/login', methods=['GET', 'POST'])
     def login():
@@ -586,7 +624,10 @@ def create_app(config_class=Config):
     @app.route('/companies')
     @login_required
     def companies():
-        companies_list = Company.query.all()
+        if current_user.is_admin:
+            companies_list = Company.query.order_by(Company.name).all()
+        else:
+            companies_list = current_user.get_accessible_companies()
         return render_template('companies.html', companies=companies_list)
 
     @app.route('/companies/add', methods=['POST'])
@@ -710,6 +751,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/sync/<int:company_id>', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('sync')
     def sync_company(company_id):
         company = Company.query.get_or_404(company_id)
         
@@ -996,6 +1038,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/csf/<int:company_id>', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('sync')
     def download_csf_route(company_id):
         flash('La descarga de CSF (Constancia de Situación Fiscal) no está disponible actualmente.', 'warning')
         return redirect(url_for('companies'))
@@ -1072,183 +1115,42 @@ def create_app(config_class=Config):
     @login_required
     def sync_list():
         """Show list of companies to sync"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('sync')
         return render_template('sync_list.html', companies=companies_list)
-    
+
     @app.route('/categories')
     @login_required
     def categories_list():
         """Show list of companies to manage categories"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('inventory', 'inventory_admin')
         return render_template('categories_list.html', companies=companies_list)
-    
+
     @app.route('/suppliers')
     @login_required
     def suppliers_list():
         """Show list of companies to manage suppliers"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('inventory', 'inventory_admin')
         return render_template('suppliers_list.html', companies=companies_list)
-    
+
     @app.route('/search/advanced')
     @login_required
     def search_advanced():
         """Show list of companies for advanced search"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('invoices')
         return render_template('search_list.html', companies=companies_list)
-    
+
     @app.route('/taxes')
     @login_required
     def taxes_list():
         """Show list of companies for tax calculations"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('taxes')
         return render_template('taxes_list.html', companies=companies_list)
-    
-    # ==================== DASHBOARD ROUTES ====================
-    
-    @app.route('/companies/<int:company_id>/dashboard')
-    @login_required
-    def company_dashboard(company_id):
-        """Dashboard financiero principal de la empresa"""
-        company = Company.query.get_or_404(company_id)
-        
-        # Obtener año seleccionado desde query parameter, por defecto el año actual
-        today = now_mexico()
-        try:
-            selected_year = int(request.args.get('year', today.year))
-        except (ValueError, TypeError):
-            selected_year = today.year
-        
-        current_month = today.month
-        current_year = today.year
-        
-        # Totales del mes actual del año seleccionado
-        month_income = db.session.query(func.sum(Movement.amount)).filter(
-            Movement.company_id == company_id,
-            Movement.type == 'INCOME',
-            extract('month', Movement.date) == current_month,
-            extract('year', Movement.date) == selected_year
-        ).scalar() or 0
-        
-        month_expense = db.session.query(func.sum(Movement.amount)).filter(
-            Movement.company_id == company_id,
-            Movement.type == 'EXPENSE',
-            extract('month', Movement.date) == current_month,
-            extract('year', Movement.date) == selected_year
-        ).scalar() or 0
-        
-        # Totales del año seleccionado
-        total_income = db.session.query(func.sum(Movement.amount)).filter(
-            Movement.company_id == company_id,
-            Movement.type == 'INCOME',
-            extract('year', Movement.date) == selected_year
-        ).scalar() or 0
-        
-        total_expense = db.session.query(func.sum(Movement.amount)).filter(
-            Movement.company_id == company_id,
-            Movement.type == 'EXPENSE',
-            extract('year', Movement.date) == selected_year
-        ).scalar() or 0
-        
-        # Tendencia de los 12 meses del año seleccionado
-        monthly_trend = []
-        for month in range(1, 13):  # Enero a Diciembre
-            income = db.session.query(func.sum(Movement.amount)).filter(
-                Movement.company_id == company_id,
-                Movement.type == 'INCOME',
-                extract('month', Movement.date) == month,
-                extract('year', Movement.date) == selected_year
-            ).scalar() or 0
-            
-            expense = db.session.query(func.sum(Movement.amount)).filter(
-                Movement.company_id == company_id,
-                Movement.type == 'EXPENSE',
-                extract('month', Movement.date) == month,
-                extract('year', Movement.date) == selected_year
-            ).scalar() or 0
-            
-            month_name = datetime(selected_year, month, 1).strftime('%B')
-            monthly_trend.append({
-                'month': month_name,
-                'income': float(income),
-                'expense': float(expense)
-            })
-        
-        # Distribución por categoría (solo egresos del año seleccionado)
-        category_distribution = db.session.query(
-            Category.name,
-            Category.color,
-            func.sum(Movement.amount).label('total')
-        ).join(Movement).filter(
-            Movement.company_id == company_id,
-            Movement.type == 'EXPENSE',
-            Category.active == True,
-            extract('year', Movement.date) == selected_year
-        ).group_by(Category.id).order_by(func.sum(Movement.amount).desc()).limit(8).all()
-        
-        # Últimas 10 facturas del año seleccionado
-        recent_invoices = Invoice.query.filter(
-            Invoice.company_id == company_id,
-            extract('year', Invoice.date) == selected_year
-        ).order_by(Invoice.date.desc()).limit(10).all()
-        
-        # Top 5 proveedores del año seleccionado
-        # Calculamos basándonos en facturas del año
-        from sqlalchemy import and_
-        
-        top_suppliers_query = db.session.query(
-            Supplier,
-            func.sum(Invoice.total).label('year_total'),
-            func.count(Invoice.id).label('year_count')
-        ).join(
-            Invoice,
-            and_(
-                Invoice.receiver_rfc == Supplier.rfc,
-                Invoice.company_id == company_id,
-                extract('year', Invoice.date) == selected_year
-            )
-        ).filter(
-            Supplier.company_id == company_id,
-            Supplier.active == True
-        ).group_by(Supplier.id).order_by(func.sum(Invoice.total).desc()).limit(5).all()
-        
-        # Formatear datos de proveedores
-        top_suppliers = []
-        for supplier, year_total, year_count in top_suppliers_query:
-            supplier.total_invoiced = year_total or 0
-            supplier.invoice_count = year_count or 0
-            top_suppliers.append(supplier)
-        
-        # Calculate Inventory Value (Cost Price) - siempre valor actual
-        inventory_value = db.session.query(
-            func.sum(Product.current_stock * Product.cost_price)
-        ).filter(
-            Product.company_id == company_id,
-            Product.active == True
-        ).scalar() or 0
-        
-        return render_template('dashboard/company_dashboard.html',
-            company=company,
-            selected_year=selected_year,
-            current_year=current_year,
-            current_month=today.strftime('%B'),
-            month_income=month_income,
-            month_expense=month_expense,
-            month_balance=month_income - month_expense,
-            total_income=total_income,
-            total_expense=total_expense,
-            total_balance=total_income - total_expense,
-            monthly_trend=monthly_trend,
-            category_distribution=category_distribution,
-            recent_invoices=recent_invoices,
-            top_suppliers=top_suppliers,
-            inventory_value=inventory_value
-        )
 
-    
     # ==================== SUPPLIER ROUTES ====================
     
     @app.route('/companies/<int:company_id>/suppliers')
     @login_required
+    @require_company_perm('inventory', 'inventory_admin')
     def suppliers(company_id):
         """Lista de proveedores con estadísticas"""
         company = Company.query.get_or_404(company_id)
@@ -1291,6 +1193,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/suppliers/<int:supplier_id>')
     @login_required
+    @require_company_perm('inventory', 'inventory_admin')
     def supplier_detail(company_id, supplier_id):
         """Detalle de un proveedor específico con sus facturas"""
         company = Company.query.get_or_404(company_id)
@@ -1329,6 +1232,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/categories')
     @login_required
+    @require_company_perm('inventory', 'inventory_admin')
     def categories(company_id):
         """Gestión de categorías"""
         company = Company.query.get_or_404(company_id)
@@ -1353,6 +1257,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/categories/create', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('inventory_admin')
     def create_category(company_id):
         """Crear nueva categoría"""
         company = Company.query.get_or_404(company_id)
@@ -1382,6 +1287,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/categories/<int:category_id>/edit', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('inventory_admin')
     def edit_category(company_id, category_id):
         """Editar categoría existente"""
         company = Company.query.get_or_404(company_id)
@@ -1407,6 +1313,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/ppd')
     @login_required
+    @require_company_perm('ppd', 'invoices')
     def ppd_list(company_id):
         """Gestión de facturas PPD (Pago en Parcialidades o Diferido)"""
         company = Company.query.get_or_404(company_id)
@@ -1439,6 +1346,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/acreditar', methods=['POST'])
     @login_required
+    @require_company_perm('ppd', 'invoices')
     def ppd_acreditar(company_id, invoice_id):
         """Acreditar una factura PPD a un mes específico"""
         company = Company.query.get_or_404(company_id)
@@ -1500,6 +1408,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/desacreditar', methods=['POST'])
     @login_required
+    @require_company_perm('ppd', 'invoices')
     def ppd_desacreditar(company_id, invoice_id):
         """Remover acreditación de una factura PPD"""
         company = Company.query.get_or_404(company_id)
@@ -1538,7 +1447,7 @@ def create_app(config_class=Config):
     @login_required
     def inventory_companies_list():
         """Show list of companies for inventory management"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('inventory', 'inventory_admin')
         return render_template('inventory_list_companies.html', companies=companies_list)
 
     @app.route('/companies/<int:company_id>/inventory')
@@ -1935,6 +1844,570 @@ def create_app(config_class=Config):
                                product_filter=product_filter,
                                date_from=date_from,
                                date_to=date_to)
+
+    @app.route('/companies/<int:company_id>/inventory/analytics')
+    @inventory_admin_required
+    def inventory_analytics(company_id):
+        """Análisis de inventario: ABC/Pareto, rotación y antigüedad de lotes."""
+        company = Company.query.get_or_404(company_id)
+
+        # Ventana configurable por query string (30 / 60 / 90 / 180 días)
+        try:
+            window_days = int(request.args.get('window', 90))
+        except (TypeError, ValueError):
+            window_days = 90
+        if window_days not in (30, 60, 90, 180, 365):
+            window_days = 90
+
+        today = now_mexico().date()
+        window_start = datetime.combine(today - timedelta(days=window_days), datetime.min.time())
+
+        # ----- Datos base -----
+        products = (Product.query
+                    .filter_by(company_id=company_id, active=True)
+                    .order_by(Product.name)
+                    .all())
+
+        # Salidas agregadas por producto en la ventana
+        out_by_product = dict(
+            db.session.query(
+                InventoryTransaction.product_id,
+                func.coalesce(func.sum(InventoryTransaction.quantity), 0)
+            )
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                InventoryTransaction.type == 'OUT',
+                InventoryTransaction.date >= window_start
+            )
+            .group_by(InventoryTransaction.product_id)
+            .all()
+        )
+
+        # Última fecha de OUT por producto (para detectar productos muertos)
+        last_out_by_product = dict(
+            db.session.query(
+                InventoryTransaction.product_id,
+                func.max(InventoryTransaction.date)
+            )
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                InventoryTransaction.type == 'OUT'
+            )
+            .group_by(InventoryTransaction.product_id)
+            .all()
+        )
+
+        # ----- ABC / Pareto -----
+        abc_rows = []
+        for p in products:
+            value = (p.current_stock or 0) * (p.cost_price or 0.0)
+            abc_rows.append({
+                'product': p,
+                'stock': p.current_stock or 0,
+                'cost': p.cost_price or 0.0,
+                'value': value,
+            })
+        abc_rows.sort(key=lambda r: r['value'], reverse=True)
+        total_value = sum(r['value'] for r in abc_rows) or 0.0
+        cum = 0.0
+        for r in abc_rows:
+            cum += r['value']
+            r['cumulative'] = cum
+            r['cum_pct'] = (cum / total_value * 100) if total_value > 0 else 0
+            r['value_pct'] = (r['value'] / total_value * 100) if total_value > 0 else 0
+            if r['cum_pct'] <= 80:
+                r['abc_class'] = 'A'
+            elif r['cum_pct'] <= 95:
+                r['abc_class'] = 'B'
+            else:
+                r['abc_class'] = 'C'
+
+        abc_summary = {
+            'A': {'count': sum(1 for r in abc_rows if r['abc_class'] == 'A'),
+                  'value': sum(r['value'] for r in abc_rows if r['abc_class'] == 'A')},
+            'B': {'count': sum(1 for r in abc_rows if r['abc_class'] == 'B'),
+                  'value': sum(r['value'] for r in abc_rows if r['abc_class'] == 'B')},
+            'C': {'count': sum(1 for r in abc_rows if r['abc_class'] == 'C'),
+                  'value': sum(r['value'] for r in abc_rows if r['abc_class'] == 'C')},
+            'total_value': total_value,
+            'total_count': len(abc_rows),
+        }
+
+        # ----- Rotación -----
+        # Clasificación basada en cobertura: si las salidas en la ventana cubren >= 1 stock actual → rápido
+        rotation_rows = []
+        for p in products:
+            qty_out = int(out_by_product.get(p.id, 0) or 0)
+            stock = p.current_stock or 0
+            last_out = last_out_by_product.get(p.id)
+            days_since_last = None
+            if last_out:
+                days_since_last = (now_mexico().replace(tzinfo=None) - last_out).days
+            # Tasa mensual estimada
+            monthly_rate = (qty_out / window_days * 30.0) if window_days > 0 else 0
+            # Cobertura: cuántas ventanas-de-tamaño-window puede cubrir el stock
+            coverage_ratio = (stock / qty_out) if qty_out > 0 else None
+            if qty_out == 0 and stock > 0:
+                rclass = 'dead'
+            elif qty_out >= stock and stock > 0:
+                rclass = 'fast'
+            elif qty_out > 0:
+                rclass = 'slow'
+            else:
+                rclass = 'empty'  # ni stock ni movimiento
+            rotation_rows.append({
+                'product': p,
+                'stock': stock,
+                'qty_out': qty_out,
+                'monthly_rate': monthly_rate,
+                'coverage_ratio': coverage_ratio,
+                'last_out': last_out,
+                'days_since_last': days_since_last,
+                'class': rclass,
+                'value_at_risk': stock * (p.cost_price or 0.0) if rclass == 'dead' else 0,
+            })
+
+        rotation_summary = {
+            'fast':  sum(1 for r in rotation_rows if r['class'] == 'fast'),
+            'slow':  sum(1 for r in rotation_rows if r['class'] == 'slow'),
+            'dead':  sum(1 for r in rotation_rows if r['class'] == 'dead'),
+            'empty': sum(1 for r in rotation_rows if r['class'] == 'empty'),
+            'value_at_risk': sum(r['value_at_risk'] for r in rotation_rows),
+        }
+        # Mostrar ordenados: dead primero (mayor valor en riesgo), luego slow, luego fast
+        rotation_rows.sort(key=lambda r: (
+            {'dead': 0, 'slow': 1, 'fast': 2, 'empty': 3}[r['class']],
+            -r['value_at_risk'],
+            -r['qty_out']
+        ))
+
+        # ----- Antigüedad de lotes -----
+        active_batches = (
+            db.session.query(ProductBatch, Product)
+            .join(Product, ProductBatch.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                ProductBatch.current_stock > 0
+            )
+            .order_by(ProductBatch.acquisition_date.asc())
+            .all()
+        )
+        aging_rows = []
+        for batch, p in active_batches:
+            acq = batch.acquisition_date
+            if acq is None:
+                continue
+            if hasattr(acq, 'date'):
+                acq_date = acq.date()
+            else:
+                acq_date = acq
+            days_in_stock = (today - acq_date).days
+            days_to_expire = (batch.expiration_date - today).days if batch.expiration_date else None
+            if days_in_stock >= 365:
+                bucket = 'over_year'
+            elif days_in_stock >= 180:
+                bucket = '180_365'
+            elif days_in_stock >= 90:
+                bucket = '90_180'
+            elif days_in_stock >= 30:
+                bucket = '30_90'
+            else:
+                bucket = 'fresh'
+            aging_rows.append({
+                'batch': batch,
+                'product': p,
+                'acq_date': acq_date,
+                'days_in_stock': days_in_stock,
+                'days_to_expire': days_to_expire,
+                'bucket': bucket,
+                'value': (batch.current_stock or 0) * (p.cost_price or 0.0),
+            })
+        aging_rows.sort(key=lambda r: r['days_in_stock'], reverse=True)
+        aging_summary = {
+            'over_year': sum(1 for r in aging_rows if r['bucket'] == 'over_year'),
+            '180_365':   sum(1 for r in aging_rows if r['bucket'] == '180_365'),
+            '90_180':    sum(1 for r in aging_rows if r['bucket'] == '90_180'),
+            '30_90':     sum(1 for r in aging_rows if r['bucket'] == '30_90'),
+            'fresh':     sum(1 for r in aging_rows if r['bucket'] == 'fresh'),
+            'old_value': sum(r['value'] for r in aging_rows if r['bucket'] in ('over_year', '180_365')),
+        }
+
+        return render_template(
+            'inventory/analytics.html',
+            company=company,
+            window_days=window_days,
+            abc_rows=abc_rows,
+            abc_summary=abc_summary,
+            rotation_rows=rotation_rows,
+            rotation_summary=rotation_summary,
+            aging_rows=aging_rows,
+            aging_summary=aging_summary,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/reorder')
+    @inventory_admin_required
+    def inventory_reorder(company_id):
+        """Sugerencia de reorden basada en consumo histórico × lead time."""
+        company = Company.query.get_or_404(company_id)
+
+        # Parámetros configurables
+        try:
+            lead_days = int(request.args.get('lead', 7))
+        except (TypeError, ValueError):
+            lead_days = 7
+        if lead_days < 1: lead_days = 1
+        if lead_days > 90: lead_days = 90
+
+        try:
+            window_days = int(request.args.get('window', 90))
+        except (TypeError, ValueError):
+            window_days = 90
+        if window_days not in (30, 60, 90, 180): window_days = 90
+
+        try:
+            target_days = int(request.args.get('target', 30))  # Cuántos días de stock objetivo después de reponer
+        except (TypeError, ValueError):
+            target_days = 30
+        if target_days < 7: target_days = 7
+        if target_days > 180: target_days = 180
+
+        today = now_mexico().date()
+        window_start = datetime.combine(today - timedelta(days=window_days), datetime.min.time())
+
+        products = (Product.query
+                    .filter_by(company_id=company_id, active=True)
+                    .order_by(Product.name)
+                    .all())
+
+        out_by_product = dict(
+            db.session.query(
+                InventoryTransaction.product_id,
+                func.coalesce(func.sum(InventoryTransaction.quantity), 0)
+            )
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                InventoryTransaction.type == 'OUT',
+                InventoryTransaction.date >= window_start
+            )
+            .group_by(InventoryTransaction.product_id)
+            .all()
+        )
+
+        # Cálculo: tasa diaria → punto de reorden = tasa × (lead + safety)
+        # Safety stock = 50% del lead time (conservador)
+        suggestions = []
+        for p in products:
+            qty_out = float(out_by_product.get(p.id, 0) or 0)
+            daily_rate = qty_out / window_days if window_days > 0 else 0
+            safety_days = max(1, int(round(lead_days * 0.5)))
+            reorder_point = daily_rate * (lead_days + safety_days)
+            target_stock = daily_rate * (lead_days + target_days)
+            stock = p.current_stock or 0
+
+            # ¿Reponer?
+            triggers_min = (p.min_stock_level or 0) > 0 and stock <= (p.min_stock_level or 0)
+            triggers_rop = daily_rate > 0 and stock <= reorder_point
+            should_reorder = triggers_min or triggers_rop
+
+            # Cantidad sugerida
+            suggested_qty = 0
+            if should_reorder:
+                if daily_rate > 0:
+                    suggested_qty = max(0, int(round(target_stock - stock)))
+                # Si solo dispara min_stock pero sin movimiento, usar min_stock × 2 - current
+                if suggested_qty <= 0 and triggers_min:
+                    suggested_qty = max(1, ((p.min_stock_level or 1) * 2) - stock)
+
+            # Días de stock restantes
+            days_left = (stock / daily_rate) if daily_rate > 0 else None
+
+            # Urgencia
+            if stock <= 0 and (qty_out > 0 or (p.min_stock_level or 0) > 0):
+                urgency = 'critical'
+            elif daily_rate > 0 and days_left is not None and days_left <= lead_days:
+                urgency = 'critical'
+            elif triggers_min:
+                urgency = 'high'
+            elif triggers_rop:
+                urgency = 'medium'
+            else:
+                urgency = 'ok'
+
+            suggestions.append({
+                'product': p,
+                'stock': stock,
+                'min_stock': p.min_stock_level or 0,
+                'qty_out': int(qty_out),
+                'daily_rate': daily_rate,
+                'monthly_rate': daily_rate * 30,
+                'reorder_point': reorder_point,
+                'target_stock': target_stock,
+                'suggested_qty': suggested_qty,
+                'estimated_cost': suggested_qty * (p.cost_price or 0),
+                'days_left': days_left,
+                'should_reorder': should_reorder,
+                'urgency': urgency,
+                'supplier': p.preferred_supplier,
+                'supplier_name': p.preferred_supplier.business_name if p.preferred_supplier else None,
+            })
+
+        # Ordenar: críticos primero, luego por costo estimado descendente
+        urgency_order = {'critical': 0, 'high': 1, 'medium': 2, 'ok': 3}
+        suggestions.sort(key=lambda r: (urgency_order[r['urgency']], -r['estimated_cost']))
+
+        # Resumen
+        to_reorder = [s for s in suggestions if s['should_reorder']]
+        summary = {
+            'critical':  sum(1 for s in suggestions if s['urgency'] == 'critical'),
+            'high':      sum(1 for s in suggestions if s['urgency'] == 'high'),
+            'medium':    sum(1 for s in suggestions if s['urgency'] == 'medium'),
+            'ok':        sum(1 for s in suggestions if s['urgency'] == 'ok'),
+            'to_reorder_count': len(to_reorder),
+            'estimated_total': sum(s['estimated_cost'] for s in to_reorder),
+        }
+
+        # Agrupar por proveedor
+        from collections import OrderedDict
+        by_supplier = OrderedDict()
+        for s in to_reorder:
+            key = s['supplier'].id if s['supplier'] else None
+            if key not in by_supplier:
+                by_supplier[key] = {
+                    'supplier': s['supplier'],
+                    'supplier_name': s['supplier_name'] or 'Sin proveedor preferente',
+                    'items': [],
+                    'total': 0,
+                }
+            by_supplier[key]['items'].append(s)
+            by_supplier[key]['total'] += s['estimated_cost']
+
+        return render_template(
+            'inventory/reorder.html',
+            company=company,
+            suggestions=suggestions,
+            summary=summary,
+            by_supplier=list(by_supplier.values()),
+            lead_days=lead_days,
+            window_days=window_days,
+            target_days=target_days,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/labels')
+    @inventory_admin_required
+    def inventory_labels(company_id):
+        """Etiquetas imprimibles con QR por lote."""
+        company = Company.query.get_or_404(company_id)
+
+        # Modo: 'batches' (lotes) o 'products' (productos sin lote)
+        mode = request.args.get('mode', 'batches')
+        size = request.args.get('size', 'medium')  # small | medium | large
+        if size not in ('small', 'medium', 'large'):
+            size = 'medium'
+
+        # Parámetros: filtros
+        product_filter = request.args.get('product_id', type=int)
+        batch_ids_raw = request.args.get('batch_ids', '')
+
+        # IDs específicos
+        batch_id_list = []
+        if batch_ids_raw:
+            for x in batch_ids_raw.split(','):
+                x = x.strip()
+                if x.isdigit():
+                    batch_id_list.append(int(x))
+
+        from services.qr_service import QRService
+
+        labels = []
+
+        if mode == 'batches':
+            q = (db.session.query(ProductBatch, Product)
+                 .join(Product, ProductBatch.product_id == Product.id)
+                 .filter(Product.company_id == company_id, ProductBatch.current_stock > 0))
+            if product_filter:
+                q = q.filter(Product.id == product_filter)
+            if batch_id_list:
+                q = q.filter(ProductBatch.id.in_(batch_id_list))
+            q = q.order_by(Product.name, ProductBatch.expiration_date)
+            for batch, p in q.all():
+                qr_payload = '|'.join([
+                    'L', str(company_id), str(p.id), str(batch.id),
+                    p.sku or '', batch.batch_number or '',
+                    batch.expiration_date.strftime('%Y%m%d') if batch.expiration_date else ''
+                ])
+                qr_b64 = QRService.generate_qr_base64(qr_payload, size=4, border=2)
+                labels.append({
+                    'kind': 'batch',
+                    'product': p,
+                    'batch': batch,
+                    'qr': qr_b64,
+                    'qr_data': qr_payload,
+                    'title': p.name,
+                    'sku': p.sku,
+                    'batch_number': batch.batch_number,
+                    'expiration': batch.expiration_date,
+                    'stock': batch.current_stock,
+                    'is_controlled': p.is_controlled,
+                })
+        else:  # products
+            q = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name)
+            if product_filter:
+                q = q.filter(Product.id == product_filter)
+            for p in q.all():
+                qr_payload = '|'.join(['P', str(company_id), str(p.id), p.sku or ''])
+                qr_b64 = QRService.generate_qr_base64(qr_payload, size=4, border=2)
+                labels.append({
+                    'kind': 'product',
+                    'product': p,
+                    'batch': None,
+                    'qr': qr_b64,
+                    'qr_data': qr_payload,
+                    'title': p.name,
+                    'sku': p.sku,
+                    'batch_number': None,
+                    'expiration': None,
+                    'stock': p.current_stock,
+                    'is_controlled': p.is_controlled,
+                })
+
+        # Productos disponibles para el selector
+        all_products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+
+        return render_template(
+            'inventory/labels.html',
+            company=company,
+            labels=labels,
+            mode=mode,
+            size=size,
+            product_filter=product_filter,
+            all_products=all_products,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/cycle-count', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def inventory_cycle_count(company_id):
+        """Conteo cíclico de inventario en web."""
+        company = Company.query.get_or_404(company_id)
+
+        if request.method == 'POST':
+            import json as _json
+            items_raw = request.form.get('items_json', '')
+            try:
+                items = _json.loads(items_raw) if items_raw else []
+            except (ValueError, TypeError):
+                items = []
+
+            if not items:
+                flash('No se enviaron productos para aplicar.', 'warning')
+                return redirect(url_for('inventory_cycle_count', company_id=company_id))
+
+            applied = 0
+            skipped = 0
+            for item in items:
+                pid = item.get('product_id')
+                actual = item.get('actual_stock')
+                if pid is None or actual is None:
+                    skipped += 1
+                    continue
+                try:
+                    actual = int(actual)
+                except (TypeError, ValueError):
+                    skipped += 1
+                    continue
+                if actual < 0:
+                    skipped += 1
+                    continue
+
+                product = db.session.get(Product, pid)
+                if not product or product.company_id != company_id or not product.active:
+                    skipped += 1
+                    continue
+
+                previous = product.current_stock or 0
+                diff = actual - previous
+                if diff == 0:
+                    skipped += 1
+                    continue
+
+                product.current_stock = actual
+                tx = InventoryTransaction(
+                    product_id=pid,
+                    type='ADJUSTMENT',
+                    quantity=abs(diff),
+                    previous_stock=previous,
+                    new_stock=actual,
+                    reference='Conteo Cíclico Web',
+                    notes=f'Esperado: {previous}, Contado: {actual}, Dif: {diff:+d}',
+                    created_by_id=current_user.id
+                )
+                db.session.add(tx)
+                applied += 1
+
+            db.session.commit()
+            flash(f'Conteo aplicado: {applied} ajustes, {skipped} sin cambios.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        # GET: mostrar formulario
+        category_filter = request.args.get('category', type=int)
+        only_low = request.args.get('only_low') == '1'
+
+        q = Product.query.filter_by(company_id=company_id, active=True)
+        if category_filter:
+            q = q.filter(Product.category_id == category_filter)
+        if only_low:
+            q = q.filter(Product.current_stock <= Product.min_stock_level)
+        products = q.order_by(Product.name).all()
+
+        categories = ProductCategory.query.filter_by(company_id=company_id).order_by(ProductCategory.name).all()
+
+        return render_template(
+            'inventory/cycle_count.html',
+            company=company,
+            products=products,
+            categories=categories,
+            category_filter=category_filter,
+            only_low=only_low,
+        )
+
+    @app.route('/api/companies/<int:company_id>/inventory/search')
+    @login_required
+    def api_global_product_search(company_id):
+        """Búsqueda global de productos para autocomplete del navbar."""
+        if not current_user.can_access_company(company_id) and not current_user.is_admin:
+            return jsonify({'results': []}), 403
+
+        q = (request.args.get('q') or '').strip()
+        if len(q) < 2:
+            return jsonify({'results': []})
+
+        from sqlalchemy import or_ as _or
+        like = f'%{q}%'
+        products = (Product.query
+                    .filter(Product.company_id == company_id, Product.active == True)
+                    .filter(_or(
+                        Product.name.ilike(like),
+                        Product.sku.ilike(like),
+                        Product.description.ilike(like),
+                    ))
+                    .order_by(Product.name)
+                    .limit(15)
+                    .all())
+
+        results = []
+        for p in products:
+            results.append({
+                'id': p.id,
+                'name': p.name,
+                'sku': p.sku,
+                'stock': p.current_stock,
+                'min_stock': p.min_stock_level,
+                'is_low': (p.min_stock_level or 0) > 0 and (p.current_stock or 0) <= (p.min_stock_level or 0),
+                'url': url_for('product_history', company_id=company_id, product_id=p.id),
+            })
+        return jsonify({'results': results, 'query': q})
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/batches')
     @login_required
@@ -3123,6 +3596,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/taxes')
     @login_required
+    @require_company_perm('taxes')
     def taxes_dashboard(company_id):
         """Dashboard de Impuestos con IVA, ISR y resumen anual"""
         company = Company.query.get_or_404(company_id)
@@ -3268,6 +3742,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/taxes/payment', methods=['POST'])
     @login_required
+    @require_company_perm('taxes')
     def record_tax_payment(company_id):
         """Registrar pago de impuestos manual"""
         company = Company.query.get_or_404(company_id)
@@ -3306,11 +3781,12 @@ def create_app(config_class=Config):
     @login_required
     def sales_list():
         """Show list of companies for sales analysis"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('sales')
         return render_template('sales_list.html', companies=companies_list)
     
     @app.route('/companies/<int:company_id>/sales')
     @login_required
+    @require_company_perm('sales')
     def sales_dashboard(company_id):
         """Dashboard de Análisis de Ventas con comparación año a año"""
         company = Company.query.get_or_404(company_id)
@@ -3496,6 +3972,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/search')
     @login_required
+    @require_company_perm('invoices')
     def search_invoices(company_id):
         """Búsqueda avanzada de facturas"""
         company = Company.query.get_or_404(company_id)
@@ -3563,6 +4040,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/invoices/<int:invoice_id>')
     @login_required
+    @require_company_perm('invoices')
     def invoice_detail(company_id, invoice_id):
         """Detalle completo de una factura"""
         company = Company.query.get_or_404(company_id)
@@ -3578,6 +4056,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/qr')
     @login_required
+    @require_company_perm('invoices', 'facturacion')
     def company_qr(company_id):
         """Generate QR code for company"""
         company = Company.query.get_or_404(company_id)
@@ -3590,6 +4069,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/qr/download')
     @login_required
+    @require_company_perm('invoices', 'facturacion')
     def company_qr_download(company_id):
         """Download QR code as PNG"""
         company = Company.query.get_or_404(company_id)
@@ -3604,6 +4084,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/invoices/<int:invoice_id>/qr')
     @login_required
+    @require_company_perm('invoices', 'facturacion')
     def invoice_qr(company_id, invoice_id):
         """Generate SAT verification QR for invoice"""
         invoice = Invoice.query.get_or_404(invoice_id)
@@ -3839,11 +4320,12 @@ def create_app(config_class=Config):
     @login_required
     def facturacion_list():
         """Lista de empresas para acceder al módulo de facturación"""
-        companies_list = Company.query.all()
+        companies_list = current_user.accessible_companies_with_perm('facturacion')
         return render_template('facturacion/facturacion_list.html', companies=companies_list)
     
     @app.route('/companies/<int:company_id>/facturacion')
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_dashboard(company_id):
         """Dashboard principal de facturación"""
         company = Company.query.get_or_404(company_id)
@@ -3926,6 +4408,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/facturacion/credenciales', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_credenciales(company_id):
         """Configurar o actualizar credenciales de Finkok"""
         company = Company.query.get_or_404(company_id)
@@ -3979,6 +4462,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/facturacion/download/<file_type>')
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_download_timbrado(company_id, file_type):
         """Descargar archivo timbrado (XML o PDF)"""
         from flask import session, send_file
@@ -4000,6 +4484,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/facturacion/pdf/<path:filename>')
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_invoice_pdf(company_id, filename):
         """Genera un PDF del CFDI a partir del XML usando satcfdi, con logo de la empresa."""
         from flask import send_file, abort
@@ -4075,6 +4560,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/facturacion/estado', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_estado(company_id):
         """Consultar estado de CFDI"""
         import os
@@ -4172,6 +4658,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/facturacion/lista69b', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_lista69b(company_id):
         """Verificar RFC en lista 69B"""
         company = Company.query.get_or_404(company_id)
@@ -4204,6 +4691,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/facturacion/actualizar_estado/<string:uuid>', methods=['POST'])
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_actualizar_estado_db(company_id, uuid):
         """Actualiza el estado de una factura específica consultando al SAT."""
         company = Company.query.get_or_404(company_id)
@@ -4289,6 +4777,7 @@ def create_app(config_class=Config):
     
     @app.route('/companies/<int:company_id>/facturacion/crear', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('facturacion')
     def crear_factura(company_id):
         """Generador de CFDI - Crear, generar XML y timbrar automáticamente"""
         company = Company.query.get_or_404(company_id)
@@ -4598,6 +5087,7 @@ def create_app(config_class=Config):
 
     @app.route('/companies/<int:company_id>/facturacion/cancelar/<string:uuid>', methods=['GET', 'POST'])
     @login_required
+    @require_company_perm('facturacion')
     def facturacion_cancelar(company_id, uuid):
         company = Company.query.get_or_404(company_id)
         if not current_user.can_access_company(company_id):

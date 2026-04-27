@@ -73,6 +73,42 @@ class User(UserMixin, db.Model):
             return Company.query.all()
         return [access.company for access in self.company_access]
 
+    def has_any_perm(self, *perm_names):
+        """True if global admin or has ANY of the given perms in ANY company."""
+        if self.is_admin:
+            return True
+        for access in self.company_access:
+            for name in perm_names:
+                if getattr(access, f'perm_{name}', False):
+                    return True
+        return False
+
+    def accessible_companies_with_perm(self, *perm_names):
+        """Companies where user has ANY of given perms (all companies if global admin)."""
+        if self.is_admin:
+            return Company.query.order_by(Company.name).all()
+        company_ids = set()
+        for access in self.company_access:
+            for name in perm_names:
+                if getattr(access, f'perm_{name}', False):
+                    company_ids.add(access.company_id)
+                    break
+        if not company_ids:
+            return []
+        return Company.query.filter(Company.id.in_(company_ids)).order_by(Company.name).all()
+
+    def has_company_perm(self, company_id, *perm_names):
+        """True if global admin or has ANY of given perms on the specific company."""
+        if self.is_admin:
+            return True
+        for access in self.company_access:
+            if access.company_id == company_id:
+                for name in perm_names:
+                    if getattr(access, f'perm_{name}', False):
+                        return True
+                return False
+        return False
+
 
 class UserCompanyAccess(db.Model):
     """Controls which companies a user can access and what permissions they have"""

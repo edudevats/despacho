@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+
+{% block title %}Sugerencia de Reorden - {{ company.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ror-page { --pri:#2563EB; --bg:#F8FAFC; --text:#1E293B; --muted:#64748B; }
+    .ror-header h2 { font-size:1.4rem; font-weight:600; color:var(--text); margin:0; letter-spacing:-0.01em; }
+    .ror-header .company-tag { color:var(--muted); font-size:.85rem; }
+
+    .kpi-strip { display:grid; gap:12px; grid-template-columns:repeat(5,1fr); margin-bottom:1.25rem; }
+    @media (max-width:992px){ .kpi-strip { grid-template-columns:repeat(2,1fr); } }
+    .kpi-card { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; }
+    .kpi-card .kpi-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; font-weight:600; }
+    .kpi-card .kpi-value { font-size:1.45rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:var(--text); }
+    .kpi-card .kpi-sub   { font-size:.78rem; color:var(--muted); margin-top:4px; }
+    .kpi-card.kpi-critical { border-top:3px solid #DC2626; }
+    .kpi-card.kpi-critical .kpi-value { color:#991B1B; }
+    .kpi-card.kpi-high     { border-top:3px solid #F97316; }
+    .kpi-card.kpi-high .kpi-value { color:#9A3412; }
+    .kpi-card.kpi-medium   { border-top:3px solid #D97706; }
+    .kpi-card.kpi-medium .kpi-value { color:#B45309; }
+    .kpi-card.kpi-total    { border-top:3px solid #2563EB; }
+    .kpi-card.kpi-total .kpi-value { color:#1E40AF; }
+    .kpi-card.kpi-cost     { border-top:3px solid #059669; }
+    .kpi-card.kpi-cost .kpi-value { color:#047857; }
+
+    .params-bar { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:1rem;
+                  display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .params-bar label { font-size:.78rem; font-weight:600; color:#475569; margin:0; }
+    .params-bar .form-select-sm { width:auto; min-width:120px; }
+    .params-bar .help-icon { color:#94A3B8; cursor:help; font-size:.85rem; }
+
+    .filter-chip { background:#F1F5F9; color:#334155; border:1px solid transparent; padding:5px 12px; border-radius:999px;
+                   font-size:.82rem; font-weight:500; cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px; }
+    .filter-chip:hover { background:#E2E8F0; }
+    .filter-chip.active { background:var(--pri); color:#fff; }
+    .filter-chip.active.urgent-critical { background:#DC2626; }
+    .filter-chip.active.urgent-high     { background:#F97316; }
+    .filter-chip.active.urgent-medium   { background:#D97706; }
+    .filter-chip .count { font-weight:600; opacity:.8; font-variant-numeric:tabular-nums; }
+
+    .ror-table thead th { position:sticky; top:0; background:#F8FAFC; z-index:2; font-size:.78rem;
+                           text-transform:uppercase; letter-spacing:.04em; color:#475569; font-weight:600;
+                           border-bottom:2px solid #E2E8F0 !important; }
+    .ror-table td { font-size:.88rem; vertical-align:middle; }
+    .ror-table .num { font-variant-numeric:tabular-nums; }
+    .ror-table tr.row-critical { background:#FEF2F2; }
+    .ror-table tr.row-critical:hover { background:#FEE2E2; }
+    .ror-table tr.row-high { background:#FFF7ED; }
+    .ror-table tr.row-high:hover { background:#FFEDD5; }
+
+    .urg-pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:6px; font-size:.75rem; font-weight:600; }
+    .urg-pill.critical { background:#FEE2E2; color:#991B1B; }
+    .urg-pill.high     { background:#FFEDD5; color:#9A3412; }
+    .urg-pill.medium   { background:#FEF3C7; color:#92400E; }
+    .urg-pill.ok       { background:#F1F5F9; color:#475569; }
+
+    .qty-input { width:90px; font-variant-numeric:tabular-nums; text-align:right; }
+
+    .supplier-section { background:#fff; border:1px solid #E2E8F0; border-radius:10px; margin-bottom:1rem; overflow:hidden; }
+    .supplier-header { padding:12px 16px; background:#F8FAFC; border-bottom:1px solid #E2E8F0;
+                       display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .supplier-header .supplier-name { font-weight:600; font-size:.95rem; color:var(--text); }
+    .supplier-header .supplier-meta { font-size:.78rem; color:var(--muted); }
+
+    .empty-block { padding:48px 16px; text-align:center; color:var(--muted); }
+    .empty-block i { font-size:2.5rem; opacity:.35; margin-bottom:.75rem; display:block; }
+
+    .num-cell-bad { color:#991B1B; font-weight:600; }
+    .num-cell-warn { color:#9A3412; font-weight:600; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .filter-chip { transition:none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ror-page">
+
+    <!-- Header -->
+    <div class="ror-header d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+        <div>
+            <h2><i class="fas fa-truck-loading text-primary me-2"></i>Sugerencia de Reorden</h2>
+            <div class="company-tag">{{ company.name }} · ventana {{ window_days }}d · lead {{ lead_days }}d · objetivo {{ target_days }}d de stock</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Inventario
+            </a>
+            <a href="{{ url_for('inventory_analytics', company_id=company.id) }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-chart-line me-1"></i>Análisis
+            </a>
+            <button id="exportCsvBtn" class="btn btn-outline-secondary btn-sm" aria-label="Exportar CSV">
+                <i class="fas fa-file-csv me-1"></i>Exportar CSV
+            </button>
+            <button id="printBtn" class="btn btn-outline-secondary btn-sm" aria-label="Imprimir">
+                <i class="fas fa-print me-1"></i>Imprimir
+            </button>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-strip">
+        <div class="kpi-card kpi-critical filter-chip-kpi" data-target="critical" role="button" tabindex="0" aria-label="Filtrar críticos">
+            <div class="kpi-label">Críticos</div>
+            <div class="kpi-value">{{ summary.critical }}</div>
+            <div class="kpi-sub">stock 0 o &le; lead time</div>
+        </div>
+        <div class="kpi-card kpi-high filter-chip-kpi" data-target="high" role="button" tabindex="0" aria-label="Filtrar urgentes">
+            <div class="kpi-label">Altos</div>
+            <div class="kpi-value">{{ summary.high }}</div>
+            <div class="kpi-sub">por debajo de min</div>
+        </div>
+        <div class="kpi-card kpi-medium filter-chip-kpi" data-target="medium" role="button" tabindex="0" aria-label="Filtrar medios">
+            <div class="kpi-label">Medios</div>
+            <div class="kpi-value">{{ summary.medium }}</div>
+            <div class="kpi-sub">en punto de reorden</div>
+        </div>
+        <div class="kpi-card kpi-total filter-chip-kpi" data-target="all" role="button" tabindex="0" aria-label="Total a reordenar">
+            <div class="kpi-label">A Reordenar</div>
+            <div class="kpi-value">{{ summary.to_reorder_count }}</div>
+            <div class="kpi-sub">productos sugeridos</div>
+        </div>
+        <div class="kpi-card kpi-cost">
+            <div class="kpi-label">Costo Estimado</div>
+            <div class="kpi-value">${{ '{:,.0f}'.format(summary.estimated_total) }}</div>
+            <div class="kpi-sub">total compra sugerida</div>
+        </div>
+    </div>
+
+    <!-- Parámetros -->
+    <form method="get" class="params-bar" id="paramsForm">
+        <label class="me-1">
+            <i class="fas fa-clock me-1 text-muted" data-bs-toggle="tooltip" title="Días entre orden y recepción"></i>
+            Lead time:
+        </label>
+        <select name="lead" class="form-select form-select-sm" onchange="document.getElementById('paramsForm').submit();">
+            {% for d in [3,5,7,10,14,21,30,45,60] %}
+                <option value="{{ d }}" {% if d == lead_days %}selected{% endif %}>{{ d }}d</option>
+            {% endfor %}
+        </select>
+
+        <label class="me-1 ms-2">
+            <i class="fas fa-history me-1 text-muted" data-bs-toggle="tooltip" title="Ventana histórica para calcular consumo"></i>
+            Histórico:
+        </label>
+        <select name="window" class="form-select form-select-sm" onchange="document.getElementById('paramsForm').submit();">
+            <option value="30"  {% if window_days == 30  %}selected{% endif %}>30d</option>
+            <option value="60"  {% if window_days == 60  %}selected{% endif %}>60d</option>
+            <option value="90"  {% if window_days == 90  %}selected{% endif %}>90d</option>
+            <option value="180" {% if window_days == 180 %}selected{% endif %}>180d</option>
+        </select>
+
+        <label class="me-1 ms-2">
+            <i class="fas fa-bullseye me-1 text-muted" data-bs-toggle="tooltip" title="Días de stock objetivo después de reponer"></i>
+            Objetivo:
+        </label>
+        <select name="target" class="form-select form-select-sm" onchange="document.getElementById('paramsForm').submit();">
+            {% for d in [15,30,45,60,90] %}
+                <option value="{{ d }}" {% if d == target_days %}selected{% endif %}>{{ d }}d</option>
+            {% endfor %}
+        </select>
+
+        <div class="ms-auto d-flex gap-2 align-items-center">
+            <span class="filter-chip" data-filter="all" role="button" tabindex="0">
+                Todos <span class="count">{{ suggestions|length }}</span>
+            </span>
+            <span class="filter-chip active" data-filter="reorder" role="button" tabindex="0">
+                A reordenar <span class="count">{{ summary.to_reorder_count }}</span>
+            </span>
+            <span class="filter-chip" data-filter="critical" role="button" tabindex="0">
+                Críticos <span class="count">{{ summary.critical }}</span>
+            </span>
+        </div>
+    </form>
+
+    {% if summary.to_reorder_count == 0 %}
+        <div class="empty-block">
+            <i class="fas fa-check-circle text-success"></i>
+            <h5 class="text-dark">Todo en orden</h5>
+            <p>Ningún producto requiere reorden con los parámetros actuales.</p>
+        </div>
+    {% else %}
+
+    <!-- Vista por proveedor (drafts de PO) -->
+    {% for group in by_supplier %}
+        <div class="supplier-section" data-supplier-id="{{ group.supplier.id if group.supplier else '0' }}">
+            <div class="supplier-header">
+                <div>
+                    <i class="fas fa-building me-2 text-muted"></i>
+                    <span class="supplier-name">{{ group.supplier_name }}</span>
+                    <span class="supplier-meta ms-2">· {{ group['items']|length }} producto(s) · ${{ '{:,.0f}'.format(group['total']) }}</span>
+                </div>
+                <div class="d-flex gap-2">
+                    {% if group.supplier %}
+                        <a href="{{ url_for('add_purchase_order', company_id=company.id) }}?supplier_id={{ group.supplier.id }}"
+                           class="btn btn-sm btn-warning">
+                            <i class="fas fa-file-invoice me-1"></i>Nueva orden de compra
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover ror-table mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;"><input type="checkbox" class="form-check-input chk-all-supplier" aria-label="Seleccionar todos"></th>
+                            <th>Producto</th>
+                            <th class="text-end">Stock</th>
+                            <th class="text-end">Mín</th>
+                            <th class="text-end" data-bs-toggle="tooltip" title="Salidas en {{ window_days }}d">Salidas</th>
+                            <th class="text-end" data-bs-toggle="tooltip" title="Promedio de unidades vendidas/usadas por día">/día</th>
+                            <th class="text-end" data-bs-toggle="tooltip" title="Días estimados de stock restante a la tasa actual">Días rest.</th>
+                            <th class="text-end" data-bs-toggle="tooltip" title="Punto de reorden = tasa × (lead + safety)">ROP</th>
+                            <th class="text-center">Urgencia</th>
+                            <th class="text-end" style="width:120px;">Sugerido</th>
+                            <th class="text-end">Costo est.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for s in group['items'] %}
+                        <tr class="row-{{ s.urgency }} sug-row" data-urgency="{{ s.urgency }}" data-cost="{{ s.estimated_cost }}">
+                            <td><input type="checkbox" class="form-check-input chk-row" checked aria-label="Incluir"></td>
+                            <td>
+                                <div class="fw-semibold">{{ s.product.name }}</div>
+                                <div class="small text-muted">
+                                    {% if s.product.sku %}<span class="me-2">SKU: {{ s.product.sku }}</span>{% endif %}
+                                    {% if s.product.is_controlled %}<span class="badge bg-danger-subtle text-danger">Controlado</span>{% endif %}
+                                </div>
+                            </td>
+                            <td class="num text-end {% if s.stock <= 0 %}num-cell-bad{% elif s.stock <= s.min_stock %}num-cell-warn{% endif %}">
+                                {{ s.stock|int }}
+                            </td>
+                            <td class="num text-end text-muted">{{ s.min_stock|int if s.min_stock > 0 else '—' }}</td>
+                            <td class="num text-end">{{ s.qty_out }}</td>
+                            <td class="num text-end">{{ '{:.2f}'.format(s.daily_rate) }}</td>
+                            <td class="num text-end {% if s.days_left is not none and s.days_left <= lead_days %}num-cell-bad{% endif %}">
+                                {% if s.days_left is none %}—
+                                {% else %}{{ '{:.0f}'.format(s.days_left) }}d{% endif %}
+                            </td>
+                            <td class="num text-end text-muted">{{ '{:.0f}'.format(s.reorder_point) }}</td>
+                            <td class="text-center">
+                                <span class="urg-pill {{ s.urgency }}">
+                                    {% if s.urgency == 'critical' %}<i class="fas fa-exclamation-triangle"></i> Crítico
+                                    {% elif s.urgency == 'high' %}<i class="fas fa-arrow-up"></i> Alto
+                                    {% elif s.urgency == 'medium' %}<i class="fas fa-circle"></i> Medio
+                                    {% else %}<i class="fas fa-check"></i> OK{% endif %}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <input type="number" min="0" class="form-control form-control-sm qty-input qty-suggested"
+                                       value="{{ s.suggested_qty }}"
+                                       data-cost-unit="{{ s.product.cost_price or 0 }}"
+                                       aria-label="Cantidad sugerida">
+                            </td>
+                            <td class="num text-end fw-semibold cost-cell">${{ '{:,.0f}'.format(s.estimated_cost) }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endfor %}
+
+    {% endif %}
+
+    <!-- Tabla completa (incluye OK) -->
+    {% if suggestions %}
+    <details class="mt-4">
+        <summary class="text-muted small" style="cursor:pointer;">
+            <i class="fas fa-list me-1"></i>Ver todos los productos analizados ({{ suggestions|length }})
+        </summary>
+        <div class="table-responsive mt-2">
+            <table class="table table-sm table-hover ror-table">
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th class="text-end">Stock</th>
+                        <th class="text-end">Salidas</th>
+                        <th class="text-end">/día</th>
+                        <th class="text-end">Días rest.</th>
+                        <th class="text-center">Urgencia</th>
+                        <th class="text-end">Sugerido</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for s in suggestions %}
+                    <tr>
+                        <td>{{ s.product.name }} {% if s.product.sku %}<small class="text-muted">· {{ s.product.sku }}</small>{% endif %}</td>
+                        <td class="num text-end">{{ s.stock|int }}</td>
+                        <td class="num text-end">{{ s.qty_out }}</td>
+                        <td class="num text-end">{{ '{:.2f}'.format(s.daily_rate) }}</td>
+                        <td class="num text-end">{% if s.days_left is none %}—{% else %}{{ '{:.0f}'.format(s.days_left) }}d{% endif %}</td>
+                        <td class="text-center"><span class="urg-pill {{ s.urgency }}">{{ s.urgency }}</span></td>
+                        <td class="num text-end">{{ s.suggested_qty if s.should_reorder else '—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+    // Tooltips
+    if (window.bootstrap) {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    }
+
+    // Recalcular costo estimado cuando cambia cantidad
+    document.querySelectorAll('.qty-suggested').forEach(input => {
+        input.addEventListener('input', function() {
+            const unit = parseFloat(this.dataset.costUnit) || 0;
+            const qty = parseFloat(this.value) || 0;
+            const row = this.closest('tr');
+            const costCell = row.querySelector('.cost-cell');
+            if (costCell) {
+                costCell.textContent = '$' + (qty * unit).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+            }
+        });
+    });
+
+    // Check-all por proveedor
+    document.querySelectorAll('.chk-all-supplier').forEach(chk => {
+        chk.addEventListener('change', function() {
+            const section = this.closest('.supplier-section');
+            section.querySelectorAll('.chk-row').forEach(r => { r.checked = this.checked; });
+        });
+    });
+
+    // Filtros chip
+    const chips = document.querySelectorAll('.filter-chip[data-filter]');
+    chips.forEach(c => {
+        c.addEventListener('click', () => applyFilter(c.dataset.filter, c));
+        c.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyFilter(c.dataset.filter, c); }
+        });
+    });
+    function applyFilter(f, chipEl) {
+        chips.forEach(x => x.classList.remove('active'));
+        if (chipEl) chipEl.classList.add('active');
+        document.querySelectorAll('.sug-row').forEach(r => {
+            const u = r.dataset.urgency;
+            let show = true;
+            if (f === 'reorder') show = (u !== 'ok');
+            else if (f === 'critical') show = (u === 'critical');
+            else if (f === 'all') show = true;
+            r.style.display = show ? '' : 'none';
+        });
+        // Ocultar secciones vacías
+        document.querySelectorAll('.supplier-section').forEach(sec => {
+            const visible = sec.querySelectorAll('.sug-row:not([style*="display: none"])').length;
+            sec.style.display = visible > 0 ? '' : 'none';
+        });
+    }
+
+    // KPI cards también filtran
+    document.querySelectorAll('.filter-chip-kpi').forEach(card => {
+        const target = card.dataset.target;
+        const handler = () => {
+            let f = 'reorder';
+            if (target === 'critical') f = 'critical';
+            else if (target === 'all') f = 'reorder';
+            else if (target === 'high' || target === 'medium') {
+                // Filtrar específicamente por urgencia
+                document.querySelectorAll('.filter-chip[data-filter]').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.sug-row').forEach(r => {
+                    r.style.display = (r.dataset.urgency === target) ? '' : 'none';
+                });
+                document.querySelectorAll('.supplier-section').forEach(sec => {
+                    const visible = sec.querySelectorAll('.sug-row:not([style*="display: none"])').length;
+                    sec.style.display = visible > 0 ? '' : 'none';
+                });
+                return;
+            }
+            const chip = document.querySelector('.filter-chip[data-filter="' + f + '"]');
+            applyFilter(f, chip);
+        };
+        card.addEventListener('click', handler);
+        card.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
+        });
+    });
+
+    // Imprimir
+    document.getElementById('printBtn')?.addEventListener('click', () => window.print());
+
+    // Export CSV
+    document.getElementById('exportCsvBtn')?.addEventListener('click', () => {
+        const rows = [['Producto','SKU','Stock','Min','Salidas','Tasa/día','Días restantes','ROP','Urgencia','Sugerido','Costo estimado','Proveedor']];
+        document.querySelectorAll('.supplier-section').forEach(sec => {
+            const supplierName = sec.querySelector('.supplier-name')?.textContent.trim() || '';
+            sec.querySelectorAll('.sug-row').forEach(tr => {
+                if (tr.style.display === 'none') return;
+                const cells = tr.querySelectorAll('td');
+                const name = cells[1].querySelector('.fw-semibold')?.textContent.trim() || '';
+                const skuTxt = cells[1].querySelector('.small')?.textContent.trim() || '';
+                const sku = skuTxt.replace('SKU:','').replace('Controlado','').trim();
+                const qtyInput = tr.querySelector('.qty-suggested');
+                rows.push([
+                    name, sku,
+                    cells[2].textContent.trim(),
+                    cells[3].textContent.trim(),
+                    cells[4].textContent.trim(),
+                    cells[5].textContent.trim(),
+                    cells[6].textContent.trim(),
+                    cells[7].textContent.trim(),
+                    tr.dataset.urgency,
+                    qtyInput ? qtyInput.value : '',
+                    tr.querySelector('.cost-cell')?.textContent.trim() || '',
+                    supplierName
+                ]);
+            });
+        });
+        const csv = '\uFEFF' + rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+        const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'reorden_{{ company.name|replace(" ","_") }}_' + new Date().toISOString().slice(0,10) + '.csv';
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    });
+
+    // Atajos: e=export, p=print
+    document.addEventListener('keydown', e => {
+        if (e.target.matches('input,textarea,select')) return;
+        if (e.key === 'e') { e.preventDefault(); document.getElementById('exportCsvBtn').click(); }
+        else if (e.key === 'p') { e.preventDefault(); window.print(); }
+    });
+})();
+</script>
+{% endblock %}

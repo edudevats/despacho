@@ -2,99 +2,241 @@
 
 {% block title %}Inventario - {{ company.name }}{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Inventario · Data-Dense Dashboard */
+    .inv-page { --inv-primary:#2563EB; --inv-cta:#F97316; --inv-bg:#F8FAFC; --inv-text:#1E293B; --inv-muted:#64748B; }
+    .inv-header h2 { font-size:1.4rem; font-weight:600; color:var(--inv-text); margin:0; letter-spacing:-0.01em; }
+    .inv-header .company-tag { color:var(--inv-muted); font-size:.85rem; }
+
+    /* KPIs */
+    .kpi-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:1.25rem; }
+    @media (max-width:992px){ .kpi-strip{ grid-template-columns:repeat(2,1fr); } }
+    .kpi-card { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; cursor:pointer;
+                transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease; user-select:none; }
+    .kpi-card:hover { transform:translateY(-1px); box-shadow:0 2px 6px rgba(15,23,42,.08); border-color:#CBD5E1; }
+    .kpi-card.active { border-color:var(--inv-primary); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+    .kpi-card .kpi-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--inv-muted); margin-bottom:6px; font-weight:600; }
+    .kpi-card .kpi-value { font-size:1.5rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:var(--inv-text); }
+    .kpi-card .kpi-icon { float:right; font-size:1.05rem; opacity:.55; }
+    .kpi-card.kpi-danger .kpi-value { color:#DC2626; }
+    .kpi-card.kpi-warning .kpi-value { color:#D97706; }
+    .kpi-card.kpi-info .kpi-value { color:#2563EB; }
+    .kpi-card.kpi-success .kpi-value { color:#059669; }
+
+    /* Alert summary bar */
+    .alert-summary { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:10px 14px; margin-bottom:1rem;
+                     display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .alert-summary .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+                           font-size:.78rem; font-weight:600; }
+    .alert-summary .pill.danger { background:#FEE2E2; color:#991B1B; }
+    .alert-summary .pill.warn   { background:#FEF3C7; color:#92400E; }
+    .alert-summary .pill.info   { background:#DBEAFE; color:#1E40AF; }
+    .alert-summary .toggle { margin-left:auto; }
+    .alert-summary[aria-expanded="true"] .chev { transform:rotate(180deg); }
+    .alert-detail { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:1rem; }
+
+    /* Search & chips */
+    .search-bar { position:relative; }
+    .search-bar input { padding-left:38px; height:42px; border-radius:8px; }
+    .search-bar .icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--inv-muted); pointer-events:none; }
+    .search-bar .clear { position:absolute; right:8px; top:50%; transform:translateY(-50%); border:0; background:transparent;
+                          color:var(--inv-muted); padding:4px 8px; border-radius:6px; display:none; cursor:pointer; }
+    .search-bar .clear:hover { background:#F1F5F9; color:var(--inv-text); }
+    .filter-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .filter-chip { background:#F1F5F9; color:#334155; border:1px solid transparent; padding:6px 12px; border-radius:999px;
+                   font-size:.82rem; font-weight:500; cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px; }
+    .filter-chip:hover { background:#E2E8F0; }
+    .filter-chip.active { background:var(--inv-primary); color:#fff; }
+    .filter-chip .count { font-weight:600; opacity:.8; font-variant-numeric:tabular-nums; }
+    .filter-chip.active .count { opacity:1; }
+    .saved-view-chip { background:#EFF6FF; color:#1D4ED8; border:1px solid #DBEAFE; padding:5px 10px 5px 12px;
+                       border-radius:999px; font-size:.78rem; font-weight:500; display:inline-flex; align-items:center; gap:6px;
+                       cursor:pointer; transition:background .12s; }
+    .saved-view-chip:hover { background:#DBEAFE; }
+    .saved-view-chip .vw-del { background:transparent; border:none; padding:0 2px; color:#1D4ED8; opacity:.55;
+                                cursor:pointer; line-height:1; font-size:.75rem; }
+    .saved-view-chip .vw-del:hover { opacity:1; color:#DC2626; }
+    @media (prefers-reduced-motion: reduce) { .saved-view-chip { transition:none; } }
+
+    /* Table polish */
+    .inv-table thead th { position:sticky; top:0; background:#F8FAFC; z-index:2; font-size:.78rem;
+                          text-transform:uppercase; letter-spacing:.04em; color:#475569; font-weight:600;
+                          border-bottom:2px solid #E2E8F0 !important; }
+    .inv-table td { font-size:.9rem; }
+    .inv-table .num { font-variant-numeric:tabular-nums; }
+    .sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+    .sortable .sort-icon { opacity:.35; margin-left:4px; font-size:.7rem; }
+    .sortable.sort-asc .sort-icon, .sortable.sort-desc .sort-icon { opacity:1; color:var(--inv-primary); }
+    tbody tr.product-row { transition:background-color .12s; }
+    tbody tr.product-row:hover { background:#F8FAFC !important; }
+    tbody tr.product-row:focus-visible { outline:2px solid var(--inv-primary); outline-offset:-2px; }
+
+    /* Stock health badges */
+    .stock-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:6px;
+                   font-size:.78rem; font-weight:600; font-variant-numeric:tabular-nums; }
+    .stock-badge.ok       { background:#DCFCE7; color:#166534; }
+    .stock-badge.low      { background:#FEF3C7; color:#92400E; }
+    .stock-badge.critical { background:#FEE2E2; color:#991B1B; }
+    .stock-badge.zero     { background:#F1F5F9; color:#475569; }
+
+    /* Empty state */
+    .inv-empty { padding:48px 16px; text-align:center; color:var(--inv-muted); }
+    .inv-empty i { font-size:2.5rem; opacity:.35; margin-bottom:.75rem; display:block; }
+    .inv-empty .title { font-size:1rem; font-weight:600; color:var(--inv-text); margin-bottom:.25rem; }
+
+    /* Skeleton (modal de lotes) */
+    @keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+    .skeleton-row { height:32px; margin-bottom:8px; border-radius:6px;
+                    background:linear-gradient(90deg,#F1F5F9 0%,#E2E8F0 50%,#F1F5F9 100%);
+                    background-size:800px 100%; animation:shimmer 1.4s infinite linear; }
+
+    /* Tabs agrupadas */
+    .nav-tabs.inv-tabs { border-bottom:1px solid #E2E8F0; gap:2px; }
+    .nav-tabs.inv-tabs .nav-link { color:#475569; font-weight:500; font-size:.88rem; padding:.55rem .85rem; border-radius:8px 8px 0 0; }
+    .nav-tabs.inv-tabs .nav-link:hover { background:#F8FAFC; color:#0F172A; }
+    .nav-tabs.inv-tabs .nav-link.active { color:#2563EB; background:#fff; border-color:#E2E8F0 #E2E8F0 #fff; font-weight:600; }
+    .nav-tabs.inv-tabs .nav-link i { color:inherit; opacity:.85; }
+    .tab-divider { width:1px; background:#CBD5E1; margin:6px 4px; align-self:stretch; }
+    .tab-group-label { color:#94A3B8; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em;
+                       font-weight:600; padding:0 8px; align-self:center; user-select:none; }
+
+    /* A11y: respeta reduced-motion */
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton-row { animation:none; }
+        .kpi-card, tbody tr.product-row { transition:none; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <h2><i class="fas fa-warehouse text-primary"></i> Inventario: {{ company.name }}</h2>
+<div class="container-fluid mt-4 inv-page">
+    <!-- Header -->
+    <div class="inv-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+            <h2><i class="fas fa-warehouse text-primary me-1"></i> Inventario <span class="company-tag">· {{ company.name }}</span></h2>
         </div>
-        <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2 flex-wrap">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             {% if not (current_user.is_admin or is_inv_admin(company.id)) and perms.get('perm_inventory') %}
-            <div class="btn-group btn-group-sm">
-                <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-outline-info" title="Solicitar Ingreso Inicial">
-                    <i class="fas fa-box-open"></i> Ingreso Inicial
-                </a>
-                <a href="{{ url_for('create_adjustment_request', company_id=company.id) }}" class="btn btn-outline-warning" title="Solicitar Ajuste">
-                    <i class="fas fa-balance-scale"></i> Solicitar Ajuste
-                </a>
-            </div>
+            <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-sm btn-outline-info" aria-label="Solicitar ingreso inicial">
+                <i class="fas fa-box-open me-1"></i> Ingreso Inicial
+            </a>
+            <a href="{{ url_for('create_adjustment_request', company_id=company.id) }}" class="btn btn-sm btn-outline-warning" aria-label="Solicitar ajuste">
+                <i class="fas fa-balance-scale me-1"></i> Solicitar Ajuste
+            </a>
             {% elif not (current_user.is_admin or is_inv_admin(company.id)) %}
-            <span class="badge bg-secondary py-2 px-3">
+            <span class="badge bg-secondary-subtle text-secondary-emphasis py-2 px-3" title="Tu rol solo permite consulta">
                 <i class="fas fa-eye me-1"></i> Solo lectura
             </span>
             {% endif %}
             {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-            <a href="{{ url_for('inventory_movements', company_id=company.id) }}" class="btn btn-outline-info">
-                <i class="fas fa-exchange-alt"></i> Movimientos
+            <a href="{{ url_for('inventory_analytics', company_id=company.id) }}" class="btn btn-sm btn-outline-primary" aria-label="Ver análisis de inventario">
+                <i class="fas fa-chart-line me-1"></i> Análisis
+            </a>
+            <a href="{{ url_for('inventory_reorder', company_id=company.id) }}" class="btn btn-sm btn-warning" aria-label="Sugerencia de reorden">
+                <i class="fas fa-truck-loading me-1"></i> Reorden
+            </a>
+            <a href="{{ url_for('inventory_labels', company_id=company.id) }}" class="btn btn-sm btn-outline-secondary" aria-label="Imprimir etiquetas">
+                <i class="fas fa-tags me-1"></i> Etiquetas
+            </a>
+            <a href="{{ url_for('inventory_cycle_count', company_id=company.id) }}" class="btn btn-sm btn-outline-success" aria-label="Conteo cíclico">
+                <i class="fas fa-clipboard-check me-1"></i> Conteo
+            </a>
+            <a href="{{ url_for('inventory_movements', company_id=company.id) }}" class="btn btn-sm btn-outline-info" aria-label="Ver movimientos">
+                <i class="fas fa-exchange-alt me-1"></i> Movimientos
             </a>
             {% endif %}
-            <a href="{{ url_for('company_dashboard', company_id=company.id) }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left"></i> Dashboard
-            </a>
         </div>
     </div>
 
-    <!-- Alertas de Caducidad -->
+    <!-- KPI Strip · contadores dinámicos calculados en JS -->
+    <div class="kpi-strip" role="group" aria-label="Indicadores clave del inventario">
+        <button type="button" class="kpi-card kpi-info text-start" data-kpi-filter="all" aria-pressed="true">
+            <i class="fas fa-coins kpi-icon"></i>
+            <div class="kpi-label">Valor Inventario</div>
+            <div class="kpi-value">${{ total_inventory_value|format_currency }}</div>
+        </button>
+        <button type="button" class="kpi-card text-start" data-kpi-filter="all">
+            <i class="fas fa-boxes kpi-icon"></i>
+            <div class="kpi-label">Productos · Unidades</div>
+            <div class="kpi-value">{{ products|length }} · <span class="text-muted fs-6">{{ total_items }}</span></div>
+        </button>
+        <button type="button" class="kpi-card kpi-warning text-start" data-kpi-filter="low" aria-label="Filtrar productos con stock bajo">
+            <i class="fas fa-arrow-trend-down kpi-icon"></i>
+            <div class="kpi-label">Stock Bajo</div>
+            <div class="kpi-value" id="kpiBajoStock">0</div>
+        </button>
+        <button type="button" class="kpi-card kpi-warning text-start" aria-label="Lotes próximos a vencer en 30 días"
+                onclick="document.getElementById('alertSummary')?.scrollIntoView({behavior:'smooth',block:'start'});">
+            <i class="fas fa-clock kpi-icon"></i>
+            <div class="kpi-label">Por vencer (30d)</div>
+            <div class="kpi-value">{{ critical_batches|length }}</div>
+        </button>
+        <button type="button" class="kpi-card kpi-danger text-start" aria-label="Lotes ya caducados"
+                onclick="document.getElementById('alertSummary')?.scrollIntoView({behavior:'smooth',block:'start'});">
+            <i class="fas fa-triangle-exclamation kpi-icon"></i>
+            <div class="kpi-label">Caducados</div>
+            <div class="kpi-value">{{ expired_batches|length }}</div>
+        </button>
+    </div>
+
+    <!-- Alertas de caducidad (colapsables) -->
     {% if expired_batches or critical_batches or warning_batches %}
-    <div class="row mb-4">
-        <div class="col-12">
+    <div id="alertSummary" class="alert-summary" aria-expanded="false" aria-controls="alertDetail">
+        <i class="fas fa-bell text-warning"></i>
+        <strong class="me-1">Alertas de caducidad:</strong>
+        {% if expired_batches %}<span class="pill danger"><i class="fas fa-times-circle"></i> {{ expired_batches|length }} caducados</span>{% endif %}
+        {% if critical_batches %}<span class="pill warn"><i class="fas fa-clock"></i> {{ critical_batches|length }} por vencer (30d)</span>{% endif %}
+        {% if warning_batches %}<span class="pill info"><i class="fas fa-info-circle"></i> {{ warning_batches|length }} en 90d</span>{% endif %}
+        <button type="button" class="btn btn-sm btn-link toggle p-0 ms-auto" data-bs-toggle="collapse" data-bs-target="#alertDetail"
+                aria-expanded="false" aria-controls="alertDetail">
+            Ver detalles <i class="fas fa-chevron-down chev ms-1"></i>
+        </button>
+    </div>
+    <div class="collapse" id="alertDetail">
+        <div class="alert-detail">
             {% if expired_batches %}
-            <div class="alert alert-danger d-flex align-items-center">
-                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
-                <div>
-                    <strong>PRODUCTOS CADUCADOS ({{ expired_batches|length }})</strong><br>
-                    {% for batch, product in expired_batches[:5] %}
-                    <small>{{ product.name }} - Lote: {{ batch.batch_number }} (Vencido: {{ batch.expiration_date.strftime('%d/%m/%Y') }}) - {{ batch.current_stock }} unidades</small><br>
-                    {% endfor %}
-                    {% if expired_batches|length > 5 %}<small class="text-muted">... y {{ expired_batches|length - 5 }} mas</small>{% endif %}
-                </div>
-            </div>
+            <h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1"></i> Caducados ({{ expired_batches|length }})</h6>
+            <ul class="list-unstyled small mb-3">
+                {% for batch, product in expired_batches[:8] %}
+                <li class="mb-1">{{ product.name }} · Lote <code>{{ batch.batch_number }}</code> · Vencido {{ batch.expiration_date.strftime('%d/%m/%Y') }} · <strong>{{ batch.current_stock }} u.</strong></li>
+                {% endfor %}
+                {% if expired_batches|length > 8 %}<li class="text-muted">… y {{ expired_batches|length - 8 }} más</li>{% endif %}
+            </ul>
             {% endif %}
-
             {% if critical_batches %}
-            <div class="alert alert-warning d-flex align-items-center">
-                <i class="fas fa-clock fa-2x me-3"></i>
-                <div>
-                    <strong>PROXIMOS A VENCER (30 dias) - {{ critical_batches|length }} lotes</strong><br>
-                    {% for batch, product in critical_batches[:5] %}
-                    <small>{{ product.name }} - Lote: {{ batch.batch_number }} (Vence: {{ batch.expiration_date.strftime('%d/%m/%Y') }}) - {{ batch.current_stock }} unidades</small><br>
-                    {% endfor %}
-                    {% if critical_batches|length > 5 %}<small class="text-muted">... y {{ critical_batches|length - 5 }} mas</small>{% endif %}
-                </div>
-            </div>
+            <h6 class="text-warning mb-2"><i class="fas fa-clock me-1"></i> Próximos a vencer en 30 días ({{ critical_batches|length }})</h6>
+            <ul class="list-unstyled small mb-3">
+                {% for batch, product in critical_batches[:8] %}
+                <li class="mb-1">{{ product.name }} · Lote <code>{{ batch.batch_number }}</code> · Vence {{ batch.expiration_date.strftime('%d/%m/%Y') }} · <strong>{{ batch.current_stock }} u.</strong></li>
+                {% endfor %}
+                {% if critical_batches|length > 8 %}<li class="text-muted">… y {{ critical_batches|length - 8 }} más</li>{% endif %}
+            </ul>
             {% endif %}
-
             {% if warning_batches %}
-            <div class="alert alert-info d-flex align-items-center">
-                <i class="fas fa-info-circle fa-2x me-3"></i>
-                <div>
-                    <strong>VENCEN EN 90 DIAS - {{ warning_batches|length }} lotes</strong>
-                    <small class="text-muted ms-2">(Dar prioridad a su venta)</small>
-                </div>
-            </div>
+            <h6 class="text-info mb-2"><i class="fas fa-info-circle me-1"></i> En los próximos 90 días ({{ warning_batches|length }})</h6>
+            <p class="text-muted small mb-0">Dar prioridad a su venta.</p>
             {% endif %}
         </div>
     </div>
     {% endif %}
 
-    <!-- Navigation Tabs -->
-    <ul class="nav nav-tabs mb-4" id="inventoryTabs" role="tablist">
+    <!-- Navigation Tabs · agrupadas semánticamente -->
+    <ul class="nav nav-tabs inv-tabs mb-4 d-flex flex-wrap" id="inventoryTabs" role="tablist">
+        <li class="tab-group-label d-none d-lg-flex" aria-hidden="true">Stock</li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ 'active' if active_tab == 'products' else '' }}" id="products-tab"
                     data-bs-toggle="tab" data-bs-target="#products" type="button" role="tab">
                 <i class="fas fa-pills"></i> Medicamentos
             </button>
         </li>
+
+        <li class="tab-divider d-none d-lg-block" aria-hidden="true"></li>
+        <li class="tab-group-label d-none d-lg-flex" aria-hidden="true">Catálogos</li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ 'active' if active_tab == 'laboratories' else '' }}" id="laboratories-tab"
                     data-bs-toggle="tab" data-bs-target="#laboratories" type="button" role="tab">
                 <i class="fas fa-flask"></i> Laboratorios
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link {{ 'active' if active_tab == 'suppliers' else '' }}" id="suppliers-tab"
-                    data-bs-toggle="tab" data-bs-target="#suppliers" type="button" role="tab">
-                <i class="fas fa-truck"></i> Proveedores
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -104,27 +246,24 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if active_tab == 'suppliers' else '' }}" id="suppliers-tab"
+                    data-bs-toggle="tab" data-bs-target="#suppliers" type="button" role="tab">
+                <i class="fas fa-truck"></i> Proveedores
+            </button>
+        </li>
+
+        <li class="tab-divider d-none d-lg-block" aria-hidden="true"></li>
+        <li class="tab-group-label d-none d-lg-flex" aria-hidden="true">Operaciones</li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link {{ 'active' if active_tab == 'orders' else '' }}" id="orders-tab"
                     data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
-                <i class="fas fa-clipboard-list"></i> Ordenes de Compra
+                <i class="fas fa-clipboard-list"></i> Compras
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ 'active' if active_tab == 'exits' else '' }}" id="exits-tab"
                     data-bs-toggle="tab" data-bs-target="#exits" type="button" role="tab">
-                <i class="fas fa-sign-out-alt"></i> Ordenes de Salida
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link {{ 'active' if active_tab == 'services' else '' }}" id="services-tab"
-                    data-bs-toggle="tab" data-bs-target="#services" type="button" role="tab">
-                <i class="fas fa-stethoscope"></i> Servicios
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link {{ 'active' if active_tab == 'templates' else '' }}" id="templates-tab"
-                    data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab">
-                <i class="fas fa-file-medical"></i> Plantillas
+                <i class="fas fa-sign-out-alt"></i> Salidas
             </button>
         </li>
         {% if (current_user.is_admin or is_inv_admin(company.id)) or perms.get('perm_inventory') %}
@@ -138,19 +277,44 @@
             </button>
         </li>
         {% endif %}
+
+        <li class="tab-divider d-none d-lg-block" aria-hidden="true"></li>
+        <li class="tab-group-label d-none d-lg-flex" aria-hidden="true">Facturación</li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if active_tab == 'services' else '' }}" id="services-tab"
+                    data-bs-toggle="tab" data-bs-target="#services" type="button" role="tab">
+                <i class="fas fa-stethoscope"></i> Servicios
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if active_tab == 'templates' else '' }}" id="templates-tab"
+                    data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab">
+                <i class="fas fa-file-medical"></i> Plantillas
+            </button>
+        </li>
     </ul>
 
     <!-- Tab Content -->
     <div class="tab-content" id="inventoryTabContent">
         <!-- TAB: Medicamentos/Productos -->
         <div class="tab-pane fade {{ 'show active' if active_tab == 'products' else '' }}" id="products" role="tabpanel">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div class="d-flex align-items-center gap-3">
-                    <h4 class="mb-0">Productos</h4>
-                    <!-- Filtro por categoría -->
-                    <form method="GET" action="{{ url_for('inventory_list', company_id=company.id) }}" class="d-inline-flex align-items-center gap-2">
+
+            <!-- Toolbar: search + category + acción -->
+            <div class="row g-2 align-items-center mb-3">
+                <div class="col-12 col-md-5">
+                    <div class="search-bar">
+                        <i class="fas fa-search icon" aria-hidden="true"></i>
+                        <input type="search" id="invSearch" class="form-control" placeholder="Buscar producto, SKU, descripción…"
+                               aria-label="Buscar productos" autocomplete="off">
+                        <button type="button" class="clear" id="invSearchClear" aria-label="Limpiar búsqueda">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <form method="GET" action="{{ url_for('inventory_list', company_id=company.id) }}" class="d-flex gap-2">
                         <input type="hidden" name="tab" value="products">
-                        <select name="category_id" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                        <select name="category_id" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filtrar por categoría">
                             <option value="">Todas las categorías</option>
                             {% for cat in product_categories %}
                             <option value="{{ cat.id }}" {{ 'selected' if category_filter == cat.id }}>{{ cat.name }}</option>
@@ -158,62 +322,90 @@
                         </select>
                     </form>
                 </div>
-                {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Nuevo Producto
-                </a>
-                {% endif %}
+                <div class="col-12 col-md-3 text-md-end d-flex gap-2 justify-content-md-end">
+                    <button type="button" id="invExportCsv" class="btn btn-outline-secondary" title="Exportar la vista filtrada a CSV (atajo: e)">
+                        <i class="fas fa-file-csv me-1"></i> Exportar
+                    </button>
+                    {% if (current_user.is_admin or is_inv_admin(company.id)) %}
+                    <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary" id="invAddProduct" title="Nuevo producto (atajo: n)">
+                        <i class="fas fa-plus me-1"></i> Nuevo
+                    </a>
+                    {% endif %}
+                </div>
             </div>
 
-            <!-- Resumen -->
-            <div class="row mb-4">
-                <div class="col-md-6">
-                    <div class="card bg-light">
-                        <div class="card-body d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="text-muted mb-0">Valor Total Inventario (Costo)</h6>
-                                <h3 class="text-primary mb-0">${{ total_inventory_value|format_currency }}</h3>
-                            </div>
-                            <div>
-                                <h6 class="text-muted mb-0">Total Items</h6>
-                                <h3 class="mb-0">{{ total_items }}</h3>
-                            </div>
-                        </div>
-                    </div>
+            <!-- Filtros rápidos -->
+            <div class="filter-chips mb-3 d-flex align-items-center justify-content-between gap-3 flex-wrap" role="tablist" aria-label="Filtros rápidos">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <button type="button" class="filter-chip active" data-chip="all" role="tab" aria-selected="true">
+                        <i class="fas fa-list"></i> Todos <span class="count" id="chipCountAll">0</span>
+                    </button>
+                    <button type="button" class="filter-chip" data-chip="low" role="tab" aria-selected="false">
+                        <i class="fas fa-arrow-trend-down"></i> Stock bajo <span class="count" id="chipCountLow">0</span>
+                    </button>
+                    <button type="button" class="filter-chip" data-chip="zero" role="tab" aria-selected="false">
+                        <i class="fas fa-ban"></i> Sin stock <span class="count" id="chipCountZero">0</span>
+                    </button>
+                    <button type="button" class="filter-chip" data-chip="controlled" role="tab" aria-selected="false">
+                        <i class="fas fa-shield-halved"></i> Controlados <span class="count" id="chipCountCtrl">0</span>
+                    </button>
+                </div>
+
+                <!-- Vistas guardadas -->
+                <div class="d-flex flex-wrap gap-2 align-items-center" id="savedViewsBar" aria-label="Vistas guardadas">
+                    <span class="text-muted small me-1"><i class="fas fa-bookmark me-1"></i>Vistas:</span>
+                    <div id="savedViewsList" class="d-flex flex-wrap gap-2"></div>
+                    <button type="button" id="btnSaveView" class="btn btn-sm btn-outline-primary" title="Guardar filtros actuales como vista (atajo: v)">
+                        <i class="fas fa-plus me-1"></i> Guardar
+                    </button>
                 </div>
             </div>
 
             <!-- Lista de Productos -->
             <div class="card shadow-sm">
-                <div class="card-body">
+                <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light">
+                        <table class="table table-hover align-middle inv-table mb-0" id="invProductsTable">
+                            <thead>
                                 <tr>
-                                    <th>SKU</th>
-                                    <th>Producto</th>
+                                    <th class="sortable" data-sort="sku">SKU<i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="sortable" data-sort="name">Producto<i class="fas fa-sort sort-icon"></i></th>
                                     <th>Categoría</th>
                                     <th>Laboratorio</th>
-                                    <th class="text-end">Costo</th>
+                                    <th class="text-end sortable num" data-sort="cost">Costo<i class="fas fa-sort sort-icon"></i></th>
                                     <th class="text-end">Margen</th>
-                                    <th class="text-end">Precio Venta</th>
-                                    <th class="text-center">Stock</th>
+                                    <th class="text-end sortable num" data-sort="price">Precio Venta<i class="fas fa-sort sort-icon"></i></th>
+                                    <th class="text-center sortable num" data-sort="stock">Stock<i class="fas fa-sort sort-icon"></i></th>
                                     <th class="text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for product in products %}
-                                <tr class="product-batches-link {% if product.current_stock <= product.min_stock_level %}table-warning border-start border-warning border-4{% endif %}"
+                                {% set is_zero = product.current_stock <= 0 %}
+                                {% set is_low = (not is_zero) and product.current_stock <= product.min_stock_level %}
+                                {% set is_critical = (not is_zero) and product.min_stock_level > 0 and product.current_stock <= (product.min_stock_level / 2) %}
+                                <tr class="product-row product-batches-link"
+                                    tabindex="0"
                                     style="cursor: pointer;"
                                     data-product-id="{{ product.id }}"
                                     data-product-name="{{ product.name }}"
-                                    data-product-stock="{{ product.current_stock }}">
+                                    data-product-stock="{{ product.current_stock }}"
+                                    data-search="{{ (product.name or '')|lower }} {{ (product.sku or '')|lower }} {{ (product.description or '')|lower }} {{ (product.barcode or '')|lower }}"
+                                    data-stock="{{ product.current_stock }}"
+                                    data-min="{{ product.min_stock_level or 0 }}"
+                                    data-controlled="{{ '1' if product.is_controlled else '0' }}"
+                                    data-state="{% if is_zero %}zero{% elif is_critical %}critical{% elif is_low %}low{% else %}ok{% endif %}"
+                                    data-sort-name="{{ (product.name or '')|lower }}"
+                                    data-sort-sku="{{ (product.sku or '')|lower }}"
+                                    data-sort-cost="{{ product.cost_price or 0 }}"
+                                    data-sort-price="{{ product.calculated_selling_price or 0 }}"
+                                    data-sort-stock="{{ product.current_stock or 0 }}">
                                     <td><small class="text-muted">{{ product.sku or '--' }}</small></td>
                                     <td>
                                         <strong>{{ product.name }}</strong>
                                         {% if product.is_controlled %}
-                                        <span class="badge bg-danger ms-1" title="Medicamento Controlado">
-                                            <i class="fas fa-exclamation-triangle"></i>
+                                        <span class="badge bg-danger-subtle text-danger-emphasis ms-1" title="Medicamento Controlado" aria-label="Medicamento controlado">
+                                            <i class="fas fa-shield-halved"></i> Ctrl
                                         </span>
                                         {% endif %}
                                         {% if product.description %}
@@ -225,7 +417,7 @@
                                     </td>
                                     <td>
                                         {% if product.category %}
-                                        <span class="badge bg-{{ 'primary' if product.category.requires_cofepris else 'secondary' }}">{{ product.category.name }}</span>
+                                        <span class="badge bg-{{ 'primary' if product.category.requires_cofepris else 'secondary' }}-subtle text-{{ 'primary' if product.category.requires_cofepris else 'secondary' }}-emphasis">{{ product.category.name }}</span>
                                         {% else %}
                                         <small class="text-muted">--</small>
                                         {% endif %}
@@ -237,33 +429,39 @@
                                         <small class="text-muted">--</small>
                                         {% endif %}
                                     </td>
-                                    <td class="text-end text-muted">${{ product.cost_price|format_currency }}</td>
-                                    <td class="text-end">
+                                    <td class="text-end text-muted num">${{ product.cost_price|format_currency }}</td>
+                                    <td class="text-end num">
                                         {% if product.profit_margin %}
-                                        <span class="badge bg-info">{{ product.profit_margin }}%</span>
+                                        <span class="badge bg-info-subtle text-info-emphasis">{{ product.profit_margin }}%</span>
                                         {% else %}
                                         <small class="text-muted">--</small>
                                         {% endif %}
                                     </td>
-                                    <td class="text-end text-success fw-bold">${{ product.calculated_selling_price|format_currency }}</td>
+                                    <td class="text-end fw-bold num" style="color:#059669;">${{ product.calculated_selling_price|format_currency }}</td>
                                     <td class="text-center">
-                                        <span class="badge {% if product.current_stock <= product.min_stock_level %}bg-warning text-dark{% else %}bg-success{% endif %} rounded-pill">
-                                            {{ product.current_stock }}
-                                        </span>
+                                        {% if is_zero %}
+                                        <span class="stock-badge zero" aria-label="Sin stock"><i class="fas fa-ban"></i> {{ product.current_stock }}</span>
+                                        {% elif is_critical %}
+                                        <span class="stock-badge critical" aria-label="Stock crítico"><i class="fas fa-triangle-exclamation"></i> {{ product.current_stock }}</span>
+                                        {% elif is_low %}
+                                        <span class="stock-badge low" aria-label="Stock bajo"><i class="fas fa-arrow-trend-down"></i> {{ product.current_stock }}</span>
+                                        {% else %}
+                                        <span class="stock-badge ok" aria-label="Stock disponible"><i class="fas fa-check"></i> {{ product.current_stock }}</span>
+                                        {% endif %}
                                     </td>
                                     <td class="text-center" onclick="event.stopPropagation();">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <div class="btn-group btn-group-sm">
                                             <a href="{{ url_for('product_history', company_id=company.id, product_id=product.id) }}"
-                                                class="btn btn-outline-info" title="Ver Historial">
+                                                class="btn btn-outline-info" aria-label="Ver historial de {{ product.name }}" title="Historial">
                                                 <i class="fas fa-history"></i>
                                             </a>
                                             <a href="{{ url_for('adjust_stock', company_id=company.id, product_id=product.id) }}"
-                                                class="btn btn-outline-warning" title="Corrección de Stock">
+                                                class="btn btn-outline-warning" aria-label="Corregir stock de {{ product.name }}" title="Corregir stock">
                                                 <i class="fas fa-tools"></i>
                                             </a>
                                             <a href="{{ url_for('edit_product', company_id=company.id, product_id=product.id) }}"
-                                                class="btn btn-outline-secondary" title="Editar">
+                                                class="btn btn-outline-secondary" aria-label="Editar {{ product.name }}" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                         </div>
@@ -272,12 +470,29 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="9" class="text-center py-4 text-muted">
-                                        <i class="fas fa-box-open fa-3x mb-3"></i><br>
-                                        No hay productos registrados.
+                                    <td colspan="9">
+                                        <div class="inv-empty">
+                                            <i class="fas fa-box-open"></i>
+                                            <div class="title">No hay productos registrados</div>
+                                            <p class="mb-3">Empieza agregando tu primer producto al catálogo.</p>
+                                            {% if (current_user.is_admin or is_inv_admin(company.id)) %}
+                                            <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary btn-sm">
+                                                <i class="fas fa-plus me-1"></i> Nuevo Producto
+                                            </a>
+                                            {% endif %}
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
+                                <tr id="invNoResults" style="display:none;">
+                                    <td colspan="9">
+                                        <div class="inv-empty">
+                                            <i class="fas fa-search"></i>
+                                            <div class="title">Sin resultados</div>
+                                            <p class="mb-0">Prueba con otra palabra clave o quita los filtros.</p>
+                                        </div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -955,8 +1170,10 @@
                     <span class="text-muted">Stock total:</span>
                     <span class="badge bg-success fs-6" id="pbmProductStock">0</span>
                 </div>
-                <div id="pbmLoading" class="text-center py-3 text-muted">
-                    <i class="fas fa-spinner fa-spin me-1"></i> Cargando lotes...
+                <div id="pbmLoading">
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row" style="width:90%"></div>
+                    <div class="skeleton-row" style="width:75%"></div>
                 </div>
                 <div id="pbmContent" style="display:none;">
                     <table class="table table-sm table-striped align-middle mb-0">
@@ -1143,6 +1360,353 @@ document.addEventListener('DOMContentLoaded', function() {
             window.history.replaceState({}, '', url);
         });
     });
+});
+
+/* ============================================================
+ * Inventario · Búsqueda, chips, ordenamiento y KPIs (cliente)
+ * ============================================================ */
+(function() {
+    const table = document.getElementById('invProductsTable');
+    if (!table) return;
+
+    const tbody       = table.querySelector('tbody');
+    const rows        = Array.from(tbody.querySelectorAll('tr.product-row'));
+    const noResults   = document.getElementById('invNoResults');
+    const searchInput = document.getElementById('invSearch');
+    const searchClear = document.getElementById('invSearchClear');
+    const chips       = document.querySelectorAll('.filter-chip');
+    const kpiCards    = document.querySelectorAll('.kpi-card[data-kpi-filter]');
+
+    let state = { q: '', chip: 'all', sort: { col: null, dir: 1 } };
+
+    // Counts iniciales
+    const countAll  = rows.length;
+    const countLow  = rows.filter(r => ['low','critical','zero'].includes(r.dataset.state)).length;
+    const countZero = rows.filter(r => r.dataset.state === 'zero').length;
+    const countCtrl = rows.filter(r => r.dataset.controlled === '1').length;
+
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setText('chipCountAll',  countAll);
+    setText('chipCountLow',  countLow);
+    setText('chipCountZero', countZero);
+    setText('chipCountCtrl', countCtrl);
+    setText('kpiBajoStock',  countLow);
+
+    function rowMatchesChip(row, chip) {
+        if (chip === 'all')        return true;
+        if (chip === 'low')        return ['low','critical','zero'].includes(row.dataset.state);
+        if (chip === 'zero')       return row.dataset.state === 'zero';
+        if (chip === 'controlled') return row.dataset.controlled === '1';
+        return true;
+    }
+
+    function applyFilters() {
+        const q = state.q.trim().toLowerCase();
+        let visible = 0;
+        rows.forEach(row => {
+            const haystack = row.dataset.search || '';
+            const matchesQ = !q || haystack.indexOf(q) !== -1;
+            const matchesC = rowMatchesChip(row, state.chip);
+            const show = matchesQ && matchesC;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (noResults) noResults.style.display = visible === 0 ? '' : 'none';
+    }
+
+    // Búsqueda con debounce
+    let debounceId;
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(debounceId);
+            const v = this.value;
+            searchClear.style.display = v ? 'inline-flex' : 'none';
+            debounceId = setTimeout(() => { state.q = v; applyFilters(); }, 200);
+        });
+    }
+    if (searchClear) {
+        searchClear.addEventListener('click', () => {
+            searchInput.value = ''; state.q = '';
+            searchClear.style.display = 'none';
+            applyFilters(); searchInput.focus();
+        });
+    }
+
+    // Chips
+    chips.forEach(chip => {
+        chip.addEventListener('click', function() {
+            chips.forEach(c => { c.classList.remove('active'); c.setAttribute('aria-selected','false'); });
+            this.classList.add('active');
+            this.setAttribute('aria-selected','true');
+            state.chip = this.dataset.chip;
+            applyFilters();
+        });
+    });
+
+    // KPI cards → activan chip correspondiente
+    kpiCards.forEach(card => {
+        card.addEventListener('click', function() {
+            const target = this.dataset.kpiFilter;
+            const targetChip = document.querySelector(`.filter-chip[data-chip="${target}"]`);
+            if (targetChip) targetChip.click();
+            kpiCards.forEach(k => k.classList.remove('active'));
+            this.classList.add('active');
+            // Cambiar a tab productos si no está activo
+            const productsTab = document.getElementById('products-tab');
+            if (productsTab && !productsTab.classList.contains('active')) {
+                new bootstrap.Tab(productsTab).show();
+            }
+        });
+    });
+
+    // Ordenamiento
+    const headers = table.querySelectorAll('thead th.sortable');
+    headers.forEach(h => {
+        h.addEventListener('click', function() {
+            const col = this.dataset.sort;
+            if (state.sort.col === col) state.sort.dir = -state.sort.dir;
+            else { state.sort.col = col; state.sort.dir = 1; }
+
+            headers.forEach(x => {
+                x.classList.remove('sort-asc','sort-desc');
+                const ic = x.querySelector('.sort-icon');
+                if (ic) ic.className = 'fas fa-sort sort-icon';
+            });
+            this.classList.add(state.sort.dir === 1 ? 'sort-asc' : 'sort-desc');
+            const ic = this.querySelector('.sort-icon');
+            if (ic) ic.className = 'fas sort-icon ' + (state.sort.dir === 1 ? 'fa-sort-up' : 'fa-sort-down');
+
+            const numeric = ['cost','price','stock'].includes(col);
+            const sorted = rows.slice().sort((a,b) => {
+                let av = a.dataset['sort'+col.charAt(0).toUpperCase()+col.slice(1)] || '';
+                let bv = b.dataset['sort'+col.charAt(0).toUpperCase()+col.slice(1)] || '';
+                if (numeric) { av = parseFloat(av) || 0; bv = parseFloat(bv) || 0; return (av - bv) * state.sort.dir; }
+                return av.localeCompare(bv) * state.sort.dir;
+            });
+            sorted.forEach(r => tbody.insertBefore(r, noResults));
+        });
+    });
+
+    // Accesibilidad: Enter/Space sobre fila abre el modal de lotes
+    rows.forEach(row => {
+        row.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
+            }
+        });
+    });
+
+    // Export CSV de la vista visible (respeta búsqueda + chip + categoría)
+    function exportVisibleAsCsv() {
+        const headers = ['SKU','Producto','Categoría','Laboratorio','Costo','Margen','Precio Venta','Stock','Stock mínimo','Estado','Controlado'];
+        const escape = v => {
+            const s = (v == null ? '' : String(v)).replace(/\s+/g,' ').trim();
+            return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+        };
+        const visibleRows = rows.filter(r => r.style.display !== 'none');
+        const lines = [headers.join(',')];
+        visibleRows.forEach(r => {
+            const cells = r.querySelectorAll('td');
+            const stockState = ({ok:'OK', low:'Bajo', critical:'Crítico', zero:'Sin stock'})[r.dataset.state] || '';
+            const ctrl = r.dataset.controlled === '1' ? 'Sí' : 'No';
+            lines.push([
+                cells[0]?.innerText, cells[1]?.innerText, cells[2]?.innerText, cells[3]?.innerText,
+                cells[4]?.innerText, cells[5]?.innerText, cells[6]?.innerText,
+                r.dataset.stock, r.dataset.min, stockState, ctrl
+            ].map(escape).join(','));
+        });
+        // BOM para Excel UTF-8
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `inventario-{{ company.id }}-${ts}.csv`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    }
+    const exportBtn = document.getElementById('invExportCsv');
+    if (exportBtn) exportBtn.addEventListener('click', exportVisibleAsCsv);
+
+    // Atajos globales
+    document.addEventListener('keydown', function(e) {
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === '/') { e.preventDefault(); searchInput && searchInput.focus(); }
+        if (e.key === 'Escape' && document.activeElement === searchInput) { searchClear && searchClear.click(); }
+        if (e.key === 'n' || e.key === 'N') {
+            const addBtn = document.getElementById('invAddProduct');
+            if (addBtn) { e.preventDefault(); window.location.href = addBtn.href; }
+        }
+        if (e.key === 'e' || e.key === 'E') {
+            if (exportBtn) { e.preventDefault(); exportBtn.click(); }
+        }
+        if (e.key === 'v' || e.key === 'V') {
+            const sv = document.getElementById('btnSaveView');
+            if (sv) { e.preventDefault(); sv.click(); }
+        }
+    });
+
+    // ============ Vistas guardadas (localStorage) ============
+    const VIEWS_KEY = 'inv_saved_views_{{ company.id }}';
+    const viewsList = document.getElementById('savedViewsList');
+    const btnSaveView = document.getElementById('btnSaveView');
+
+    function getViews() {
+        try { return JSON.parse(localStorage.getItem(VIEWS_KEY) || '[]'); }
+        catch (e) { return []; }
+    }
+    function setViews(arr) {
+        try { localStorage.setItem(VIEWS_KEY, JSON.stringify(arr)); } catch (e) {}
+    }
+    function currentCategoryId() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('category_id') || '';
+    }
+    function snapshotState() {
+        return {
+            q: state.q || '',
+            chip: state.chip || 'all',
+            sortCol: state.sort.col || '',
+            sortDir: state.sort.dir || 1,
+            categoryId: currentCategoryId(),
+        };
+    }
+    function describeView(v) {
+        const parts = [];
+        if (v.q) parts.push('"' + v.q + '"');
+        if (v.chip && v.chip !== 'all') parts.push(({low:'bajo', zero:'sin', controlled:'ctrl'})[v.chip] || v.chip);
+        if (v.categoryId) parts.push('cat#' + v.categoryId);
+        if (v.sortCol) parts.push(v.sortCol + (v.sortDir < 0 ? ' desc' : ' asc'));
+        return parts.length ? parts.join(' · ') : 'sin filtros';
+    }
+    function applyView(v) {
+        const target = currentCategoryId();
+        if ((v.categoryId || '') !== (target || '')) {
+            const url = new URL(window.location.href);
+            if (v.categoryId) url.searchParams.set('category_id', v.categoryId);
+            else url.searchParams.delete('category_id');
+            url.searchParams.set('_view_q',    v.q || '');
+            url.searchParams.set('_view_chip', v.chip || 'all');
+            url.searchParams.set('_view_sc',   v.sortCol || '');
+            url.searchParams.set('_view_sd',   String(v.sortDir || 1));
+            window.location.href = url.toString();
+            return;
+        }
+        if (searchInput) {
+            searchInput.value = v.q || '';
+            searchClear.style.display = v.q ? 'inline-flex' : 'none';
+        }
+        state.q = v.q || '';
+        const targetChip = document.querySelector('.filter-chip[data-chip="' + (v.chip || 'all') + '"]');
+        if (targetChip) targetChip.click();
+        else { state.chip = v.chip || 'all'; applyFilters(); }
+        if (v.sortCol) {
+            const h = table.querySelector('thead th.sortable[data-sort="' + v.sortCol + '"]');
+            if (h) {
+                state.sort.col = null;
+                state.sort.dir = (v.sortDir < 0 ? 1 : -1);
+                h.click();
+            }
+        }
+    }
+    function makeViewChip(v, idx) {
+        const chip = document.createElement('span');
+        chip.className = 'saved-view-chip';
+        chip.setAttribute('role', 'button');
+        chip.setAttribute('tabindex', '0');
+        chip.title = describeView(v);
+
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-bookmark';
+        chip.appendChild(icon);
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.textContent = v.name;
+        chip.appendChild(nameSpan);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'vw-del';
+        delBtn.setAttribute('aria-label', 'Eliminar vista');
+        delBtn.textContent = '×';
+        chip.appendChild(delBtn);
+
+        chip.addEventListener('click', e => {
+            if (e.target === delBtn) return;
+            applyView(v);
+        });
+        chip.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyView(v); }
+        });
+        delBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (confirm('¿Eliminar la vista "' + v.name + '"?')) {
+                const arr = getViews();
+                arr.splice(idx, 1);
+                setViews(arr);
+                renderViews();
+            }
+        });
+        return chip;
+    }
+    function renderViews() {
+        if (!viewsList) return;
+        viewsList.textContent = '';
+        const views = getViews();
+        if (views.length === 0) {
+            const empty = document.createElement('span');
+            empty.className = 'text-muted small fst-italic';
+            empty.textContent = 'sin vistas';
+            viewsList.appendChild(empty);
+            return;
+        }
+        views.forEach((v, idx) => viewsList.appendChild(makeViewChip(v, idx)));
+    }
+    if (btnSaveView) {
+        btnSaveView.addEventListener('click', () => {
+            const snap = snapshotState();
+            const suggested = describeView(snap);
+            const name = (prompt('Nombre de la vista:', suggested) || '').trim();
+            if (!name) return;
+            const arr = getViews();
+            const idx = arr.findIndex(x => x.name === name);
+            const entry = Object.assign({ name }, snap);
+            if (idx >= 0) arr[idx] = entry; else arr.push(entry);
+            setViews(arr);
+            renderViews();
+        });
+    }
+    renderViews();
+
+    // Restaurar estado tras navegación con category_id (parámetros _view_*)
+    (function restoreFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('_view_q') && !params.has('_view_chip')) return;
+        const v = {
+            q: params.get('_view_q') || '',
+            chip: params.get('_view_chip') || 'all',
+            sortCol: params.get('_view_sc') || '',
+            sortDir: parseInt(params.get('_view_sd') || '1', 10),
+            categoryId: currentCategoryId(),
+        };
+        ['_view_q','_view_chip','_view_sc','_view_sd'].forEach(k => params.delete(k));
+        const cleaned = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+        window.history.replaceState({}, '', cleaned);
+        applyView(v);
+    })();
+})();
+
+// Toggle del banner de alertas (icono chevron)
+document.addEventListener('DOMContentLoaded', function() {
+    const detail = document.getElementById('alertDetail');
+    const summary = document.getElementById('alertSummary');
+    if (!detail || !summary) return;
+    detail.addEventListener('shown.bs.collapse',  () => summary.setAttribute('aria-expanded','true'));
+    detail.addEventListener('hidden.bs.collapse', () => summary.setAttribute('aria-expanded','false'));
 });
 </script>
 {% endblock %}

@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+
+{% block title %}Conteo Cíclico - {{ company.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cc-page { --pri:#2563EB; --bg:#F8FAFC; --text:#1E293B; --muted:#64748B; }
+    .cc-header h2 { font-size:1.4rem; font-weight:600; color:var(--text); margin:0; letter-spacing:-0.01em; }
+    .cc-header .company-tag { color:var(--muted); font-size:.85rem; }
+
+    .kpi-strip { display:grid; gap:12px; grid-template-columns:repeat(4,1fr); margin-bottom:1rem; }
+    @media (max-width:768px){ .kpi-strip { grid-template-columns:repeat(2,1fr); } }
+    .kpi-card { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; }
+    .kpi-card .kpi-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; font-weight:600; }
+    .kpi-card .kpi-value { font-size:1.45rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:var(--text); }
+    .kpi-card.kpi-progress { border-top:3px solid #2563EB; }
+    .kpi-card.kpi-match    { border-top:3px solid #059669; }
+    .kpi-card.kpi-diff     { border-top:3px solid #D97706; }
+    .kpi-card.kpi-pending  { border-top:3px solid #94A3B8; }
+
+    .toolbar { background:#fff; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:1rem;
+               display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .toolbar .form-control-sm, .toolbar .form-select-sm { min-width:140px; }
+    .toolbar .chip-group { display:flex; gap:6px; flex-wrap:nowrap; }
+
+    .scan-input { font-size:1rem; min-width:280px !important; flex:1 1 320px; }
+    .filter-input { flex:1 1 200px; min-width:180px; }
+
+    .cc-table-wrap { background:#fff; border:1px solid #E2E8F0; border-radius:10px; overflow:hidden; }
+    .cc-table thead th { position:sticky; top:0; background:#F1F5F9; z-index:2; font-size:.78rem;
+                         text-transform:uppercase; letter-spacing:.04em; color:#475569; font-weight:600;
+                         border-bottom:2px solid #E2E8F0 !important; padding:10px 12px; }
+    .cc-table th.col-product  { width:auto; }
+    .cc-table th.col-expected { width:110px; text-align:right; }
+    .cc-table th.col-actual   { width:140px; text-align:right; }
+    .cc-table th.col-diff     { width:120px; text-align:right; }
+    .cc-table th.col-status   { width:140px; text-align:center; }
+    .cc-table td { font-size:.88rem; vertical-align:middle; padding:10px 12px; }
+    .cc-table .num { font-variant-numeric:tabular-nums; }
+    .cc-table tr.row-match   { background:#F0FDF4; }
+    .cc-table tr.row-diff    { background:#FFF7ED; }
+    .cc-table tr.row-bigdiff { background:#FEF2F2; }
+    .cc-table tr.row-flash   { animation: flash 1.2s ease-out; }
+    @keyframes flash { 0% { background:#FEF3C7; } 100% { background:transparent; } }
+
+    .qty-input { width:96px; font-variant-numeric:tabular-nums; text-align:right; font-weight:600; }
+    .diff-cell { font-weight:700; font-variant-numeric:tabular-nums; }
+    .diff-cell.match { color:#16A34A; }
+    .diff-cell.up    { color:#1D4ED8; }
+    .diff-cell.down  { color:#DC2626; }
+
+    .status-pill { display:inline-flex; align-items:center; gap:5px; padding:2px 10px; border-radius:6px; font-size:.72rem; font-weight:600; }
+    .status-pill.pending { background:#F1F5F9; color:#475569; }
+    .status-pill.match   { background:#DCFCE7; color:#166534; }
+    .status-pill.diff    { background:#FEF3C7; color:#92400E; }
+    .status-pill.bigdiff { background:#FEE2E2; color:#991B1B; }
+
+    .filter-chip { background:#F1F5F9; color:#334155; border:1px solid transparent; padding:5px 12px; border-radius:999px;
+                   font-size:.82rem; font-weight:500; cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px; }
+    .filter-chip:hover { background:#E2E8F0; }
+    .filter-chip.active { background:var(--pri); color:#fff; }
+
+    .progress-thin { height:6px; }
+
+    .floating-submit {
+        position:fixed; bottom:20px; right:20px; z-index:100;
+        box-shadow:0 4px 16px rgba(0,0,0,.18);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .filter-chip, .row-flash { transition:none; animation:none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cc-page">
+
+    <div class="cc-header d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+        <div>
+            <h2><i class="fas fa-clipboard-check text-primary me-2"></i>Conteo Cíclico</h2>
+            <div class="company-tag">{{ company.name }} · {{ products|length }} productos a contar</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Inventario
+            </a>
+        </div>
+    </div>
+
+    <!-- KPIs en vivo -->
+    <div class="kpi-strip">
+        <div class="kpi-card kpi-progress">
+            <div class="kpi-label">Avance</div>
+            <div class="kpi-value"><span id="kpiCounted">0</span> / {{ products|length }}</div>
+            <div class="progress progress-thin mt-2"><div id="kpiProgressBar" class="progress-bar bg-primary" style="width:0%"></div></div>
+        </div>
+        <div class="kpi-card kpi-match">
+            <div class="kpi-label">Sin diferencia</div>
+            <div class="kpi-value" id="kpiMatch">0</div>
+        </div>
+        <div class="kpi-card kpi-diff">
+            <div class="kpi-label">Con diferencia</div>
+            <div class="kpi-value" id="kpiDiff">0</div>
+        </div>
+        <div class="kpi-card kpi-pending">
+            <div class="kpi-label">Pendientes</div>
+            <div class="kpi-value" id="kpiPending">{{ products|length }}</div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <input type="text" id="scanInput" class="form-control form-control-sm scan-input" placeholder="Escanear / teclear SKU y Enter   (atajo: s)" aria-label="Escanear">
+        <input type="text" id="searchInput" class="form-control form-control-sm filter-input" placeholder="Filtrar por nombre o SKU…   (atajo: /)" aria-label="Filtrar">
+
+        <div class="chip-group ms-auto">
+            <span class="filter-chip active" data-filter="all" role="button" tabindex="0">Todos <span class="count" id="cntAll">{{ products|length }}</span></span>
+            <span class="filter-chip" data-filter="pending" role="button" tabindex="0">Pendientes <span class="count" id="cntPending">{{ products|length }}</span></span>
+            <span class="filter-chip" data-filter="match" role="button" tabindex="0">Sin dif. <span class="count" id="cntMatch">0</span></span>
+            <span class="filter-chip" data-filter="diff" role="button" tabindex="0">Con dif. <span class="count" id="cntDiff">0</span></span>
+        </div>
+    </div>
+
+    <form method="post" id="ccForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="items_json" id="itemsJson" value="">
+
+        {% if products %}
+        <div class="cc-table-wrap">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover cc-table mb-0">
+                <thead>
+                    <tr>
+                        <th class="col-product">Producto</th>
+                        <th class="col-expected">Esperado</th>
+                        <th class="col-actual">Contado</th>
+                        <th class="col-diff">Diferencia</th>
+                        <th class="col-status">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in products %}
+                    <tr class="cc-row" data-product-id="{{ p.id }}" data-name="{{ p.name|lower }}" data-sku="{{ (p.sku or '')|lower }}" data-expected="{{ p.current_stock or 0 }}" data-status="pending">
+                        <td class="col-product">
+                            <div class="fw-semibold">{{ p.name }}</div>
+                            <div class="small text-muted">
+                                {% if p.sku %}<span class="me-2">SKU: {{ p.sku }}</span>{% endif %}
+                                {% if p.unit_measure %}<span class="me-2">{{ p.unit_measure }}</span>{% endif %}
+                            </div>
+                        </td>
+                        <td class="num text-end text-muted col-expected">{{ p.current_stock or 0 }}</td>
+                        <td class="text-end col-actual">
+                            <input type="number" min="0" class="form-control form-control-sm qty-input cc-actual"
+                                   placeholder="—" aria-label="Stock contado para {{ p.name }}">
+                        </td>
+                        <td class="diff-cell text-end col-diff" data-diff>—</td>
+                        <td class="text-center col-status"><span class="status-pill pending">Pendiente</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5 bg-white border rounded">
+            <i class="fas fa-box-open fa-2x opacity-50 d-block mb-2"></i>
+            <p>No hay productos activos para contar.</p>
+        </div>
+        {% endif %}
+
+        <button type="submit" id="submitBtn" class="btn btn-success floating-submit" disabled>
+            <i class="fas fa-save me-1"></i>Aplicar conteo (<span id="btnCount">0</span>)
+        </button>
+    </form>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+    const rows = Array.from(document.querySelectorAll('.cc-row'));
+    const total = rows.length;
+    const kpiCounted = document.getElementById('kpiCounted');
+    const kpiMatch = document.getElementById('kpiMatch');
+    const kpiDiff = document.getElementById('kpiDiff');
+    const kpiPending = document.getElementById('kpiPending');
+    const kpiBar = document.getElementById('kpiProgressBar');
+    const cntAll = document.getElementById('cntAll');
+    const cntPending = document.getElementById('cntPending');
+    const cntMatch = document.getElementById('cntMatch');
+    const cntDiff = document.getElementById('cntDiff');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnCount = document.getElementById('btnCount');
+
+    function recalcKpis() {
+        let counted = 0, match = 0, diff = 0, pending = 0, willApply = 0;
+        rows.forEach(r => {
+            const s = r.dataset.status;
+            if (s === 'pending') pending++;
+            else { counted++; if (s === 'match') match++; else { diff++; willApply++; } }
+        });
+        kpiCounted.textContent = counted;
+        kpiMatch.textContent = match;
+        kpiDiff.textContent = diff;
+        kpiPending.textContent = pending;
+        kpiBar.style.width = total ? (counted * 100 / total) + '%' : '0%';
+        cntAll.textContent = total;
+        cntPending.textContent = pending;
+        cntMatch.textContent = match;
+        cntDiff.textContent = diff;
+        btnCount.textContent = willApply;
+        submitBtn.disabled = willApply === 0;
+    }
+
+    function updateRow(row) {
+        const expected = parseInt(row.dataset.expected) || 0;
+        const input = row.querySelector('.cc-actual');
+        const valStr = input.value.trim();
+        const diffCell = row.querySelector('[data-diff]');
+        const pill = row.querySelector('.status-pill');
+
+        if (valStr === '') {
+            row.dataset.status = 'pending';
+            row.classList.remove('row-match','row-diff','row-bigdiff');
+            diffCell.textContent = '—';
+            diffCell.className = 'diff-cell text-end';
+            pill.className = 'status-pill pending'; pill.textContent = 'Pendiente';
+            return;
+        }
+        const actual = parseInt(valStr) || 0;
+        const d = actual - expected;
+        const absRel = expected > 0 ? Math.abs(d) / expected : (d !== 0 ? 1 : 0);
+
+        if (d === 0) {
+            row.dataset.status = 'match';
+            row.classList.add('row-match'); row.classList.remove('row-diff','row-bigdiff');
+            diffCell.textContent = '0'; diffCell.className = 'diff-cell text-end match';
+            pill.className = 'status-pill match'; pill.textContent = 'OK';
+        } else {
+            const big = absRel >= 0.2;
+            row.dataset.status = big ? 'bigdiff' : 'diff';
+            row.classList.remove('row-match');
+            row.classList.toggle('row-bigdiff', big);
+            row.classList.toggle('row-diff', !big);
+            diffCell.textContent = (d > 0 ? '+' : '') + d;
+            diffCell.className = 'diff-cell text-end ' + (d > 0 ? 'up' : 'down');
+            pill.className = 'status-pill ' + (big ? 'bigdiff' : 'diff');
+            pill.textContent = big ? 'Dif. grande' : 'Diferencia';
+        }
+    }
+
+    rows.forEach(r => {
+        const inp = r.querySelector('.cc-actual');
+        inp.addEventListener('input', () => { updateRow(r); recalcKpis(); });
+    });
+
+    // Filtros chip
+    const chips = document.querySelectorAll('.filter-chip[data-filter]');
+    chips.forEach(c => {
+        c.addEventListener('click', () => applyFilter(c.dataset.filter, c));
+        c.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyFilter(c.dataset.filter, c); }
+        });
+    });
+    function applyFilter(f, chipEl) {
+        chips.forEach(x => x.classList.remove('active'));
+        if (chipEl) chipEl.classList.add('active');
+        const term = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+        rows.forEach(r => {
+            const s = r.dataset.status;
+            let show = true;
+            if (f === 'pending') show = s === 'pending';
+            else if (f === 'match') show = s === 'match';
+            else if (f === 'diff') show = (s === 'diff' || s === 'bigdiff');
+            if (show && term) show = r.dataset.name.includes(term) || r.dataset.sku.includes(term);
+            r.style.display = show ? '' : 'none';
+        });
+    }
+
+    // Search
+    const searchInput = document.getElementById('searchInput');
+    let searchTimer;
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            const active = document.querySelector('.filter-chip[data-filter].active');
+            applyFilter(active ? active.dataset.filter : 'all', active);
+        }, 150);
+    });
+
+    // Scan SKU: Enter en scanInput busca por SKU/nombre exacto y enfoca su input
+    const scanInput = document.getElementById('scanInput');
+    scanInput.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const code = scanInput.value.trim().toLowerCase();
+        if (!code) return;
+        let target = rows.find(r => r.dataset.sku === code);
+        if (!target) target = rows.find(r => r.dataset.sku.includes(code) || r.dataset.name.includes(code));
+        if (target) {
+            target.scrollIntoView({ behavior:'smooth', block:'center' });
+            target.classList.remove('row-flash'); void target.offsetWidth; target.classList.add('row-flash');
+            const inp = target.querySelector('.cc-actual');
+            inp.focus(); inp.select();
+            scanInput.value = '';
+        } else {
+            scanInput.classList.add('is-invalid');
+            setTimeout(() => scanInput.classList.remove('is-invalid'), 800);
+        }
+    });
+
+    // Atajos
+    document.addEventListener('keydown', e => {
+        if (e.target.matches('input,textarea,select')) return;
+        if (e.key === 's') { e.preventDefault(); scanInput.focus(); }
+        else if (e.key === '/') { e.preventDefault(); searchInput.focus(); }
+    });
+
+    // Submit: serializar items con stock contado
+    document.getElementById('ccForm').addEventListener('submit', e => {
+        const items = [];
+        rows.forEach(r => {
+            const s = r.dataset.status;
+            if (s !== 'pending' && s !== 'match') {
+                const inp = r.querySelector('.cc-actual');
+                items.push({ product_id: parseInt(r.dataset.productId), actual_stock: parseInt(inp.value) || 0 });
+            }
+        });
+        if (items.length === 0) { e.preventDefault(); return; }
+        if (!confirm(`Aplicar ${items.length} ajuste(s) al inventario? Se generarán registros de movimiento tipo ADJUSTMENT.`)) {
+            e.preventDefault(); return;
+        }
+        document.getElementById('itemsJson').value = JSON.stringify(items);
+    });
+
+    // Auto-focus scan
+    setTimeout(() => scanInput.focus(), 200);
+
+    recalcKpis();
+})();
+</script>
+{% endblock %}
