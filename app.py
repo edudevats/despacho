@@ -2907,6 +2907,53 @@ def create_app(config_class=Config):
 
         return render_template('inventory/purchase_order_view.html', company=company, order=order)
 
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/pdf')
+    @login_required
+    def purchase_order_pdf(company_id, order_id):
+        """Generar PDF de orden de compra"""
+        from flask import render_template, send_file, abort
+        from io import BytesIO
+        import weasyprint
+        import base64
+        import mimetypes
+
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        # Cargar logo como base64
+        logo_data_uri = None
+        if company.logo_path:
+            resolved_logo = None
+            if os.path.exists(company.logo_path):
+                resolved_logo = company.logo_path
+            else:
+                fallback = os.path.join(PROJECT_ROOT, 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
+                if os.path.exists(fallback):
+                    resolved_logo = fallback
+            
+            if resolved_logo:
+                try:
+                    with open(resolved_logo, 'rb') as lf:
+                        logo_b64 = base64.b64encode(lf.read()).decode('ascii')
+                    mime = mimetypes.guess_type(resolved_logo)[0] or 'image/png'
+                    logo_data_uri = f"data:{mime};base64,{logo_b64}"
+                except Exception as e:
+                    logger.error(f"Error loading logo for purchase order PDF: {e}")
+
+        html_string = render_template('inventory/purchase_order_pdf.html', company=company, order=order, logo_data_uri=logo_data_uri)
+        pdf_bytes = weasyprint.HTML(string=html_string).write_pdf()
+
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"Orden_Compra_{order.id}.pdf"
+        )
+
     @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/review', methods=['GET', 'POST'])
     @inventory_admin_required
     def review_purchase_order(company_id, order_id):

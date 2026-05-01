@@ -166,14 +166,12 @@
             <div class="kpi-label">Stock Bajo</div>
             <div class="kpi-value" id="kpiBajoStock">0</div>
         </button>
-        <button type="button" class="kpi-card kpi-warning text-start" aria-label="Lotes próximos a vencer en 30 días"
-                onclick="document.getElementById('alertSummary')?.scrollIntoView({behavior:'smooth',block:'start'});">
+        <button type="button" class="kpi-card kpi-warning text-start" data-kpi-filter="expiring" aria-label="Filtrar productos con lotes próximos a vencer">
             <i class="fas fa-clock kpi-icon"></i>
             <div class="kpi-label">Por vencer (30d)</div>
             <div class="kpi-value">{{ critical_batches|length }}</div>
         </button>
-        <button type="button" class="kpi-card kpi-danger text-start" aria-label="Lotes ya caducados"
-                onclick="document.getElementById('alertSummary')?.scrollIntoView({behavior:'smooth',block:'start'});">
+        <button type="button" class="kpi-card kpi-danger text-start" data-kpi-filter="expired" aria-label="Filtrar productos con lotes caducados">
             <i class="fas fa-triangle-exclamation kpi-icon"></i>
             <div class="kpi-label">Caducados</div>
             <div class="kpi-value">{{ expired_batches|length }}</div>
@@ -349,6 +347,12 @@
                     <button type="button" class="filter-chip" data-chip="controlled" role="tab" aria-selected="false">
                         <i class="fas fa-shield-halved"></i> Controlados <span class="count" id="chipCountCtrl">0</span>
                     </button>
+                    <button type="button" class="filter-chip" data-chip="expired" role="tab" aria-selected="false">
+                        <i class="fas fa-triangle-exclamation"></i> Caducados <span class="count" id="chipCountExpired">0</span>
+                    </button>
+                    <button type="button" class="filter-chip" data-chip="expiring" role="tab" aria-selected="false">
+                        <i class="fas fa-clock"></i> Por Vencer <span class="count" id="chipCountExpiring">0</span>
+                    </button>
                 </div>
 
                 <!-- Vistas guardadas -->
@@ -380,10 +384,14 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                {% set expired_product_ids = expired_batches|map(attribute='1.id')|list %}
+                                {% set expiring_product_ids = critical_batches|map(attribute='1.id')|list %}
                                 {% for product in products %}
                                 {% set is_zero = product.current_stock <= 0 %}
                                 {% set is_low = (not is_zero) and product.current_stock <= product.min_stock_level %}
                                 {% set is_critical = (not is_zero) and product.min_stock_level > 0 and product.current_stock <= (product.min_stock_level / 2) %}
+                                {% set has_expired = product.id in expired_product_ids %}
+                                {% set has_expiring = product.id in expiring_product_ids %}
                                 <tr class="product-row product-batches-link"
                                     tabindex="0"
                                     style="cursor: pointer;"
@@ -394,6 +402,8 @@
                                     data-stock="{{ product.current_stock }}"
                                     data-min="{{ product.min_stock_level or 0 }}"
                                     data-controlled="{{ '1' if product.is_controlled else '0' }}"
+                                    data-has-expired="{{ '1' if has_expired else '0' }}"
+                                    data-has-expiring="{{ '1' if has_expiring else '0' }}"
                                     data-state="{% if is_zero %}zero{% elif is_critical %}critical{% elif is_low %}low{% else %}ok{% endif %}"
                                     data-sort-name="{{ (product.name or '')|lower }}"
                                     data-sort-sku="{{ (product.sku or '')|lower }}"
@@ -775,7 +785,7 @@
                                     <th>Fecha</th>
                                     <th class="text-end">Total Est.</th>
                                     <th class="text-center">Estado</th>
-                                    <th class="text-center">Acciones</th>
+                                    <th class="text-center" colspan="5">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -796,42 +806,62 @@
                                         <span class="badge bg-success">Completada</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-center">
-                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                            {% if order.status == 'DRAFT' or order.status == 'SENT' %}
+                                    <!-- Editar -->
+                                    <td class="text-center align-middle" style="width: 40px;">
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) and (order.status == 'DRAFT' or order.status == 'SENT') %}
                                             <a href="{{ url_for('edit_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                                class="btn btn-sm btn-outline-primary" title="Editar">
-                                                <i class="fas fa-edit"></i>
+                                                class="btn btn-link text-primary text-decoration-none p-1" title="Editar">
+                                                <i class="fas fa-edit fs-5"></i>
                                             </a>
-                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                    
+                                    <!-- Revisar/Completar -->
+                                    <td class="text-center align-middle" style="width: 60px;">
+                                        {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                             {% if order.status == 'SENT' %}
                                             <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                                class="btn btn-sm btn-warning" title="Revisar Recepcion">
-                                                <i class="fas fa-clipboard-check"></i>
+                                                class="btn btn-warning rounded-3 px-3 py-1 shadow-sm border-0" title="Revisar Recepcion">
+                                                <i class="fas fa-clipboard-check fs-6 text-dark"></i>
                                             </a>
-                                            {% endif %}
-                                            {% if order.status == 'IN_REVIEW' %}
+                                            {% elif order.status == 'IN_REVIEW' %}
                                             <a href="{{ url_for('complete_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                                class="btn btn-sm btn-success" title="Completar">
-                                                <i class="fas fa-check"></i>
+                                                class="btn btn-success rounded-3 px-3 py-1 shadow-sm border-0" title="Completar">
+                                                <i class="fas fa-check fs-6 text-white"></i>
                                             </a>
                                             {% endif %}
                                         {% endif %}
+                                    </td>
+
+                                    <!-- Ver Detalles -->
+                                    <td class="text-center align-middle" style="width: 40px;">
                                         <a href="{{ url_for('view_purchase_order', company_id=company.id, order_id=order.id) }}"
-                                            class="btn btn-sm btn-outline-secondary" title="Ver Detalles">
-                                            <i class="fas fa-eye"></i>
+                                            class="btn btn-link text-secondary text-decoration-none p-1" title="Ver Detalles">
+                                            <i class="fas fa-eye fs-5"></i>
                                         </a>
+                                    </td>
+
+                                    <!-- PDF -->
+                                    <td class="text-center align-middle" style="width: 40px;">
+                                        <button type="button" onclick="downloadOrderPdf('{{ url_for('purchase_order_pdf', company_id=company.id, order_id=order.id) }}', '{{ order.id }}')"
+                                            class="btn btn-link text-danger text-decoration-none p-1 border-0" title="Descargar PDF">
+                                            <i class="fas fa-file-pdf fs-5"></i>
+                                        </button>
+                                    </td>
+
+                                    <!-- Eliminar -->
+                                    <td class="text-center align-middle" style="width: 40px;">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar"
+                                        <button type="button" class="btn btn-link text-danger text-decoration-none p-1 border-0" title="Eliminar"
                                             onclick="confirmDeleteOrder('{{ order.id }}', '{{ order.supplier.business_name }}')">
-                                            <i class="fas fa-trash"></i>
+                                            <i class="fas fa-trash fs-5"></i>
                                         </button>
                                         {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">
+                                    <td colspan="10" class="text-center py-4 text-muted">
                                         <i class="fas fa-clipboard-list fa-3x mb-3"></i><br>
                                         No hay ordenes de compra.
                                     </td>
@@ -1384,12 +1414,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const countLow  = rows.filter(r => ['low','critical','zero'].includes(r.dataset.state)).length;
     const countZero = rows.filter(r => r.dataset.state === 'zero').length;
     const countCtrl = rows.filter(r => r.dataset.controlled === '1').length;
+    const countExpired = rows.filter(r => r.dataset.hasExpired === '1').length;
+    const countExpiring = rows.filter(r => r.dataset.hasExpiring === '1').length;
 
     const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     setText('chipCountAll',  countAll);
     setText('chipCountLow',  countLow);
     setText('chipCountZero', countZero);
     setText('chipCountCtrl', countCtrl);
+    setText('chipCountExpired', countExpired);
+    setText('chipCountExpiring', countExpiring);
     setText('kpiBajoStock',  countLow);
 
     function rowMatchesChip(row, chip) {
@@ -1397,6 +1431,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (chip === 'low')        return ['low','critical','zero'].includes(row.dataset.state);
         if (chip === 'zero')       return row.dataset.state === 'zero';
         if (chip === 'controlled') return row.dataset.controlled === '1';
+        if (chip === 'expired')    return row.dataset.hasExpired === '1';
+        if (chip === 'expiring')   return row.dataset.hasExpiring === '1';
         return true;
     }
 
@@ -1708,5 +1744,50 @@ document.addEventListener('DOMContentLoaded', function() {
     detail.addEventListener('shown.bs.collapse',  () => summary.setAttribute('aria-expanded','true'));
     detail.addEventListener('hidden.bs.collapse', () => summary.setAttribute('aria-expanded','false'));
 });
+// Función para descargar PDF con pantalla de carga
+function downloadOrderPdf(url, orderId) {
+    const overlay = document.getElementById('pdfLoadingOverlay');
+    if (overlay) {
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+    }
+    
+    fetch(url)
+        .then(response => {
+            if (!response.ok) throw new Error('Error al generar el PDF');
+            return response.blob();
+        })
+        .then(blob => {
+            const urlBlob = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = urlBlob;
+            a.download = 'Orden_Compra_' + orderId + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(urlBlob);
+            if (overlay) {
+                overlay.classList.add('d-none');
+                overlay.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Hubo un error al generar el PDF.');
+            if (overlay) {
+                overlay.classList.add('d-none');
+                overlay.style.display = 'none';
+            }
+        });
+}
 </script>
+
+<!-- Overlay de Carga para PDF -->
+<div id="pdfLoadingOverlay" class="d-none" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); z-index: 1050; flex-direction: column; align-items: center; justify-content: center; display: none;">
+    <div class="spinner-border text-danger" style="width: 4rem; height: 4rem;" role="status">
+        <span class="visually-hidden">Cargando...</span>
+    </div>
+    <h4 class="mt-4 text-dark fw-bold">Generando PDF...</h4>
+    <p class="text-muted">Por favor, espera un momento.</p>
+</div>
 {% endblock %}

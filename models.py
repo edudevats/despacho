@@ -471,6 +471,7 @@ class ProductBatch(db.Model):
     
     initial_stock = db.Column(db.Integer, default=0)
     current_stock = db.Column(db.Integer, default=0)
+    sanitary_registration = db.Column(db.String(100), nullable=True) # Registro Sanitario del lote
     
     acquisition_date = db.Column(db.Date, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True) # Se desactiva si stock es 0 o caducado

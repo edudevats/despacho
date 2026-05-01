@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Orden de Compra #{{ order.id }}</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 20mm;
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+                font-family: Arial, sans-serif;
+                font-size: 10px;
+                color: #666;
+            }
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #333;
+            line-height: 1.4;
+            font-size: 12px;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            width: 100%;
+            border-bottom: 2px solid #2563EB;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .header table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .header td {
+            vertical-align: middle;
+        }
+        .logo {
+            max-width: 200px;
+            max-height: 80px;
+        }
+        .title {
+            text-align: right;
+            color: #2563EB;
+        }
+        .title h1 {
+            margin: 0;
+            font-size: 24px;
+            text-transform: uppercase;
+        }
+        .title p {
+            margin: 4px 0 0 0;
+            font-size: 12px;
+            color: #666;
+        }
+        .info-section {
+            width: 100%;
+            margin-bottom: 20px;
+            display: table;
+        }
+        .info-box {
+            display: table-cell;
+            width: 50%;
+            padding-right: 15px;
+            vertical-align: top;
+        }
+        .info-box.right {
+            padding-right: 0;
+            padding-left: 15px;
+        }
+        .info-title {
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #2563EB;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+        }
+        .info-content p {
+            margin: 0 0 4px 0;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .table th {
+            background-color: #f1f5f9;
+            color: #333;
+            text-align: left;
+            padding: 8px;
+            font-size: 11px;
+            border-bottom: 2px solid #ccc;
+        }
+        .table td {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+        }
+        .table .text-right {
+            text-align: right;
+        }
+        .table .text-center {
+            text-align: center;
+        }
+        .totals-section {
+            width: 100%;
+        }
+        .totals-table {
+            width: 40%;
+            float: right;
+            border-collapse: collapse;
+        }
+        .totals-table td {
+            padding: 6px 8px;
+        }
+        .totals-table .label {
+            text-align: right;
+            font-weight: bold;
+            color: #555;
+        }
+        .totals-table .value {
+            text-align: right;
+        }
+        .totals-table .grand-total {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2563EB;
+            border-top: 2px solid #2563EB;
+        }
+        .notes {
+            clear: both;
+            margin-top: 30px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+            font-size: 11px;
+            color: #666;
+        }
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 10px;
+            color: #999;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 11px;
+            color: #fff;
+        }
+        .status-draft { background-color: #64748b; }
+        .status-sent { background-color: #0ea5e9; }
+        .status-review { background-color: #eab308; color: #fff; }
+        .status-completed { background-color: #22c55e; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <table>
+            <tr>
+                <td style="width: 50%;">
+                    {% if logo_data_uri %}
+                        <img src="{{ logo_data_uri }}" class="logo" alt="Logo">
+                    {% elif company.logo_path %}
+                        <img src="file://{{ company.logo_path|replace('\\', '/') }}" class="logo" alt="Logo">
+                    {% else %}
+                        <h2>{{ company.name }}</h2>
+                    {% endif %}
+                </td>
+                <td style="width: 50%;" class="title">
+                    <h1>ORDEN DE COMPRA</h1>
+                    <p>Folio: <strong>#{{ order.id }}</strong></p>
+                    <p>Fecha: {{ order.created_at.strftime('%d/%m/%Y') }}</p>
+                    <p>
+                        Estado: 
+                        <span class="status-badge 
+                            {% if order.status == 'DRAFT' %}status-draft{% elif order.status == 'SENT' %}status-sent{% elif order.status == 'IN_REVIEW' %}status-review{% else %}status-completed{% endif %}">
+                            {% if order.status == 'DRAFT' %}BORRADOR
+                            {% elif order.status == 'SENT' %}ENVIADA
+                            {% elif order.status == 'IN_REVIEW' %}EN REVISIÓN
+                            {% else %}COMPLETADA{% endif %}
+                        </span>
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="info-section">
+        <div class="info-box">
+            <div class="info-title">Datos de la Empresa</div>
+            <div class="info-content">
+                <p><strong>{{ company.name }}</strong></p>
+                <p>RFC: {{ company.rfc }}</p>
+                {% if company.postal_code %}
+                <p>C.P.: {{ company.postal_code }}</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="info-box right">
+            <div class="info-title">Proveedor</div>
+            <div class="info-content">
+                <p><strong>{{ order.supplier.business_name }}</strong></p>
+                <p>RFC: {{ order.supplier.rfc }}</p>
+                {% if order.supplier.contact_name %}
+                <p>Contacto: {{ order.supplier.contact_name }}</p>
+                {% endif %}
+                {% if order.supplier.phone %}
+                <p>Teléfono: {{ order.supplier.phone }}</p>
+                {% endif %}
+                {% if order.supplier.payment_terms %}
+                <p>Condiciones: {{ order.supplier.payment_terms }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Código / SKU</th>
+                <th>Descripción del Producto</th>
+                <th class="text-center">Cant.</th>
+                <th class="text-center">U.M.</th>
+                <th class="text-right">Costo Est.</th>
+                <th class="text-right">Importe Est.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for detail in order.details %}
+            <tr>
+                <td>{{ detail.product.sku or '--' }}</td>
+                <td>
+                    <strong>{{ detail.product.name }}</strong><br>
+                    {% if detail.product.description %}
+                    <span style="color:#666; font-size:10px;">{{ detail.product.description[:80] }}{% if detail.product.description|length > 80 %}...{% endif %}</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">{{ detail.quantity_requested }}</td>
+                <td class="text-center">{{ detail.order_unit|capitalize }}</td>
+                <td class="text-right">${{ "{:,.2f}".format(detail.product.cost_price or 0.0) }}</td>
+                <td class="text-right">${{ "{:,.2f}".format((detail.quantity_requested * (detail.product.cost_price or 0.0))) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals-section">
+        <table class="totals-table">
+            <tr>
+                <td class="label">Total Estimado:</td>
+                <td class="value grand-total">${{ "{:,.2f}".format(order.estimated_total or 0.0) }}</td>
+            </tr>
+        </table>
+    </div>
+
+    {% if order.notes %}
+    <div class="notes">
+        <strong>Observaciones / Notas:</strong><br>
+        {{ order.notes|replace('\n', '<br>')|safe }}
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        Este documento es una orden de compra generada por el sistema.
+    </div>
+
+</body>
+</html>
