@@ -63,7 +63,37 @@
                                         {{ detail.quantity_requested }}
                                         {% endif %}
                                     </td>
-                                    <td class="text-end">${{ detail.unit_cost|format_currency }}</td>
+                                    <td class="text-end">
+                                        <!-- Modo lectura: click para editar -->
+                                        <span class="cost-display" id="costDisplay_{{ detail.id }}" 
+                                              onclick="editCost({{ detail.id }}, {{ detail.unit_cost }})"
+                                              style="cursor: pointer; border-bottom: 1px dashed #007bff;" 
+                                              title="Click para editar">
+                                            ${{ detail.unit_cost|format_currency }}
+                                            <i class="fas fa-pencil-alt text-primary ms-1" style="font-size: 0.7rem;"></i>
+                                        </span>
+                                        <!-- Modo edición -->
+                                        <form method="POST" class="d-none" id="costForm_{{ detail.id }}" 
+                                              style="min-width: 120px;" onsubmit="return submitCostEdit({{ detail.id }})">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="update_cost">
+                                            <input type="hidden" name="detail_id" value="{{ detail.id }}">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" name="new_cost" class="form-control form-control-sm" 
+                                                       step="0.01" min="0" value="{{ detail.unit_cost }}" 
+                                                       id="costInput_{{ detail.id }}"
+                                                       onkeydown="if(event.key==='Escape') cancelCostEdit({{ detail.id }})">
+                                                <button type="submit" class="btn btn-sm btn-success" title="Guardar">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                                        onclick="cancelCostEdit({{ detail.id }})" title="Cancelar">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </td>
                                     <td class="text-end fw-bold">${{ (detail.quantity_requested * detail.unit_cost)|format_currency }}</td>
                                     <td class="text-center">
                                         <form method="POST" style="display: inline;">
@@ -261,5 +291,31 @@ function updateTotalCalc() {
 
 packageQty.addEventListener('input', updateTotalCalc);
 looseQty.addEventListener('input', updateTotalCalc);
+
+// ---- Edición inline de costo ----
+function editCost(detailId, currentCost) {
+    document.getElementById('costDisplay_' + detailId).classList.add('d-none');
+    const form = document.getElementById('costForm_' + detailId);
+    form.classList.remove('d-none');
+    const input = document.getElementById('costInput_' + detailId);
+    input.value = parseFloat(currentCost).toFixed(2);
+    input.focus();
+    input.select();
+}
+
+function cancelCostEdit(detailId) {
+    document.getElementById('costForm_' + detailId).classList.add('d-none');
+    document.getElementById('costDisplay_' + detailId).classList.remove('d-none');
+}
+
+function submitCostEdit(detailId) {
+    const input = document.getElementById('costInput_' + detailId);
+    const val = parseFloat(input.value);
+    if (isNaN(val) || val < 0) {
+        input.classList.add('is-invalid');
+        return false;
+    }
+    return true;
+}
 </script>
 {% endblock %}

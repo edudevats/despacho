@@ -2854,8 +2854,8 @@ def create_app(config_class=Config):
                 upp = product_obj.units_per_package or 1
 
                 if order_unit == 'PAQUETE' and upp > 1:
-                    pkg_qty = int(request.form.get('package_quantity', 0))
-                    loose_qty = int(request.form.get('loose_quantity', 0))
+                    pkg_qty = int(request.form.get('package_quantity') or 0)
+                    loose_qty = int(request.form.get('loose_quantity') or 0)
                     quantity = (pkg_qty * upp) + loose_qty
                 else:
                     order_unit = 'UNIDAD'
@@ -2873,6 +2873,20 @@ def create_app(config_class=Config):
                     loose_quantity=loose_qty
                 )
                 db.session.add(detail)
+
+                # Actualizar costo del producto con el nuevo precio
+                if unit_cost > 0:
+                    product_obj.cost_price = unit_cost
+
+            elif action == 'update_cost':
+                detail_id = int(request.form.get('detail_id'))
+                new_cost = float(request.form.get('new_cost', 0))
+                detail = PurchaseOrderDetail.query.get(detail_id)
+                if detail and detail.order_id == order.id:
+                    detail.unit_cost = new_cost
+                    # También actualizar el costo del producto
+                    if new_cost > 0:
+                        detail.product.cost_price = new_cost
 
             elif action == 'remove_product':
                 detail_id = int(request.form.get('detail_id'))
@@ -2977,15 +2991,15 @@ def create_app(config_class=Config):
 
                 # Manejar recepción por paquete o unidad
                 if detail.order_unit == 'PAQUETE' and upp > 1:
-                    pkgs = int(request.form.get(f'packages_received_{detail.id}', 0))
-                    loose = int(request.form.get(f'loose_received_{detail.id}', 0))
+                    pkgs = int(request.form.get(f'packages_received_{detail.id}') or 0)
+                    loose = int(request.form.get(f'loose_received_{detail.id}') or 0)
                     detail.packages_received = pkgs
                     detail.loose_received = loose
                     detail.quantity_received = (pkgs * upp) + loose
                 else:
                     received = request.form.get(f'received_{detail.id}')
                     if received is not None:
-                        detail.quantity_received = int(received)
+                        detail.quantity_received = int(received or 0)
 
                 # Lote y caducidad solo si la categoría lo requiere
                 requires_batch = (product_obj.category and product_obj.category.requires_batch_tracking)

@@ -98,36 +98,8 @@
             border-bottom: 1px solid #eee;
             vertical-align: top;
         }
-        .table .text-right {
-            text-align: right;
-        }
         .table .text-center {
             text-align: center;
-        }
-        .totals-section {
-            width: 100%;
-        }
-        .totals-table {
-            width: 40%;
-            float: right;
-            border-collapse: collapse;
-        }
-        .totals-table td {
-            padding: 6px 8px;
-        }
-        .totals-table .label {
-            text-align: right;
-            font-weight: bold;
-            color: #555;
-        }
-        .totals-table .value {
-            text-align: right;
-        }
-        .totals-table .grand-total {
-            font-size: 16px;
-            font-weight: bold;
-            color: #2563EB;
-            border-top: 2px solid #2563EB;
         }
         .notes {
             clear: both;
@@ -226,8 +198,6 @@
                 <th>Descripción del Producto</th>
                 <th class="text-center">Cant.</th>
                 <th class="text-center">U.M.</th>
-                <th class="text-right">Costo Est.</th>
-                <th class="text-right">Importe Est.</th>
             </tr>
         </thead>
         <tbody>
@@ -242,21 +212,12 @@
                 </td>
                 <td class="text-center">{{ detail.quantity_requested }}</td>
                 <td class="text-center">{{ detail.order_unit|capitalize }}</td>
-                <td class="text-right">${{ "{:,.2f}".format(detail.product.cost_price or 0.0) }}</td>
-                <td class="text-right">${{ "{:,.2f}".format((detail.quantity_requested * (detail.product.cost_price or 0.0))) }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <div class="totals-section">
-        <table class="totals-table">
-            <tr>
-                <td class="label">Total Estimado:</td>
-                <td class="value grand-total">${{ "{:,.2f}".format(order.estimated_total or 0.0) }}</td>
-            </tr>
-        </table>
-    </div>
+
 
     {% if order.notes %}
     <div class="notes">
