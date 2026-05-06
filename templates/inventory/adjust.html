@@ -109,6 +109,93 @@
             </div>
         </div>
     </div>
+
+    {% if requires_batches and all_batches %}
+    <!-- ============ SECCIÓN: Corrección de Fechas de Caducidad ============ -->
+    <div class="row justify-content-center mt-4">
+        <div class="col-md-10">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>Corrección de Fechas de Caducidad (Admin)
+                    </h4>
+                    <small>Modifica la fecha de caducidad de los lotes existentes de este producto</small>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning py-2">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <strong>Importante:</strong> Los cambios en fechas de caducidad quedarán registrados en el historial del producto para auditoría.
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th><i class="fas fa-barcode me-1"></i>Lote</th>
+                                    <th><i class="fas fa-calendar-day me-1"></i>Caducidad Actual</th>
+                                    <th><i class="fas fa-boxes me-1"></i>Stock</th>
+                                    <th><i class="fas fa-circle me-1"></i>Estado</th>
+                                    <th><i class="fas fa-calendar-plus me-1"></i>Nueva Fecha</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for batch in all_batches %}
+                                {% set is_expired = batch.expiration_date and today and batch.expiration_date < today %}
+                                <tr class="{{ 'table-danger' if is_expired else '' }}">
+                                    <td>
+                                        <span class="fw-bold">{{ batch.batch_number }}</span>
+                                        {% if batch.sanitary_registration %}
+                                        <br><small class="text-muted">RS: {{ batch.sanitary_registration }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="{{ 'text-danger fw-bold' if is_expired else '' }}">
+                                            {{ batch.expiration_date.strftime('%d/%m/%Y') if batch.expiration_date else 'Sin fecha' }}
+                                        </span>
+                                        {% if is_expired %}
+                                        <br><span class="badge bg-danger"><i class="fas fa-exclamation-circle"></i> Caducado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ 'bg-success' if batch.current_stock > 0 else 'bg-secondary' }} fs-6">
+                                            {{ batch.current_stock }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if batch.is_active and batch.current_stock > 0 %}
+                                        <span class="badge bg-success"><i class="fas fa-check-circle"></i> Activo</span>
+                                        {% elif batch.current_stock <= 0 %}
+                                        <span class="badge bg-secondary"><i class="fas fa-archive"></i> Agotado</span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-pause-circle"></i> Inactivo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td colspan="2">
+                                        <form method="POST" class="d-flex align-items-center gap-2"
+                                            action="{{ url_for('update_batch_expiration', company_id=company.id, product_id=product.id, batch_id=batch.id) }}"
+                                            onsubmit="return confirmExpirationChange(this, '{{ batch.batch_number }}', '{{ batch.expiration_date.strftime('%d/%m/%Y') if batch.expiration_date else 'N/A' }}');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="reason" value="">
+                                            <input type="date" class="form-control form-control-sm" name="new_expiration_date"
+                                                value="{{ batch.expiration_date.strftime('%Y-%m-%d') if batch.expiration_date else '' }}"
+                                                required style="min-width: 150px;">
+                                            <button type="submit" class="btn btn-sm btn-outline-info text-nowrap"
+                                                title="Actualizar fecha de caducidad">
+                                                <i class="fas fa-save"></i> Guardar
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>
@@ -134,5 +221,88 @@
     typeOut.addEventListener('change', toggle);
     toggle();
 })();
+
+function confirmExpirationChange(form, batchNumber, currentDate) {
+    const newDate = form.querySelector('input[name="new_expiration_date"]').value;
+    if (!newDate) return false;
+
+    // Format new date for display
+    const parts = newDate.split('-');
+    const formattedNew = parts[2] + '/' + parts[1] + '/' + parts[0];
+
+    if (formattedNew === currentDate) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire('Sin cambios', 'La fecha ingresada es la misma que la actual.', 'info');
+        } else {
+            alert('La fecha ingresada es la misma que la actual.');
+        }
+        return false;
+    }
+
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'Cambiar Fecha de Caducidad',
+            html:
+                `<div style="text-align:left; margin-bottom:16px;">` +
+                    `<div style="background:#f8f9fa; border-radius:8px; padding:12px 16px; margin-bottom:14px;">` +
+                        `<div style="margin-bottom:6px;"><i class="fas fa-barcode" style="color:#17a2b8; width:20px;"></i> <strong>Lote:</strong> ${batchNumber}</div>` +
+                        `<div style="margin-bottom:6px;"><i class="fas fa-calendar-minus" style="color:#dc3545; width:20px;"></i> <strong>Fecha actual:</strong> <span style="text-decoration:line-through; color:#dc3545;">${currentDate}</span></div>` +
+                        `<div><i class="fas fa-calendar-plus" style="color:#28a745; width:20px;"></i> <strong>Nueva fecha:</strong> <span style="color:#28a745; font-weight:600;">${formattedNew}</span></div>` +
+                    `</div>` +
+                    `<label for="swal-reason" style="font-weight:600; margin-bottom:6px; display:block;">` +
+                        `<i class="fas fa-pencil-alt" style="color:#17a2b8;"></i> Motivo del cambio <span style="color:#dc3545;">*</span>` +
+                    `</label>` +
+                    `<textarea id="swal-reason" class="swal2-textarea" rows="3" ` +
+                        `placeholder="Ej: Error de captura, fecha incorrecta del proveedor, actualización del lote..." ` +
+                        `style="width:100%; margin:0; font-size:14px; border-radius:6px;"></textarea>` +
+                `</div>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#17a2b8',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="fas fa-check"></i> Confirmar Cambio',
+            cancelButtonText: '<i class="fas fa-times"></i> Cancelar',
+            customClass: {
+                popup: 'swal2-popup-lg'
+            },
+            width: '520px',
+            preConfirm: () => {
+                const reason = document.getElementById('swal-reason').value.trim();
+                if (!reason) {
+                    Swal.showValidationMessage('<i class="fas fa-exclamation-circle"></i> Debes escribir el motivo del cambio');
+                    return false;
+                }
+                if (reason.length < 5) {
+                    Swal.showValidationMessage('<i class="fas fa-exclamation-circle"></i> El motivo debe tener al menos 5 caracteres');
+                    return false;
+                }
+                return reason;
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                form.querySelector('input[name="reason"]').value = result.value;
+                form.onsubmit = null;
+                form.submit();
+            }
+        });
+        return false;
+    }
+
+    // Fallback for no SweetAlert
+    const reason = prompt(
+        `¿Cambiar fecha de caducidad del lote ${batchNumber}?\n\n` +
+        `Fecha actual: ${currentDate}\n` +
+        `Nueva fecha: ${formattedNew}\n\n` +
+        `Escribe el motivo del cambio:`
+    );
+    if (reason && reason.trim().length >= 5) {
+        form.querySelector('input[name="reason"]').value = reason.trim();
+        return true;
+    }
+    if (reason !== null) {
+        alert('El motivo debe tener al menos 5 caracteres.');
+    }
+    return false;
+}
 </script>
 {% endblock %}

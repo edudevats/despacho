@@ -1658,11 +1658,17 @@ def create_app(config_class=Config):
             return redirect(url_for('inventory_list', company_id=company_id))
 
         requires_batches = bool(product.category and product.category.requires_batch_tracking)
+        today = now_mexico().date()
 
         active_batches = ProductBatch.query.filter(
             ProductBatch.product_id == product.id,
             ProductBatch.current_stock > 0,
             ProductBatch.is_active == True
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        # All batches (for expiration date editing section)
+        all_batches = ProductBatch.query.filter(
+            ProductBatch.product_id == product.id,
         ).order_by(ProductBatch.expiration_date.asc()).all()
 
         if request.method == 'POST':
@@ -1676,7 +1682,9 @@ def create_app(config_class=Config):
                     company=company,
                     product=product,
                     active_batches=active_batches,
+                    all_batches=all_batches,
                     requires_batches=requires_batches,
+                    today=today,
                 )
 
             if not notes:
@@ -1777,8 +1785,70 @@ def create_app(config_class=Config):
             company=company,
             product=product,
             active_batches=active_batches,
+            all_batches=all_batches,
             requires_batches=requires_batches,
+            today=today,
         )
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/batch/<int:batch_id>/update-expiration', methods=['POST'])
+    @inventory_admin_required
+    def update_batch_expiration(company_id, product_id, batch_id):
+        """Actualizar fecha de caducidad de un lote - solo administradores"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+
+        if product.company_id != company_id:
+            flash('Producto no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        batch = ProductBatch.query.get_or_404(batch_id)
+        if batch.product_id != product.id:
+            flash('Lote no encontrado para este producto.', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        new_expiration_str = request.form.get('new_expiration_date', '').strip()
+        reason = request.form.get('reason', '').strip()
+
+        if not new_expiration_str:
+            flash('Debe ingresar la nueva fecha de caducidad.', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        if not reason or len(reason) < 5:
+            flash('Debe escribir el motivo del cambio (mínimo 5 caracteres).', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        try:
+            new_expiration = datetime.strptime(new_expiration_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Fecha de caducidad inválida.', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        old_expiration = batch.expiration_date
+        if old_expiration == new_expiration:
+            flash('La fecha de caducidad es la misma, no se realizaron cambios.', 'info')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        # Update the expiration date
+        batch.expiration_date = new_expiration
+
+        # Log the change as an ADJUSTMENT transaction for audit trail
+        transaction = InventoryTransaction(
+            product_id=product.id,
+            batch_id=batch.id,
+            type='ADJUSTMENT',
+            quantity=0,
+            previous_stock=product.current_stock,
+            new_stock=product.current_stock,
+            reference=f'Cambio fecha caducidad - {current_user.username}',
+            notes=f'[CAMBIO CADUCIDAD: {current_user.username}] Lote {batch.batch_number}: {old_expiration.strftime("%d/%m/%Y")} → {new_expiration.strftime("%d/%m/%Y")} | Motivo: {reason}',
+            created_by_id=current_user.id
+        )
+        db.session.add(transaction)
+        db.session.commit()
+
+        logger.info(f"Admin batch expiration update by {current_user.username}: batch {batch.batch_number} (product {product_id}), {old_expiration} -> {new_expiration}, reason: {reason}")
+        flash(f'Fecha de caducidad del lote {batch.batch_number} actualizada: {old_expiration.strftime("%d/%m/%Y")} → {new_expiration.strftime("%d/%m/%Y")}', 'success')
+        return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
 
     @app.route('/companies/<int:company_id>/inventory/<int:product_id>/history')
     @inventory_admin_required
