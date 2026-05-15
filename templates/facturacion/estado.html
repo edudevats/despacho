@@ -87,7 +87,7 @@
                             {% else %}
                             <div class="alert alert-info">
                                 <i class="fas fa-info-circle"></i> No hay facturas generadas aún.
-                                <a href="{{ url_for('crear_factura', company_id=company.id) }}">Crear primera
+                                <a href="{{ url_for('invoicing.crear_factura', company_id=company.id) }}">Crear primera
                                     factura</a>
                             </div>
                             {% endif %}
@@ -109,7 +109,7 @@
                                 </div>
 
                                 <div class="d-flex justify-content-between mt-4">
-                                    <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}"
+                                    <a href="{{ url_for('invoicing.facturacion_dashboard', company_id=company.id) }}"
                                         class="btn btn-outline-secondary">
                                         <i class="fas fa-arrow-left"></i> Regresar
                                     </a>
@@ -173,7 +173,7 @@
                                 </div>
 
                                 <div class="d-flex justify-content-between mt-4">
-                                    <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}"
+                                    <a href="{{ url_for('invoicing.facturacion_dashboard', company_id=company.id) }}"
                                         class="btn btn-outline-secondary">
                                         <i class="fas fa-arrow-left"></i> Regresar
                                     </a>

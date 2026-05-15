@@ -11,7 +11,7 @@
             <p class="text-muted mb-0">{{ company.name }} &mdash; Historial completo de entradas, salidas y correcciones</p>
         </div>
         <div class="col-auto">
-            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left"></i> Volver al Inventario
             </a>
         </div>
@@ -135,7 +135,7 @@
                                 <small class="text-muted">{{ tx.date.strftime('%H:%M') }}</small>
                             </td>
                             <td>
-                                <a href="{{ url_for('product_history', company_id=company.id, product_id=tx.product_id) }}"
+                                <a href="{{ url_for('inventory.product_history', company_id=company.id, product_id=tx.product_id) }}"
                                    class="text-decoration-none fw-bold">
                                     {{ tx.product.name if tx.product else '—' }}
                                 </a>

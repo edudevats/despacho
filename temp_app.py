@@ -1,0 +1,5383 @@
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
+import os
+import logging
+
+# Load environment variables FIRST (before importing config)
+from dotenv import load_dotenv
+load_dotenv()
+
+from config import Config
+from extensions import db, login_manager, migrate, mail, cache, csrf, limiter, init_extensions
+from models import (Company, Movement, Invoice, User, Category, Supplier, TaxPayment, Product,
+                    InventoryTransaction, ProductBatch, FinkokCredentials, InvoiceFolioCounter, Customer,
+                    Laboratory, LaboratorySanitaryRegistration, Service, PurchaseOrder, PurchaseOrderDetail,
+                    InvoiceTemplate, InvoiceTemplateItem,
+                    UserCompanyAccess, ExitOrder, ExitOrderDetail, InventoryRequest, ProductCategory)
+from forms import (LoginForm, RegistrationForm, CompanyForm, CompanyEditForm, SyncForm, TaxPaymentForm,
+                   CategoryForm, SupplierForm, InvoiceSearchForm, ProductForm, BatchForm,
+                   FinkokCredentialsForm, TimbrarFacturaForm, ConsultarEstadoForm, Lista69BForm, CancelarFacturaForm,
+                   CFDIComprobanteForm, CFDIReceptorForm, CFDIConceptoForm,
+                   LaboratoryForm, ServiceForm, SupplierManualForm, PurchaseOrderForm, InvoiceTemplateForm,
+                   UserForm, UserCompanyAccessForm, ExitOrderForm,
+                   InitialStockRequestForm, AdjustmentRequestForm, ProductCategoryForm)
+from functools import wraps
+from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf.csrf import CSRFError
+from services.sat_service import SATService, SATError
+from services.qr_service import QRService
+from sqlalchemy import func, extract
+from datetime import datetime, timedelta, timezone
+from utils.timezone_helper import now_mexico, to_mexico_time
+
+logger = logging.getLogger(__name__)
+
+# Define project root directory (absolute path to the directory containing app.py)
+# This ensures correct paths even in WSGI context where os.getcwd() returns wrong directory
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def safe_redirect_target(candidate, fallback):
+    """Return `candidate` only if it is a same-origin URL; otherwise `fallback`.
+
+    Prevents open-redirect attacks via attacker-controlled `Referer` headers
+    or `?next=` parameters. Accepts only relative URLs, or absolute URLs whose
+    netloc matches the current request host.
+    """
+    if not candidate:
+        return fallback
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(candidate)
+    except Exception:
+        return fallback
+    # Reject dangerous schemes outright (javascript:, data:, etc.)
+    if parsed.scheme and parsed.scheme not in ('http', 'https'):
+        return fallback
+    # Same-origin: empty netloc (relative) or matching the current request host.
+    if parsed.netloc and parsed.netloc != request.host:
+        return fallback
+    return candidate
+
+
+def find_company_invoice_xml_path(company_rfc, uuid, project_root=None):
+    """Find a generated invoice XML by UUID inside xml/<company_rfc>/."""
+    if not company_rfc or not uuid:
+        return None
+
+    base_dir = project_root or PROJECT_ROOT
+    xml_dir = os.path.join(base_dir, 'xml', company_rfc)
+    if not os.path.isdir(xml_dir):
+        return None
+
+    target_uuid = uuid.lower()
+    for filename in os.listdir(xml_dir):
+        if not filename.lower().endswith('.xml'):
+            continue
+        if filename.lower().startswith('acuse_cancelacion_'):
+            continue
+
+        stem = filename[:-4]
+        filename_uuid = stem.split('_', 1)[1] if '_' in stem else stem
+        if filename_uuid.lower() == target_uuid:
+            return os.path.join(xml_dir, filename)
+
+    return None
+
+
+def parse_invoice_xml_for_db(xml_content, fallback_uuid=None):
+    """Extract the fields required to persist a generated CFDI as Invoice."""
+    from lxml import etree
+
+    if isinstance(xml_content, bytes):
+        xml_bytes = xml_content
+        xml_text = xml_content.decode('utf-8', errors='replace')
+    else:
+        xml_text = xml_content
+        xml_bytes = xml_content.encode('utf-8')
+
+    root = etree.fromstring(xml_bytes)
+    ns = {
+        'cfdi': root.nsmap.get(None) or root.nsmap.get('cfdi') or 'http://www.sat.gob.mx/cfd/4',
+        'tfd': 'http://www.sat.gob.mx/TimbreFiscalDigital',
+    }
+
+    emisor = root.find('cfdi:Emisor', ns)
+    receptor = root.find('cfdi:Receptor', ns)
+    timbre = root.find('.//tfd:TimbreFiscalDigital', ns)
+    impuestos = root.find('cfdi:Impuestos', ns)
+
+    def as_float(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    fecha = root.get('Fecha')
+    date_value = datetime.fromisoformat(fecha) if fecha else now_mexico()
+    tax_value = as_float(impuestos.get('TotalImpuestosTrasladados')) if impuestos is not None else 0.0
+
+    return {
+        'uuid': (timbre.get('UUID') if timbre is not None else None) or fallback_uuid,
+        'date': date_value,
+        'total': as_float(root.get('Total')),
+        'subtotal': as_float(root.get('SubTotal')),
+        'tax': tax_value,
+        'type': root.get('TipoDeComprobante'),
+        'issuer_rfc': emisor.get('Rfc') if emisor is not None else None,
+        'issuer_name': emisor.get('Nombre') if emisor is not None else None,
+        'receiver_rfc': receptor.get('Rfc') if receptor is not None else None,
+        'receiver_name': receptor.get('Nombre') if receptor is not None else None,
+        'forma_pago': root.get('FormaPago'),
+        'metodo_pago': root.get('MetodoPago'),
+        'uso_cfdi': receptor.get('UsoCFDI') if receptor is not None else None,
+        'xml_content': xml_text,
+        'currency': root.get('Moneda'),
+        'exchange_rate': as_float(root.get('TipoCambio'), None),
+        'exportation': root.get('Exportacion'),
+        'version': root.get('Version'),
+        'serie': root.get('Serie'),
+        'folio': root.get('Folio'),
+        'lugar_expedicion': root.get('LugarExpedicion'),
+        'no_certificado': root.get('NoCertificado'),
+        'sello': root.get('Sello'),
+        'certificado': root.get('Certificado'),
+        'regimen_fiscal_emisor': emisor.get('RegimenFiscal') if emisor is not None else None,
+        'regimen_fiscal_receptor': receptor.get('RegimenFiscalReceptor') if receptor is not None else None,
+        'domicilio_fiscal_receptor': receptor.get('DomicilioFiscalReceptor') if receptor is not None else None,
+        'fecha_timbrado': datetime.fromisoformat(timbre.get('FechaTimbrado')) if timbre is not None and timbre.get('FechaTimbrado') else None,
+        'rfc_prov_certif': timbre.get('RfcProvCertif') if timbre is not None else None,
+        'sello_sat': timbre.get('SelloSAT') if timbre is not None else None,
+        'no_certificado_sat': timbre.get('NoCertificadoSAT') if timbre is not None else None,
+    }
+
+
+def get_or_create_supplier(company_id, rfc, business_name):
+    """
+    Obtiene o crea un proveedor y actualiza su información básica.
+    
+    Args:
+        company_id: ID de la empresa
+        rfc: RFC del proveedor
+        business_name: Razón social del proveedor
+        
+    Returns:
+        Supplier: Objeto del proveedor
+    """
+    supplier = Supplier.query.filter_by(
+        company_id=company_id,
+        rfc=rfc
+    ).first()
+    
+    if not supplier:
+        supplier = Supplier(
+            company_id=company_id,
+            rfc=rfc,
+            business_name=business_name or rfc,
+            active=True
+        )
+        db.session.add(supplier)
+        db.session.flush()  # Para obtener el ID
+    else:
+        # Actualizar nombre si viene más completo
+        if business_name and len(business_name) > len(supplier.business_name or ''):
+            supplier.business_name = business_name
+    
+    return supplier
+
+
+def update_supplier_stats(supplier_id):
+    """
+    Recalcula las estadísticas de un proveedor basándose en sus facturas.
+    
+    Args:
+        supplier_id: ID del proveedor
+    """
+    supplier = db.session.get(Supplier, supplier_id)
+    if not supplier:
+        return
+    
+    invoices = Invoice.query.filter_by(supplier_id=supplier_id).all()
+    
+    if invoices:
+        supplier.invoice_count = len(invoices)
+        supplier.total_invoiced = sum(inv.total for inv in invoices)
+        supplier.first_invoice_date = min(inv.date for inv in invoices)
+        supplier.last_invoice_date = max(inv.date for inv in invoices)
+    else:
+        supplier.invoice_count = 0
+        supplier.total_invoiced = 0
+        supplier.first_invoice_date = None
+        supplier.last_invoice_date = None
+
+
+def create_app(config_class=Config):
+    # Fail-fast if SECRET_KEY / JWT_SECRET_KEY are missing or weak.
+    # TestingConfig overrides these with safe deterministic test values.
+    config_class.validate()
+
+    app = Flask(__name__)
+    app.config.from_object(config_class)
+
+    # Initialize all extensions
+    init_extensions(app)
+    
+    # Setup logging
+    from logging_config import setup_logging
+    setup_logging(app)
+    
+    # Custom Jinja2 filter for currency formatting with thousands separators
+    @app.template_filter('format_currency')
+    def format_currency(value):
+        """Format a number with thousand separators and 2 decimal places.
+        Example: 1000000 -> 1,000,000.00
+        """
+        try:
+            return "{:,.2f}".format(float(value))
+        except (ValueError, TypeError):
+            return "0.00"
+
+    @app.template_filter('chunk_split')
+    def chunk_split(body, chunklen=76, end='\r\n'):
+        if not body: return ""
+        return end.join(body[i:i+chunklen] for i in range(0, len(body), chunklen))
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return db.session.get(User, int(user_id))
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        flash('La página expiró por inactividad. Hemos recargado la página para que puedas continuar de forma segura.', 'warning')
+        # Validate referrer against the current host to prevent open-redirect via Referer.
+        return redirect(safe_redirect_target(request.referrer, request.url))
+
+    # Admin required decorator
+    def admin_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('login'))
+            if not current_user.is_admin:
+                flash('Acceso denegado. Se requieren permisos de administrador.', 'error')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+
+    @app.context_processor
+    def inject_inventory_admin_helper():
+        def is_inv_admin(company_id):
+            if not current_user.is_authenticated:
+                return False
+            return current_user.is_inventory_admin_for(company_id)
+
+        def has_any_perm(*perm_names):
+            if not current_user.is_authenticated:
+                return False
+            return current_user.has_any_perm(*perm_names)
+
+        def has_company_perm(company_id, *perm_names):
+            if not current_user.is_authenticated:
+                return False
+            return current_user.has_company_perm(company_id, *perm_names)
+
+        return {
+            'is_inv_admin': is_inv_admin,
+            'has_any_perm': has_any_perm,
+            'has_company_perm': has_company_perm,
+        }
+
+    def inventory_admin_required(f):
+        """Permite global admins o usuarios con perm_inventory_admin en la empresa."""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('login'))
+            company_id = kwargs.get('company_id')
+            if current_user.is_admin:
+                return f(*args, **kwargs)
+            if company_id is not None and current_user.is_inventory_admin_for(company_id):
+                return f(*args, **kwargs)
+            flash('Acceso denegado. Se requieren permisos de administrador de inventario.', 'error')
+            return redirect(url_for('index'))
+        return decorated_function
+
+    def require_company_perm(*perm_names):
+        """Permite global admins o usuarios con AL MENOS UNO de los perms en la empresa
+        identificada por kwargs['company_id']. Si no hay company_id, se exige que el
+        usuario tenga el perm en ALGUNA empresa (caso rutas listadoras)."""
+        def decorator(f):
+            @wraps(f)
+            def decorated_function(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    return redirect(url_for('login'))
+                if current_user.is_admin:
+                    return f(*args, **kwargs)
+                company_id = kwargs.get('company_id')
+                if company_id is not None:
+                    if current_user.has_company_perm(company_id, *perm_names):
+                        return f(*args, **kwargs)
+                else:
+                    if current_user.has_any_perm(*perm_names):
+                        return f(*args, **kwargs)
+                flash('Acceso denegado. No tienes permiso para acceder a esta sección.', 'error')
+                return redirect(url_for('index'))
+            return decorated_function
+        return decorator
+
+    @app.route('/login', methods=['GET', 'POST'])
+    # Rate limit by IP: 5 attempts per minute and 30 per hour. Mitigates
+    # online brute-force / credential stuffing. Tune via RATELIMIT_STORAGE_URI
+    # to a Redis backend in multi-worker deployments.
+    @limiter.limit("5 per minute; 30 per hour", methods=["POST"])
+    def login():
+        if request.method == 'POST':
+            username = request.form['username']
+            password = request.form['password']
+            user = User.query.filter_by(username=username).first()
+
+            # Compute hash check unconditionally to flatten timing side-channel
+            # (M-2: user enumeration via login latency). The dummy hash is a
+            # cached PBKDF2 of an unguessable string so the work factor matches
+            # a real user lookup.
+            from werkzeug.security import generate_password_hash as _ghash
+            _DUMMY_HASH = getattr(login, '_dummy_hash', None)
+            if _DUMMY_HASH is None:
+                _DUMMY_HASH = _ghash('not-a-real-password-flat-timing')
+                login._dummy_hash = _DUMMY_HASH
+            if user:
+                ok = check_password_hash(user.password_hash, password)
+            else:
+                # Burn equivalent CPU; result discarded.
+                check_password_hash(_DUMMY_HASH, password)
+                ok = False
+
+            if user and ok:
+                user.last_login = now_mexico()
+                db.session.commit()
+                login_user(user)
+                return redirect(url_for('index'))
+            else:
+                flash('Usuario o contraseña incorrectos')
+        return render_template('login.html')
+
+    @app.route('/logout')
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for('login'))
+
+    @app.route('/change_password', methods=['GET', 'POST'])
+    @login_required
+    def change_password():
+        if request.method == 'POST':
+            current_password = request.form['current_password']
+            new_password = request.form['new_password']
+            confirm_password = request.form['confirm_password']
+
+            if not check_password_hash(current_user.password_hash, current_password):
+                flash('La contraseña actual es incorrecta.', 'error')
+                return redirect(url_for('change_password'))
+            
+            if new_password != confirm_password:
+                flash('Las nuevas contraseñas no coinciden.', 'error')
+                return redirect(url_for('change_password'))
+            
+            # Update password
+            current_user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            
+            flash('Tu contraseña ha sido actualizada correctamente.', 'success')
+            return redirect(url_for('index'))
+            
+        return render_template('change_password.html')
+
+    # ==================== USER MANAGEMENT ROUTES ====================
+
+    @app.route('/admin/users')
+    @admin_required
+    def admin_users():
+        """List all users"""
+        users = User.query.order_by(User.username).all()
+        return render_template('admin/users.html', users=users)
+
+    @app.route('/admin/users/add', methods=['GET', 'POST'])
+    @admin_required
+    def admin_add_user():
+        """Create new user"""
+        form = UserForm()
+        companies = Company.query.order_by(Company.name).all()
+
+        if form.validate_on_submit():
+            # Check if username exists
+            if User.query.filter_by(username=form.username.data).first():
+                flash('El nombre de usuario ya existe.', 'error')
+                return render_template('admin/user_form.html', form=form, companies=companies, action='crear')
+
+            # Check if email exists (if provided)
+            if form.email.data and User.query.filter_by(email=form.email.data).first():
+                flash('El email ya está registrado.', 'error')
+                return render_template('admin/user_form.html', form=form, companies=companies, action='crear')
+
+            # Create user
+            user = User(
+                username=form.username.data,
+                email=form.email.data or None,
+                password_hash=generate_password_hash(form.password.data) if form.password.data else generate_password_hash('changeme'),
+                is_active=form.is_active.data,
+                is_admin=form.is_admin.data
+            )
+            db.session.add(user)
+            db.session.flush()  # Get user.id
+
+            # Process company access
+            for company in companies:
+                if request.form.get(f'company_{company.id}'):
+                    access = UserCompanyAccess(
+                        user_id=user.id,
+                        company_id=company.id,
+                        perm_dashboard=request.form.get(f'perm_dashboard_{company.id}') == 'on',
+                        perm_sync=request.form.get(f'perm_sync_{company.id}') == 'on',
+                        perm_inventory=request.form.get(f'perm_inventory_{company.id}') == 'on',
+                        perm_invoices=request.form.get(f'perm_invoices_{company.id}') == 'on',
+                        perm_ppd=request.form.get(f'perm_ppd_{company.id}') == 'on',
+                        perm_taxes=request.form.get(f'perm_taxes_{company.id}') == 'on',
+                        perm_sales=request.form.get(f'perm_sales_{company.id}') == 'on',
+                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on',
+                        perm_inventory_admin=request.form.get(f'perm_inventory_admin_{company.id}') == 'on'
+                    )
+                    db.session.add(access)
+
+            db.session.commit()
+            flash(f'Usuario "{user.username}" creado correctamente.', 'success')
+            return redirect(url_for('admin_users'))
+
+        # Set defaults for new user
+        form.is_active.data = True
+        return render_template('admin/user_form.html', form=form, companies=companies, action='crear')
+
+    @app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+    @admin_required
+    def admin_edit_user(user_id):
+        """Edit user"""
+        user = User.query.get_or_404(user_id)
+        form = UserForm(obj=user)
+        companies = Company.query.order_by(Company.name).all()
+
+        # Get current access for this user
+        user_access = {access.company_id: access for access in user.company_access}
+
+        if form.validate_on_submit():
+            # Check if username exists (excluding current user)
+            existing = User.query.filter_by(username=form.username.data).first()
+            if existing and existing.id != user_id:
+                flash('El nombre de usuario ya existe.', 'error')
+                return render_template('admin/user_form.html', form=form, user=user, companies=companies, user_access=user_access, action='editar')
+
+            # Check if email exists (if provided, excluding current user)
+            if form.email.data:
+                existing = User.query.filter_by(email=form.email.data).first()
+                if existing and existing.id != user_id:
+                    flash('El email ya está registrado.', 'error')
+                    return render_template('admin/user_form.html', form=form, user=user, companies=companies, user_access=user_access, action='editar')
+
+            # Update user
+            user.username = form.username.data
+            user.email = form.email.data or None
+            if form.password.data:
+                user.password_hash = generate_password_hash(form.password.data)
+            user.is_active = form.is_active.data
+            user.is_admin = form.is_admin.data
+
+            # Clear existing access
+            UserCompanyAccess.query.filter_by(user_id=user_id).delete()
+
+            # Process company access
+            for company in companies:
+                if request.form.get(f'company_{company.id}'):
+                    access = UserCompanyAccess(
+                        user_id=user.id,
+                        company_id=company.id,
+                        perm_dashboard=request.form.get(f'perm_dashboard_{company.id}') == 'on',
+                        perm_sync=request.form.get(f'perm_sync_{company.id}') == 'on',
+                        perm_inventory=request.form.get(f'perm_inventory_{company.id}') == 'on',
+                        perm_invoices=request.form.get(f'perm_invoices_{company.id}') == 'on',
+                        perm_ppd=request.form.get(f'perm_ppd_{company.id}') == 'on',
+                        perm_taxes=request.form.get(f'perm_taxes_{company.id}') == 'on',
+                        perm_sales=request.form.get(f'perm_sales_{company.id}') == 'on',
+                        perm_facturacion=request.form.get(f'perm_facturacion_{company.id}') == 'on',
+                        perm_inventory_admin=request.form.get(f'perm_inventory_admin_{company.id}') == 'on'
+                    )
+                    db.session.add(access)
+
+            db.session.commit()
+            flash(f'Usuario "{user.username}" actualizado correctamente.', 'success')
+            return redirect(url_for('admin_users'))
+
+        return render_template('admin/user_form.html', form=form, user=user, companies=companies, user_access=user_access, action='editar')
+
+    @app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+    @admin_required
+    def admin_delete_user(user_id):
+        """Delete user"""
+        user = User.query.get_or_404(user_id)
+
+        # Prevent deleting yourself
+        if user.id == current_user.id:
+            flash('No puedes eliminar tu propio usuario.', 'error')
+            return redirect(url_for('admin_users'))
+
+        username = user.username
+        db.session.delete(user)
+        db.session.commit()
+        flash(f'Usuario "{username}" eliminado.', 'success')
+        return redirect(url_for('admin_users'))
+
+    @app.route('/')
+    @login_required
+    def index():
+        # Get all companies for selector
+        companies = Company.query.all()
+        
+        # Get selected company from query parameter
+        company_id = request.args.get('company_id', type=int)
+        selected_company = None
+        if company_id:
+            selected_company = db.session.get(Company, company_id)
+        
+        # Get current year for filtering
+        today = now_mexico()
+        current_year = today.year
+        
+        # Get selected year from query parameter, default to current year
+        selected_year = request.args.get('year', type=int, default=current_year)
+        
+        # Base queries - filter by selected year
+        income_query = db.session.query(db.func.sum(Movement.amount)).filter(
+            Movement.type == 'INCOME',
+            extract('year', Movement.date) == selected_year
+        )
+        expenses_query = db.session.query(db.func.sum(Movement.amount)).filter(
+            Movement.type == 'EXPENSE',
+            extract('year', Movement.date) == selected_year
+        )
+        
+        # Apply company filter if selected
+        if company_id:
+            income_query = income_query.filter(Movement.company_id == company_id)
+            expenses_query = expenses_query.filter(Movement.company_id == company_id)
+        
+        # Calculate totals for current year
+        income = income_query.scalar() or 0
+        expenses = expenses_query.scalar() or 0
+        
+        # Calculate monthly statistics for selected year
+        current_month = today.month
+        monthly_data = []
+        month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        
+        # Calculate all 12 months for the selected year
+        for month_num in range(1, 13):
+            # Only include months up to current month if viewing current year
+            if selected_year == current_year and month_num > current_month:
+                continue
+                
+            # Income for this month
+            month_income_query = db.session.query(func.sum(Movement.amount)).filter(
+                Movement.type == 'INCOME',
+                extract('month', Movement.date) == month_num,
+                extract('year', Movement.date) == selected_year
+            )
+            
+            # Expenses for this month
+            month_expense_query = db.session.query(func.sum(Movement.amount)).filter(
+                Movement.type == 'EXPENSE',
+                extract('month', Movement.date) == month_num,
+                extract('year', Movement.date) == selected_year
+            )
+            
+            # Apply company filter
+            if company_id:
+                month_income_query = month_income_query.filter(Movement.company_id == company_id)
+                month_expense_query = month_expense_query.filter(Movement.company_id == company_id)
+            
+            month_income = month_income_query.scalar() or 0
+            month_expense = month_expense_query.scalar() or 0
+            
+            monthly_data.append({
+                'month': month_names[month_num - 1],
+                'income': float(month_income),
+                'expenses': float(month_expense),
+                'balance': float(month_income - month_expense)
+            })
+        
+        # Calculate annual statistics for selected year
+        annual_income_query = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.type == 'INCOME',
+            extract('year', Movement.date) == selected_year
+        )
+        annual_expense_query = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.type == 'EXPENSE',
+            extract('year', Movement.date) == selected_year
+        )
+        
+        if company_id:
+            annual_income_query = annual_income_query.filter(Movement.company_id == company_id)
+            annual_expense_query = annual_expense_query.filter(Movement.company_id == company_id)
+        
+        annual_income = annual_income_query.scalar() or 0
+        annual_expense = annual_expense_query.scalar() or 0
+        
+        # Calculate Inventory Value (Cost Price)
+        inventory_query = db.session.query(
+            func.sum(Product.current_stock * Product.cost_price)
+        ).filter(Product.active == True)
+        
+        if company_id:
+            inventory_query = inventory_query.filter(Product.company_id == company_id)
+            
+        inventory_value = inventory_query.scalar() or 0
+        
+        # Get available years from movements
+        years_query = db.session.query(
+            extract('year', Movement.date).label('year')
+        ).distinct().order_by(extract('year', Movement.date).desc())
+        
+        if company_id:
+            years_query = years_query.filter(Movement.company_id == company_id)
+        
+        available_years = [int(year[0]) for year in years_query.all() if year[0]]
+        if not available_years:
+            available_years = [current_year]
+        
+        return render_template('dashboard.html',
+            companies=companies,
+            selected_company=selected_company,
+            income=income,
+            expenses=expenses,
+            inventory_value=inventory_value,
+            monthly_data=monthly_data,
+            selected_year=selected_year,
+            available_years=available_years,
+            current_year=current_year,
+            annual_stats={
+                'year': selected_year,
+                'income': float(annual_income),
+                'expenses': float(annual_expense),
+                'balance': float(annual_income - annual_expense)
+            }
+        )
+
+    @app.route('/companies')
+    @login_required
+    def companies():
+        if current_user.is_admin:
+            companies_list = Company.query.order_by(Company.name).all()
+        else:
+            companies_list = current_user.get_accessible_companies()
+        return render_template('companies.html', companies=companies_list)
+
+    @app.route('/companies/add', methods=['POST'])
+    @login_required
+    def add_company():
+        rfc = request.form['rfc']
+        name = request.form['name']
+        postal_code = request.form.get('postal_code')
+        logo = request.files.get('logo')
+        
+        logo_path = None
+        if logo and logo.filename:
+            # Validar extensión
+            allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+            if '.' in logo.filename:
+                ext = logo.filename.rsplit('.', 1)[1].lower()
+                if ext in allowed_extensions:
+                    # Crear carpeta logos si no existe
+                    logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
+                    os.makedirs(logos_dir, exist_ok=True)
+                    
+                    # Guardar con nombre único (RFC)
+                    filename = f"{rfc}.{ext}"
+                    logo_path = os.path.join(logos_dir, filename)
+                    logo.save(logo_path)
+        
+        new_company = Company(
+            rfc=rfc, 
+            name=name,
+            postal_code=postal_code,
+            logo_path=logo_path
+        )
+        db.session.add(new_company)
+        db.session.commit()
+        
+        return redirect(url_for('companies'))
+
+    @app.route('/companies/delete/<int:company_id>', methods=['POST'])
+    @login_required
+    def delete_company(company_id):
+        company = Company.query.get_or_404(company_id)
+        
+        try:
+            # Delete dependencies in order to respect FK constraints
+            
+            # 1. Delete Movements (referencing Invoice, Category, Company)
+            Movement.query.filter_by(company_id=company.id).delete()
+            
+            # 2. Delete Invoices (referencing Supplier, Company)
+            Invoice.query.filter_by(company_id=company.id).delete()
+            
+            # 3. Delete Suppliers (referencing Company)
+            Supplier.query.filter_by(company_id=company.id).delete()
+            
+            # 4. Delete Categories (referencing Company)
+            Category.query.filter_by(company_id=company.id).delete()
+
+            # 5. Delete Inventory (Product referencing Company, Transaction referencing Product)
+            # Need to find products first to delete transactions
+            products = Product.query.filter_by(company_id=company.id).all()
+            for p in products:
+                InventoryTransaction.query.filter_by(product_id=p.id).delete()
+            Product.query.filter_by(company_id=company.id).delete()
+            
+            # 6. Delete TaxPayments (referencing Company)
+            TaxPayment.query.filter_by(company_id=company.id).delete()
+            
+            # 7. Delete Company
+            db.session.delete(company)
+            
+            db.session.commit()
+            flash('Empresa y todos sus datos eliminados correctamente.', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al eliminar empresa: {str(e)}', 'error')
+            
+        return redirect(url_for('companies'))
+
+    @app.route('/companies/edit/<int:company_id>', methods=['GET', 'POST'])
+    @login_required
+    def edit_company(company_id):
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'POST':
+            company.rfc = request.form['rfc']
+            company.name = request.form['name']
+            company.postal_code = request.form.get('postal_code')
+            
+            # Manejar logo
+            logo = request.files.get('logo')
+            if logo and logo.filename:
+                allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+                if '.' in logo.filename:
+                    ext = logo.filename.rsplit('.', 1)[1].lower()
+                    if ext in allowed_extensions:
+                        logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
+                        os.makedirs(logos_dir, exist_ok=True)
+                        
+                        # Eliminar logo anterior si existe
+                        if company.logo_path and os.path.exists(company.logo_path):
+                            try:
+                                os.remove(company.logo_path)
+                            except:
+                                pass
+                        
+                        filename = f"{company.rfc}.{ext}"
+                        logo_path = os.path.join(logos_dir, filename)
+                        logo.save(logo_path)
+                        company.logo_path = logo_path
+            
+            try:
+                db.session.commit()
+                flash('Empresa actualizada correctamente.', 'success')
+                return redirect(url_for('companies'))
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Error al actualizar empresa: {str(e)}', 'error')
+                
+        return render_template('edit_company.html', company=company)
+
+    @app.route('/companies/sync/<int:company_id>', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('sync')
+    def sync_company(company_id):
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'GET':
+            from datetime import datetime, timedelta
+            
+            # Get last invoice date
+            last_invoice_date = db.session.query(db.func.max(Invoice.date)).filter_by(company_id=company.id).scalar()
+            
+            if last_invoice_date:
+                # Start from the last invoice date to ensure we catch any late arrivals for that day
+                start_date = last_invoice_date.strftime('%Y-%m-%d')
+            else:
+                # Default to 30 days ago
+                start_date = (now_mexico() - timedelta(days=30)).strftime('%Y-%m-%d')
+                
+            end_date = now_mexico().strftime('%Y-%m-%d')
+            
+            return render_template('sync.html', company=company, start_date=start_date, end_date=end_date)
+        
+        if request.method == 'POST':
+            start_date_str = request.form['start_date']
+            end_date_str = request.form['end_date']
+            
+            # Enforce FIEL usage
+            fiel_password = request.form['fiel_password']
+            fiel_cer = request.files['fiel_cer']
+            fiel_key = request.files['fiel_key']
+
+            # Save temporary files
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.cer') as tmp_cer:
+                fiel_cer.save(tmp_cer.name)
+                cer_path = tmp_cer.name
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.key') as tmp_key:
+                fiel_key.save(tmp_key.name)
+                key_path = tmp_key.name
+
+            sat_service = SATService(
+                rfc=company.rfc,
+                fiel_cer=cer_path,
+                fiel_key=key_path,
+                fiel_password=fiel_password
+            )
+
+        try:
+            from datetime import datetime
+            import re
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            
+            # Download both Received and Emitted invoices
+            received_invoices = sat_service.download_received_invoices(start_date, end_date)
+            emitted_invoices = sat_service.download_emitted_invoices(start_date, end_date)
+            
+            all_invoices = received_invoices + emitted_invoices
+            
+            # Create folder structure for saving invoices
+            # Sanitize company name for use in folder names
+            safe_company_name = re.sub(r'[<>:"/\\|?*]', '_', company.name)
+            invoices_folder = os.path.join(os.path.dirname(__file__), 'facturas', safe_company_name)
+            os.makedirs(invoices_folder, exist_ok=True)
+            
+            # Process invoices
+            count = 0
+            updated_count = 0
+            modified_details = []
+            files_saved = 0
+            
+            for inv_data in all_invoices:
+                # Save XML to file first (always save/overwrite to ensure latest version)
+                xml_filename = f"{inv_data['uuid']}.xml"
+                xml_filepath = os.path.join(invoices_folder, xml_filename)
+                
+                # Always write the file to ensure we have the exact version from SAT
+                with open(xml_filepath, 'w', encoding='utf-8') as xml_file:
+                    xml_file.write(inv_data['xml'])
+                files_saved += 1
+                
+                # Check if exists in database
+                existing_inv = Invoice.query.filter_by(uuid=inv_data['uuid']).first()
+                
+                if existing_inv:
+                    # Check for changes in existing invoice
+                    changes = []
+                    
+                    # --- Comprobante Changes ---
+                    if abs(existing_inv.total - inv_data['total']) > 0.01:
+                        changes.append(f"Comprobante: Total ({existing_inv.total} -> {inv_data['total']})")
+                    
+                    # Check string fields (handling None)
+                    if (existing_inv.serie or '') != (inv_data.get('serie') or ''):
+                        changes.append(f"Comprobante: Serie ({existing_inv.serie} -> {inv_data.get('serie')})")
+                    if (existing_inv.folio or '') != (inv_data.get('folio') or ''):
+                        changes.append(f"Comprobante: Folio ({existing_inv.folio} -> {inv_data.get('folio')})")
+                        
+                    # --- Emisor Changes ---
+                    # Name is often slightly different in encoding, maybe skip strict check or normalize?
+                    # We will check strict for now as requested
+                    if (existing_inv.issuer_name or '') != (inv_data.get('issuer_name') or ''):
+                        changes.append(f"Emisor: Nombre")
+                    if (existing_inv.regimen_fiscal_emisor or '') != (inv_data.get('regimen_fiscal_emisor') or ''):
+                         changes.append(f"Emisor: Régimen Fiscal")
+
+                    # --- Receptor Changes ---
+                    if (existing_inv.receiver_name or '') != (inv_data.get('receiver_name') or ''):
+                        changes.append(f"Receptor: Nombre")
+                    if (existing_inv.domicilio_fiscal_receptor or '') != (inv_data.get('domicilio_fiscal_receptor') or ''):
+                         changes.append(f"Receptor: Domicilio")
+                    if (existing_inv.regimen_fiscal_receptor or '') != (inv_data.get('regimen_fiscal_receptor') or ''):
+                         changes.append(f"Receptor: Régimen Fiscal")
+
+                    # --- Timbre (SAT) Changes ---
+                    # Check if 'fecha_timbrado' matches (aware of timezone offset issues in naive comparison, but typically exact match expected)
+                    # We compare string ISO format if strictly needed, or datetime objects
+                    # If existing is None, it's an update, not a "change" in strict sense but good to note
+                    if existing_inv.fecha_timbrado != inv_data.get('fecha_timbrado'):
+                         changes.append(f"Timbre: Fecha Timbrado")
+                    
+                    if changes:
+                        # Update the record
+                        existing_inv.xml_content = inv_data['xml']
+                        existing_inv.total = inv_data['total']
+                        existing_inv.subtotal = inv_data['subtotal']
+                        existing_inv.tax = inv_data['tax']
+                        existing_inv.issuer_name = inv_data.get('issuer_name')
+                        existing_inv.receiver_name = inv_data.get('receiver_name')
+                        existing_inv.serie = inv_data.get('serie')
+                        existing_inv.folio = inv_data.get('folio')
+                        existing_inv.lugar_expedicion = inv_data.get('lugar_expedicion')
+                        existing_inv.no_certificado = inv_data.get('no_certificado')
+                        existing_inv.sello = inv_data.get('sello')
+                        existing_inv.certificado = inv_data.get('certificado')
+                        existing_inv.regimen_fiscal_emisor = inv_data.get('regimen_fiscal_emisor')
+                        existing_inv.regimen_fiscal_receptor = inv_data.get('regimen_fiscal_receptor')
+                        existing_inv.domicilio_fiscal_receptor = inv_data.get('domicilio_fiscal_receptor')
+                        existing_inv.fecha_timbrado = inv_data.get('fecha_timbrado')
+                        existing_inv.rfc_prov_certif = inv_data.get('rfc_prov_certif')
+                        existing_inv.sello_sat = inv_data.get('sello_sat')
+                        existing_inv.no_certificado_sat = inv_data.get('no_certificado_sat')
+                        # Also update version/payment terms if needed
+                        existing_inv.version = inv_data.get('version')
+                        existing_inv.payment_terms = inv_data.get('payment_terms')
+                        
+                        updated_count += 1
+                        modified_details.append(f"Factura {inv_data['uuid']} ({inv_data['date'].strftime('%Y-%m-%d') if inv_data['date'] else '?'}): {', '.join(changes)}")
+
+                else:
+                    # Create NEW Invoice
+                    # Determine Movement Type
+                    is_emitted = (inv_data['issuer_rfc'] == company.rfc)
+                    mov_type = 'INCOME' if is_emitted else 'EXPENSE'
+                    
+                    # For received invoices (expenses), create/update supplier
+                    supplier_id = None
+                    if not is_emitted:
+                        supplier = get_or_create_supplier(
+                            company_id=company.id,
+                            rfc=inv_data['issuer_rfc'],
+                            business_name=inv_data.get('issuer_name')
+                        )
+                        supplier_id = supplier.id
+                    
+                    new_inv = Invoice(
+                        uuid=inv_data['uuid'],
+                        company_id=company.id,
+                        supplier_id=supplier_id,
+                        date=inv_data['date'],
+                        total=inv_data['total'],
+                        subtotal=inv_data['subtotal'],
+                        tax=inv_data['tax'],
+                        type=inv_data['type'],
+                        issuer_rfc=inv_data['issuer_rfc'],
+                        issuer_name=inv_data.get('issuer_name'),
+                        receiver_rfc=inv_data['receiver_rfc'],
+                        receiver_name=inv_data.get('receiver_name'),
+                        forma_pago=inv_data.get('forma_pago'),
+                        metodo_pago=inv_data.get('metodo_pago'),
+                        uso_cfdi=inv_data.get('uso_cfdi'),
+                        descripcion=inv_data.get('descripcion'),
+                        xml_content=inv_data['xml'],
+                        # Standard fields
+                        periodicity=inv_data.get('periodicity'),
+                        months=inv_data.get('months'),
+                        fiscal_year=inv_data.get('fiscal_year'),
+                        payment_terms=inv_data.get('payment_terms'),
+                        currency=inv_data.get('currency'),
+                        exchange_rate=inv_data.get('exchange_rate'),
+                        exportation=inv_data.get('exportation'),
+                        version=inv_data.get('version'),
+                        # --- New Fields for Granular Tracking ---
+                        # Comprobante
+                        serie=inv_data.get('serie'),
+                        folio=inv_data.get('folio'),
+                        lugar_expedicion=inv_data.get('lugar_expedicion'),
+                        no_certificado=inv_data.get('no_certificado'),
+                        sello=inv_data.get('sello'),
+                        certificado=inv_data.get('certificado'),
+                        # Emisor
+                        regimen_fiscal_emisor=inv_data.get('regimen_fiscal_emisor'),
+                        # Receptor
+                        regimen_fiscal_receptor=inv_data.get('regimen_fiscal_receptor'),
+                        domicilio_fiscal_receptor=inv_data.get('domicilio_fiscal_receptor'),
+                        # Timbre
+                        fecha_timbrado=inv_data.get('fecha_timbrado'),
+                        rfc_prov_certif=inv_data.get('rfc_prov_certif'),
+                        sello_sat=inv_data.get('sello_sat'),
+                        no_certificado_sat=inv_data.get('no_certificado_sat')
+                    )
+                    db.session.add(new_inv)
+                    
+                    if supplier_id:
+                        update_supplier_stats(supplier_id)
+                    
+                    # Movement creation logic
+                    metodo_pago = inv_data.get('metodo_pago', 'PUE')
+                    if metodo_pago != 'PPD':
+                        new_mov = Movement(
+                            invoice=new_inv,
+                            company_id=company.id,
+                            amount=inv_data['total'],
+                            type=mov_type,
+                            description=f"Factura {inv_data['issuer_rfc'] if not is_emitted else inv_data['receiver_rfc']}",
+                            date=inv_data['date']
+                        )
+                        db.session.add(new_mov)
+                    count += 1
+            
+            db.session.commit()
+            
+            # Construct summary message
+            messages = []
+            if count > 0:
+                messages.append(f"{count} facturas nuevas importadas.")
+            if updated_count > 0:
+                messages.append(f"{updated_count} facturas existentes actualizadas.")
+            
+            if modified_details:
+                # Show first 5 details if many
+                details_text = "<br>".join(modified_details[:5])
+                if len(modified_details) > 5:
+                    details_text += f"<br>... y {len(modified_details)-5} más."
+                flash(f"Sincronización finalizada.<br>{' '.join(messages)}<br><strong>Cambios detectados:</strong><br>{details_text}", 'warning' if updated_count > 0 else 'success')
+            elif count > 0:
+                flash(f"Sincronización completada. {count} facturas nuevas.", 'success')
+            else:
+                flash("Sincronización al día. No se encontraron cambios ni facturas nuevas.", 'success')
+            
+        except SATError as sat_e:
+            import traceback
+            traceback.print_exc()
+            # SATError contains detailed user-friendly messages with suggested actions
+            user_message = sat_e.get_user_message()
+            logger.error(f'SAT error for company {company.rfc}: Code={sat_e.code}, Message={sat_e.mensaje}, Raw={sat_e.raw_message}')
+            flash(user_message, 'error')
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # Translate technical errors to user-friendly messages
+            error_str = str(e).lower()
+            if 'invalid fiel' in error_str or 'password' in error_str or 'decrypt' in error_str:
+                user_message = 'La contraseña FIEL es incorrecta o los archivos no son válidos.'
+            elif 'certificado' in error_str or 'certificate' in error_str or 'expired' in error_str:
+                user_message = 'El certificado FIEL está expirado o no es válido.'
+            elif 'timeout' in error_str or 'connection' in error_str:
+                user_message = 'No se pudo conectar con el SAT. Por favor intente más tarde.'
+            elif 'binding parameter' in error_str or 'programming' in error_str:
+                user_message = 'Hubo un problema procesando las facturas. Por favor contacte soporte técnico.'
+            else:
+                user_message = 'Ocurrió un error durante la sincronización. Por favor intente nuevamente.'
+            
+            # Log technical error for debugging
+            logger.error(f'Sync error for company {company.rfc}: {str(e)}')
+            flash(user_message, 'error')
+        finally:
+            # Cleanup temp files
+            if 'cer_path' in locals() and os.path.exists(cer_path):
+                os.remove(cer_path)
+            if 'key_path' in locals() and os.path.exists(key_path):
+                os.remove(key_path)
+            
+        return redirect(url_for('companies'))
+
+    @app.route('/companies/csf/<int:company_id>', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('sync')
+    def download_csf_route(company_id):
+        flash('La descarga de CSF (Constancia de Situación Fiscal) no está disponible actualmente.', 'warning')
+        return redirect(url_for('companies'))
+    
+    # Original CSF logic removed as CIEC is not supported
+    #     company = Company.query.get_or_404(company_id)
+    #     if request.method == 'GET':
+    #         return render_template('csf_auth.html', company=company)
+    #     ...
+
+    @app.route('/invoices/<uuid>/download/<file_type>')
+    @login_required
+    def download_invoice_file(uuid, file_type):
+        """
+        Descarga el archivo XML o genera y descarga PDF de una factura.
+        
+        Args:
+            uuid: UUID de la factura
+            file_type: 'xml' o 'pdf'
+        """
+        invoice = Invoice.query.filter_by(uuid=uuid).first_or_404()
+
+        # IDOR protection: only allow download if the user has the 'invoices'
+        # permission on the company that owns this invoice. Global admins pass.
+        from flask import abort
+        if not current_user.has_company_perm(invoice.company_id, 'invoices'):
+            abort(403)
+
+        if file_type == 'xml':
+            # Servir XML almacenado
+            return Response(
+                invoice.xml_content,
+                mimetype='application/xml',
+                headers={'Content-Disposition': f'attachment; filename={uuid}.xml'}
+            )
+        elif file_type == 'pdf':
+            # Generar PDF bajo demanda desde el XML usando satcfdi
+            try:
+                # Genera PDF usando satcfdi (genera PDFs profesionales de alta calidad)
+                pdf_bytes = SATService.generate_pdf(invoice.xml_content)
+                
+                return Response(
+                    pdf_bytes,
+                    mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename={uuid}.pdf'}
+                )
+            except Exception as e:
+                logger.error(f'Error generando PDF para factura {uuid}: {str(e)}')
+                flash('Error al generar el PDF. Por favor intente nuevamente.', 'error')
+                # Validate referrer to prevent open-redirect.
+                return redirect(safe_redirect_target(request.referrer, url_for('index')))
+        else:
+            from flask import abort
+            abort(400)
+
+    @app.route('/logos/<filename>')
+    def serve_logo(filename):
+        """Servir archivos de logos de empresas"""
+        from flask import send_from_directory
+        logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
+        return send_from_directory(logos_dir, filename)
+
+
+    @app.route('/movements')
+    @login_required
+    def movements():
+        """Redirect to unified search/movements page"""
+        return redirect(url_for('search_advanced'))
+    
+    @app.route('/companies/<int:company_id>/movements')
+    @login_required
+    def company_movements(company_id):
+        """Redirect to unified search page for specific company"""
+        return redirect(url_for('search_invoices', company_id=company_id))
+    
+    @app.route('/sync')
+    @login_required
+    def sync_list():
+        """Show list of companies to sync"""
+        companies_list = current_user.accessible_companies_with_perm('sync')
+        return render_template('sync_list.html', companies=companies_list)
+
+    @app.route('/categories')
+    @login_required
+    def categories_list():
+        """Show list of companies to manage categories"""
+        companies_list = current_user.accessible_companies_with_perm('inventory', 'inventory_admin')
+        return render_template('categories_list.html', companies=companies_list)
+
+    @app.route('/suppliers')
+    @login_required
+    def suppliers_list():
+        """Show list of companies to manage suppliers"""
+        companies_list = current_user.accessible_companies_with_perm('inventory', 'inventory_admin')
+        return render_template('suppliers_list.html', companies=companies_list)
+
+    @app.route('/search/advanced')
+    @login_required
+    def search_advanced():
+        """Show list of companies for advanced search"""
+        companies_list = current_user.accessible_companies_with_perm('invoices')
+        return render_template('search_list.html', companies=companies_list)
+
+    @app.route('/taxes')
+    @login_required
+    def taxes_list():
+        """Show list of companies for tax calculations"""
+        companies_list = current_user.accessible_companies_with_perm('taxes')
+        return render_template('taxes_list.html', companies=companies_list)
+
+    # ==================== SUPPLIER ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/suppliers')
+    @login_required
+    @require_company_perm('inventory', 'inventory_admin')
+    def suppliers(company_id):
+        """Lista de proveedores con estadísticas"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Filtros
+        search = request.args.get('search', '')
+        sort_by = request.args.get('sort', 'total')  # total, name, count
+        
+        query = Supplier.query.filter_by(company_id=company_id, active=True)
+        
+        if search:
+            query = query.filter(
+                db.or_(
+                    Supplier.business_name.ilike(f'%{search}%'),
+                    Supplier.rfc.ilike(f'%{search}%')
+                )
+            )
+        
+        if sort_by == 'total':
+            query = query.order_by(Supplier.total_invoiced.desc())
+        elif sort_by == 'name':
+            query = query.order_by(Supplier.business_name)
+        elif sort_by == 'count':
+            query = query.order_by(Supplier.invoice_count.desc())
+        
+        suppliers_list = query.all()
+        
+        # Estadísticas generales
+        total_suppliers = len(suppliers_list)
+        total_spent = sum(s.total_invoiced for s in suppliers_list)
+        
+        return render_template('suppliers/list.html',
+            company=company,
+            suppliers=suppliers_list,
+            total_suppliers=total_suppliers,
+            total_spent=total_spent,
+            search=search,
+            sort_by=sort_by
+        )
+    
+    @app.route('/companies/<int:company_id>/suppliers/<int:supplier_id>')
+    @login_required
+    @require_company_perm('inventory', 'inventory_admin')
+    def supplier_detail(company_id, supplier_id):
+        """Detalle de un proveedor específico con sus facturas"""
+        company = Company.query.get_or_404(company_id)
+        supplier = Supplier.query.get_or_404(supplier_id)
+        
+        # Verificar que el proveedor pertenece a esta empresa
+        if supplier.company_id != company_id:
+            flash('Proveedor no encontrado', 'error')
+            return redirect(url_for('suppliers', company_id=company_id))
+        
+        # Facturas del proveedor
+        invoices = Invoice.query.filter_by(
+            company_id=company_id,
+            supplier_id=supplier_id
+        ).order_by(Invoice.date.desc()).all()
+        
+        # Tendencia mensual
+        monthly_data = db.session.query(
+            extract('year', Invoice.date).label('year'),
+            extract('month', Invoice.date).label('month'),
+            func.sum(Invoice.total).label('total'),
+            func.count(Invoice.id).label('count')
+        ).filter(
+            Invoice.company_id == company_id,
+            Invoice.supplier_id == supplier_id
+        ).group_by('year', 'month').order_by('year', 'month').all()
+        
+        return render_template('suppliers/detail.html',
+            company=company,
+            supplier=supplier,
+            invoices=invoices,
+            monthly_data=monthly_data
+        )
+    
+    # ==================== CATEGORY ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/categories')
+    @login_required
+    @require_company_perm('inventory', 'inventory_admin')
+    def categories(company_id):
+        """Gestión de categorías"""
+        company = Company.query.get_or_404(company_id)
+        
+        income_categories = Category.query.filter_by(
+            company_id=company_id,
+            type='INCOME',
+            active=True
+        ).all()
+        
+        expense_categories = Category.query.filter_by(
+            company_id=company_id,
+            type='EXPENSE',
+            active=True
+        ).all()
+        
+        return render_template('categories/list.html',
+            company=company,
+            income_categories=income_categories,
+            expense_categories=expense_categories
+        )
+    
+    @app.route('/companies/<int:company_id>/categories/create', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('inventory_admin')
+    def create_category(company_id):
+        """Crear nueva categoría"""
+        company = Company.query.get_or_404(company_id)
+        
+        if request.method == 'POST':
+            name = request.form.get('name')
+            cat_type = request.form.get('type')
+            description = request.form.get('description')
+            color = request.form.get('color', '#6c757d')
+            
+            category = Category(
+                company_id=company_id,
+                name=name,
+                type=cat_type,
+                description=description,
+                color=color,
+                is_default=False
+            )
+            
+            db.session.add(category)
+            db.session.commit()
+            
+            flash(f'Categoría "{name}" creada exitosamente', 'success')
+            return redirect(url_for('categories', company_id=company_id))
+        
+        return render_template('categories/create.html', company=company)
+    
+    @app.route('/companies/<int:company_id>/categories/<int:category_id>/edit', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('inventory_admin')
+    def edit_category(company_id, category_id):
+        """Editar categoría existente"""
+        company = Company.query.get_or_404(company_id)
+        category = Category.query.get_or_404(category_id)
+        
+        if category.company_id != company_id:
+            flash('Categoría no encontrada', 'error')
+            return redirect(url_for('categories', company_id=company_id))
+        
+        if request.method == 'POST':
+            category.name = request.form.get('name')
+            category.description = request.form.get('description')
+            category.color = request.form.get('color')
+            
+            db.session.commit()
+            flash(f'Categoría "{category.name}" actualizada', 'success')
+            return redirect(url_for('categories', company_id=company_id))
+        
+
+    
+
+    # ==================== PPD MANAGEMENT ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/ppd')
+    @login_required
+    @require_company_perm('ppd', 'invoices')
+    def ppd_list(company_id):
+        """Gestión de facturas PPD (Pago en Parcialidades o Diferido)"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Facturas PPD pendientes (no acreditadas)
+        pending_invoices = Invoice.query.filter(
+            Invoice.company_id == company_id,
+            Invoice.metodo_pago == 'PPD',
+            Invoice.ppd_acreditado == False
+        ).order_by(Invoice.date.asc()).all()
+        
+        # Facturas PPD ya acreditadas
+        accredited_invoices = Invoice.query.filter(
+            Invoice.company_id == company_id,
+            Invoice.metodo_pago == 'PPD',
+            Invoice.ppd_acreditado == True
+        ).order_by(Invoice.ppd_anio_acreditado.desc(), Invoice.ppd_mes_acreditado.desc()).all()
+        
+        # Get selected invoice from query param for highlighting
+        selected_invoice_id = request.args.get('invoice_id', type=int)
+        
+        from datetime import datetime
+        return render_template('ppd/list.html',
+            company=company,
+            pending_invoices=pending_invoices,
+            accredited_invoices=accredited_invoices,
+            selected_invoice_id=selected_invoice_id,
+            current_year=now_mexico().year
+        )
+
+    @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/acreditar', methods=['POST'])
+    @login_required
+    @require_company_perm('ppd', 'invoices')
+    def ppd_acreditar(company_id, invoice_id):
+        """Acreditar una factura PPD a un mes específico"""
+        company = Company.query.get_or_404(company_id)
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        if invoice.metodo_pago != 'PPD':
+            flash('Solo se pueden acreditar facturas PPD', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        mes = request.form.get('mes_acreditado', type=int)
+        anio = request.form.get('anio_acreditado', type=int)
+        
+        if not mes or not anio:
+            flash('Debe seleccionar mes y año', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        try:
+            from datetime import datetime
+            
+            # 1. Update Invoice status
+            invoice.ppd_acreditado = True
+            invoice.ppd_mes_acreditado = mes
+            invoice.ppd_anio_acreditado = anio
+            invoice.ppd_fecha_acreditacion = now_mexico()
+            
+            # 2. Create Movement
+            # Set date to the 1st of the accredited month/year so it appears in that month's reports
+            movement_date = datetime(anio, mes, 1)
+            
+            # Determine type (Ingreso/Egreso)
+            is_emitted = (invoice.issuer_rfc == company.rfc)
+            mov_type = 'INCOME' if is_emitted else 'EXPENSE'
+            
+            description = f"Factura PPD {invoice.uuid[:8]}... (Acreditada en {mes}/{anio})"
+            
+            new_mov = Movement(
+                invoice=invoice,
+                company_id=company.id,
+                amount=invoice.total,
+                type=mov_type,
+                description=description,
+                date=movement_date,
+                source='manual_ppd'
+            )
+            db.session.add(new_mov)
+            
+            db.session.commit()
+            flash('Factura acreditada correctamente.', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al acreditar factura: {str(e)}', 'error')
+            
+        return redirect(url_for('ppd_list', company_id=company_id))
+
+    @app.route('/companies/<int:company_id>/ppd/<int:invoice_id>/desacreditar', methods=['POST'])
+    @login_required
+    @require_company_perm('ppd', 'invoices')
+    def ppd_desacreditar(company_id, invoice_id):
+        """Remover acreditación de una factura PPD"""
+        company = Company.query.get_or_404(company_id)
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('ppd_list', company_id=company_id))
+            
+        try:
+            # 1. Delete associated Movement
+            if invoice.movement:
+                db.session.delete(invoice.movement)
+            else:
+                # Fallback if relationship is not set but movement exists (search manually)
+                Movement.query.filter_by(invoice_id=invoice.id).delete()
+            
+            # 2. Reset Invoice status
+            invoice.ppd_acreditado = False
+            invoice.ppd_mes_acreditado = None
+            invoice.ppd_anio_acreditado = None
+            invoice.ppd_fecha_acreditacion = None
+            
+            db.session.commit()
+            flash('Acreditación removida correctamente.', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al remover acreditación: {str(e)}', 'error')
+            
+        return redirect(url_for('ppd_list', company_id=company_id))
+
+    # ==================== INVENTORY ROUTES ====================
+
+    @app.route('/inventory')
+    @login_required
+    def inventory_companies_list():
+        """Show list of companies for inventory management"""
+        companies_list = current_user.accessible_companies_with_perm('inventory', 'inventory_admin')
+        return render_template('inventory_list_companies.html', companies=companies_list)
+
+    @app.route('/companies/<int:company_id>/inventory')
+    @login_required
+    def inventory_list(company_id):
+        """Listado de productos e inventario con tabs"""
+        company = Company.query.get_or_404(company_id)
+
+        # Asegurar categorías por defecto
+        _ensure_default_product_categories(company_id)
+
+        # Obtener el tab activo desde URL params
+        active_tab = request.args.get('tab', 'products')
+
+        # Cargar categorías de producto
+        product_categories = ProductCategory.query.filter_by(company_id=company_id, active=True).order_by(ProductCategory.name).all()
+
+        # Cargar productos con filtro opcional por categoría
+        products_query = Product.query.filter_by(company_id=company_id, active=True)
+        category_filter = request.args.get('category_id', type=int)
+        if category_filter:
+            products_query = products_query.filter(Product.category_id == category_filter)
+        products = products_query.order_by(Product.name).all()
+        total_inventory_value = sum(p.current_stock * p.cost_price for p in products)
+        total_items = sum(p.current_stock for p in products)
+
+        # Cargar laboratorios
+        laboratories = Laboratory.query.filter_by(company_id=company_id).order_by(Laboratory.name).all()
+
+        # Cargar proveedores
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+
+        # Cargar ordenes de compra
+        purchase_orders = PurchaseOrder.query.filter_by(company_id=company_id).order_by(PurchaseOrder.created_at.desc()).all()
+
+        # Cargar ordenes de salida
+        exit_orders = ExitOrder.query.filter_by(company_id=company_id).order_by(ExitOrder.created_at.desc()).all()
+
+        # Cargar servicios
+        services = Service.query.filter_by(company_id=company_id).order_by(Service.name).all()
+
+        # Cargar plantillas de factura
+        invoice_templates = InvoiceTemplate.query.filter_by(company_id=company_id).order_by(InvoiceTemplate.name).all()
+
+        # Alertas de caducidad - productos que vencen en los proximos 90 dias
+        today = now_mexico().date()
+        expiring_soon_date = today + timedelta(days=90)
+        expiring_batches = db.session.query(ProductBatch, Product).join(Product).filter(
+            Product.company_id == company_id,
+            ProductBatch.current_stock > 0,
+            ProductBatch.expiration_date != None,
+            ProductBatch.expiration_date <= expiring_soon_date
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        # Separar por urgencia
+        expired_batches = [(b, p) for b, p in expiring_batches if b.expiration_date < today]
+        critical_batches = [(b, p) for b, p in expiring_batches if today <= b.expiration_date <= today + timedelta(days=30)]
+        warning_batches = [(b, p) for b, p in expiring_batches if today + timedelta(days=30) < b.expiration_date <= expiring_soon_date]
+
+        # Solicitudes de inventario
+        pending_requests_count = InventoryRequest.query.filter_by(
+            company_id=company_id, status='PENDING'
+        ).count()
+
+        if current_user.is_admin:
+            inventory_requests = InventoryRequest.query.filter_by(
+                company_id=company_id
+            ).order_by(InventoryRequest.created_at.desc()).limit(50).all()
+        else:
+            inventory_requests = InventoryRequest.query.filter_by(
+                company_id=company_id, created_by_id=current_user.id
+            ).order_by(InventoryRequest.created_at.desc()).limit(50).all()
+
+        # Permisos del usuario para la empresa
+        perms = current_user.get_company_permissions(company_id) if not current_user.is_admin else {}
+
+        return render_template('inventory/list.html',
+                               company=company,
+                               products=products,
+                               total_inventory_value=total_inventory_value,
+                               total_items=total_items,
+                               laboratories=laboratories,
+                               suppliers=suppliers,
+                               purchase_orders=purchase_orders,
+                               exit_orders=exit_orders,
+                               services=services,
+                               invoice_templates=invoice_templates,
+                               active_tab=active_tab,
+                               expired_batches=expired_batches,
+                               critical_batches=critical_batches,
+                               warning_batches=warning_batches,
+                               today=today,
+                               pending_requests_count=pending_requests_count,
+                               inventory_requests=inventory_requests,
+                               perms=perms,
+                               product_categories=product_categories,
+                               category_filter=category_filter)
+
+    @app.route('/companies/<int:company_id>/inventory/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_product(company_id):
+        """Agregar nuevo producto"""
+        company = Company.query.get_or_404(company_id)
+        form = ProductForm()
+
+        # Cargar opciones de laboratorios, proveedores y categorías
+        laboratories = Laboratory.query.filter_by(company_id=company_id, active=True).order_by(Laboratory.name).all()
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        categories = ProductCategory.query.filter_by(company_id=company_id, active=True).order_by(ProductCategory.name).all()
+
+        form.laboratory_id.choices = [(0, '-- Sin laboratorio --')] + [(l.id, l.name) for l in laboratories]
+        form.preferred_supplier_id.choices = [(0, '-- Sin proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+        form.category_id.choices = [(0, '-- Sin categoría --')] + [(c.id, c.name) for c in categories]
+
+        if form.validate_on_submit():
+            new_product = Product(
+                company_id=company_id,
+                name=form.name.data,
+                sku=form.sku.data,
+                description=form.description.data,
+                category_id=form.category_id.data if form.category_id.data != 0 else None,
+                cost_price=form.cost_price.data or 0,
+                selling_price=form.selling_price.data or 0,
+                profit_margin=form.profit_margin.data or 0,
+                laboratory_id=form.laboratory_id.data if form.laboratory_id.data != 0 else None,
+                preferred_supplier_id=form.preferred_supplier_id.data if form.preferred_supplier_id.data != 0 else None,
+                current_stock=0,
+                min_stock_level=form.min_stock_level.data or 0,
+                # Empaque
+                packaging_type=form.packaging_type.data or None,
+                units_per_package=form.units_per_package.data or 1,
+                sell_by=form.sell_by.data,
+                # COFEPRIS Fields
+                is_controlled=form.is_controlled.data,
+                active_ingredient=form.active_ingredient.data,
+                presentation=form.presentation.data,
+                therapeutic_group=form.therapeutic_group.data,
+                unit_measure=form.unit_measure.data
+            )
+
+            db.session.add(new_product)
+            db.session.commit()
+            flash(f'Producto "{new_product.name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        return render_template('inventory/add.html', company=company, form=form)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_product(company_id, product_id):
+        """Editar producto"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+
+        if product.company_id != company_id:
+            flash('Producto no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        form = ProductForm(obj=product)
+
+        # Cargar opciones de laboratorios, proveedores y categorías
+        laboratories = Laboratory.query.filter_by(company_id=company_id, active=True).order_by(Laboratory.name).all()
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        categories = ProductCategory.query.filter_by(company_id=company_id, active=True).order_by(ProductCategory.name).all()
+
+        form.laboratory_id.choices = [(0, '-- Sin laboratorio --')] + [(l.id, l.name) for l in laboratories]
+        form.preferred_supplier_id.choices = [(0, '-- Sin proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+        form.category_id.choices = [(0, '-- Sin categoría --')] + [(c.id, c.name) for c in categories]
+
+        if form.validate_on_submit():
+            product.name = form.name.data
+            product.sku = form.sku.data
+            product.description = form.description.data
+            product.category_id = form.category_id.data if form.category_id.data != 0 else None
+            product.cost_price = form.cost_price.data or 0
+            product.selling_price = form.selling_price.data or 0
+            product.profit_margin = form.profit_margin.data or 0
+            product.laboratory_id = form.laboratory_id.data if form.laboratory_id.data != 0 else None
+            product.preferred_supplier_id = form.preferred_supplier_id.data if form.preferred_supplier_id.data != 0 else None
+            product.min_stock_level = form.min_stock_level.data or 0
+            # Empaque
+            product.packaging_type = form.packaging_type.data or None
+            product.units_per_package = form.units_per_package.data or 1
+            product.sell_by = form.sell_by.data
+            # COFEPRIS
+            product.sanitary_registration = form.sanitary_registration.data
+            product.is_controlled = form.is_controlled.data
+            product.active_ingredient = form.active_ingredient.data
+            product.presentation = form.presentation.data
+            product.therapeutic_group = form.therapeutic_group.data
+            product.unit_measure = form.unit_measure.data
+
+            db.session.commit()
+            flash(f'Producto "{product.name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        return render_template('inventory/edit.html', company=company, product=product, form=form)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/adjust', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def adjust_stock(company_id, product_id):
+        """Corrección manual de stock - solo para administradores"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+
+        if product.company_id != company_id:
+            flash('Producto no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        requires_batches = bool(product.category and product.category.requires_batch_tracking)
+        today = now_mexico().date()
+
+        active_batches = ProductBatch.query.filter(
+            ProductBatch.product_id == product.id,
+            ProductBatch.current_stock > 0,
+            ProductBatch.is_active == True
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        # All batches (for expiration date editing section)
+        all_batches = ProductBatch.query.filter(
+            ProductBatch.product_id == product.id,
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        if request.method == 'POST':
+            adjustment_type = request.form.get('type', 'IN')
+            quantity = request.form.get('quantity', type=int)
+            notes = request.form.get('notes', '').strip()
+
+            def render_form():
+                return render_template(
+                    'inventory/adjust.html',
+                    company=company,
+                    product=product,
+                    active_batches=active_batches,
+                    all_batches=all_batches,
+                    requires_batches=requires_batches,
+                    today=today,
+                )
+
+            if not notes:
+                flash('Debe escribir una nota explicando el motivo de la corrección.', 'error')
+                return render_form()
+
+            if not quantity or quantity <= 0:
+                flash('La cantidad debe ser mayor a cero.', 'error')
+                return render_form()
+
+            previous_stock = product.current_stock
+            batch = None
+
+            if adjustment_type == 'IN':
+                if requires_batches:
+                    batch_number = request.form.get('batch_number', '').strip()
+                    expiration_str = request.form.get('expiration_date', '').strip()
+
+                    if not batch_number:
+                        flash('Debe ingresar el número de lote.', 'error')
+                        return render_form()
+                    if not expiration_str:
+                        flash('Debe ingresar la fecha de caducidad.', 'error')
+                        return render_form()
+                    try:
+                        expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        flash('Fecha de caducidad inválida.', 'error')
+                        return render_form()
+
+                    existing = ProductBatch.query.filter_by(
+                        product_id=product.id,
+                        batch_number=batch_number,
+                        expiration_date=expiration_date
+                    ).first()
+
+                    if existing:
+                        existing.current_stock += quantity
+                        existing.initial_stock = (existing.initial_stock or 0) + quantity
+                        existing.is_active = True
+                        batch = existing
+                    else:
+                        batch = ProductBatch(
+                            product_id=product.id,
+                            batch_number=batch_number,
+                            expiration_date=expiration_date,
+                            initial_stock=quantity,
+                            current_stock=quantity,
+                            acquisition_date=now_mexico().date(),
+                            is_active=True,
+                        )
+                        db.session.add(batch)
+                        db.session.flush()
+
+                new_stock = previous_stock + quantity
+            else:
+                if requires_batches:
+                    batch_id = request.form.get('batch_id', type=int)
+                    if not batch_id:
+                        flash('Debe seleccionar el lote del que se descontará.', 'error')
+                        return render_form()
+
+                    batch = ProductBatch.query.filter_by(id=batch_id, product_id=product.id).first()
+                    if not batch:
+                        flash('Lote no encontrado.', 'error')
+                        return render_form()
+                    if quantity > batch.current_stock:
+                        flash(f'El lote seleccionado solo tiene {batch.current_stock} unidades.', 'error')
+                        return render_form()
+
+                    batch.current_stock -= quantity
+                    if batch.current_stock <= 0:
+                        batch.is_active = False
+
+                new_stock = max(0, previous_stock - quantity)
+
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                batch_id=batch.id if batch else None,
+                type='ADJUSTMENT',
+                quantity=quantity,
+                previous_stock=previous_stock,
+                new_stock=new_stock,
+                reference=f'Corrección Admin - {current_user.username}',
+                notes=f'[CORRECCIÓN ADMIN: {current_user.username}] {notes}',
+                created_by_id=current_user.id
+            )
+            db.session.add(transaction)
+            product.current_stock = new_stock
+            db.session.commit()
+
+            logger.info(f"Admin stock adjustment by {current_user.username}: product {product_id}, {previous_stock} -> {new_stock}, reason: {notes}")
+            flash(f'Corrección registrada. Stock: {previous_stock} → {new_stock}', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        return render_template(
+            'inventory/adjust.html',
+            company=company,
+            product=product,
+            active_batches=active_batches,
+            all_batches=all_batches,
+            requires_batches=requires_batches,
+            today=today,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/batch/<int:batch_id>/update-expiration', methods=['POST'])
+    @inventory_admin_required
+    def update_batch_expiration(company_id, product_id, batch_id):
+        """Actualizar fecha de caducidad de un lote - solo administradores"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+
+        if product.company_id != company_id:
+            flash('Producto no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        batch = ProductBatch.query.get_or_404(batch_id)
+        if batch.product_id != product.id:
+            flash('Lote no encontrado para este producto.', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        new_expiration_str = request.form.get('new_expiration_date', '').strip()
+        reason = request.form.get('reason', '').strip()
+
+        if not new_expiration_str:
+            flash('Debe ingresar la nueva fecha de caducidad.', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        if not reason or len(reason) < 5:
+            flash('Debe escribir el motivo del cambio (mínimo 5 caracteres).', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        try:
+            new_expiration = datetime.strptime(new_expiration_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Fecha de caducidad inválida.', 'error')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        old_expiration = batch.expiration_date
+        if old_expiration == new_expiration:
+            flash('La fecha de caducidad es la misma, no se realizaron cambios.', 'info')
+            return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+        # Update the expiration date
+        batch.expiration_date = new_expiration
+
+        # Log the change as an ADJUSTMENT transaction for audit trail
+        transaction = InventoryTransaction(
+            product_id=product.id,
+            batch_id=batch.id,
+            type='ADJUSTMENT',
+            quantity=0,
+            previous_stock=product.current_stock,
+            new_stock=product.current_stock,
+            reference=f'Cambio fecha caducidad - {current_user.username}',
+            notes=f'[CAMBIO CADUCIDAD: {current_user.username}] Lote {batch.batch_number}: {old_expiration.strftime("%d/%m/%Y")} → {new_expiration.strftime("%d/%m/%Y")} | Motivo: {reason}',
+            created_by_id=current_user.id
+        )
+        db.session.add(transaction)
+        db.session.commit()
+
+        logger.info(f"Admin batch expiration update by {current_user.username}: batch {batch.batch_number} (product {product_id}), {old_expiration} -> {new_expiration}, reason: {reason}")
+        flash(f'Fecha de caducidad del lote {batch.batch_number} actualizada: {old_expiration.strftime("%d/%m/%Y")} → {new_expiration.strftime("%d/%m/%Y")}', 'success')
+        return redirect(url_for('adjust_stock', company_id=company_id, product_id=product_id))
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/history')
+    @inventory_admin_required
+    def product_history(company_id, product_id):
+        """Historial de movimientos de un producto"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+
+        if product.company_id != company_id:
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        transactions = InventoryTransaction.query.filter_by(
+            product_id=product_id
+        ).order_by(InventoryTransaction.date.desc()).all()
+
+        return render_template('inventory/history.html', company=company, product=product, transactions=transactions)
+
+    @app.route('/companies/<int:company_id>/inventory/movements')
+    @inventory_admin_required
+    def inventory_movements(company_id):
+        """Registro completo de movimientos de inventario de la empresa"""
+        company = Company.query.get_or_404(company_id)
+
+        # Filtros opcionales por query string
+        type_filter = request.args.get('type', '')        # IN, OUT, ADJUSTMENT
+        product_filter = request.args.get('product_id', type=int)
+        date_from = request.args.get('date_from', '')
+        date_to = request.args.get('date_to', '')
+
+        query = (
+            InventoryTransaction.query
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(Product.company_id == company_id)
+            .order_by(InventoryTransaction.date.desc())
+        )
+
+        if type_filter:
+            query = query.filter(InventoryTransaction.type == type_filter)
+        if product_filter:
+            query = query.filter(InventoryTransaction.product_id == product_filter)
+        if date_from:
+            try:
+                dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(InventoryTransaction.date >= dt_from)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                dt_to = datetime.strptime(date_to, '%Y-%m-%d')
+                dt_to = dt_to.replace(hour=23, minute=59, second=59)
+                query = query.filter(InventoryTransaction.date <= dt_to)
+            except ValueError:
+                pass
+
+        transactions = query.limit(500).all()
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+
+        return render_template('inventory/movements.html',
+                               company=company,
+                               transactions=transactions,
+                               products=products,
+                               type_filter=type_filter,
+                               product_filter=product_filter,
+                               date_from=date_from,
+                               date_to=date_to)
+
+    @app.route('/companies/<int:company_id>/inventory/analytics')
+    @inventory_admin_required
+    def inventory_analytics(company_id):
+        """Análisis de inventario: ABC/Pareto, rotación y antigüedad de lotes."""
+        company = Company.query.get_or_404(company_id)
+
+        # Ventana configurable por query string (30 / 60 / 90 / 180 días)
+        try:
+            window_days = int(request.args.get('window', 90))
+        except (TypeError, ValueError):
+            window_days = 90
+        if window_days not in (30, 60, 90, 180, 365):
+            window_days = 90
+
+        today = now_mexico().date()
+        window_start = datetime.combine(today - timedelta(days=window_days), datetime.min.time())
+
+        # ----- Datos base -----
+        products = (Product.query
+                    .filter_by(company_id=company_id, active=True)
+                    .order_by(Product.name)
+                    .all())
+
+        # Salidas agregadas por producto en la ventana
+        out_by_product = dict(
+            db.session.query(
+                InventoryTransaction.product_id,
+                func.coalesce(func.sum(InventoryTransaction.quantity), 0)
+            )
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                InventoryTransaction.type == 'OUT',
+                InventoryTransaction.date >= window_start
+            )
+            .group_by(InventoryTransaction.product_id)
+            .all()
+        )
+
+        # Última fecha de OUT por producto (para detectar productos muertos)
+        last_out_by_product = dict(
+            db.session.query(
+                InventoryTransaction.product_id,
+                func.max(InventoryTransaction.date)
+            )
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                InventoryTransaction.type == 'OUT'
+            )
+            .group_by(InventoryTransaction.product_id)
+            .all()
+        )
+
+        # ----- ABC / Pareto -----
+        abc_rows = []
+        for p in products:
+            value = (p.current_stock or 0) * (p.cost_price or 0.0)
+            abc_rows.append({
+                'product': p,
+                'stock': p.current_stock or 0,
+                'cost': p.cost_price or 0.0,
+                'value': value,
+            })
+        abc_rows.sort(key=lambda r: r['value'], reverse=True)
+        total_value = sum(r['value'] for r in abc_rows) or 0.0
+        cum = 0.0
+        for r in abc_rows:
+            cum += r['value']
+            r['cumulative'] = cum
+            r['cum_pct'] = (cum / total_value * 100) if total_value > 0 else 0
+            r['value_pct'] = (r['value'] / total_value * 100) if total_value > 0 else 0
+            if r['cum_pct'] <= 80:
+                r['abc_class'] = 'A'
+            elif r['cum_pct'] <= 95:
+                r['abc_class'] = 'B'
+            else:
+                r['abc_class'] = 'C'
+
+        abc_summary = {
+            'A': {'count': sum(1 for r in abc_rows if r['abc_class'] == 'A'),
+                  'value': sum(r['value'] for r in abc_rows if r['abc_class'] == 'A')},
+            'B': {'count': sum(1 for r in abc_rows if r['abc_class'] == 'B'),
+                  'value': sum(r['value'] for r in abc_rows if r['abc_class'] == 'B')},
+            'C': {'count': sum(1 for r in abc_rows if r['abc_class'] == 'C'),
+                  'value': sum(r['value'] for r in abc_rows if r['abc_class'] == 'C')},
+            'total_value': total_value,
+            'total_count': len(abc_rows),
+        }
+
+        # ----- Rotación -----
+        # Clasificación basada en cobertura: si las salidas en la ventana cubren >= 1 stock actual → rápido
+        rotation_rows = []
+        for p in products:
+            qty_out = int(out_by_product.get(p.id, 0) or 0)
+            stock = p.current_stock or 0
+            last_out = last_out_by_product.get(p.id)
+            days_since_last = None
+            if last_out:
+                days_since_last = (now_mexico().replace(tzinfo=None) - last_out).days
+            # Tasa mensual estimada
+            monthly_rate = (qty_out / window_days * 30.0) if window_days > 0 else 0
+            # Cobertura: cuántas ventanas-de-tamaño-window puede cubrir el stock
+            coverage_ratio = (stock / qty_out) if qty_out > 0 else None
+            if qty_out == 0 and stock > 0:
+                rclass = 'dead'
+            elif qty_out >= stock and stock > 0:
+                rclass = 'fast'
+            elif qty_out > 0:
+                rclass = 'slow'
+            else:
+                rclass = 'empty'  # ni stock ni movimiento
+            rotation_rows.append({
+                'product': p,
+                'stock': stock,
+                'qty_out': qty_out,
+                'monthly_rate': monthly_rate,
+                'coverage_ratio': coverage_ratio,
+                'last_out': last_out,
+                'days_since_last': days_since_last,
+                'class': rclass,
+                'value_at_risk': stock * (p.cost_price or 0.0) if rclass == 'dead' else 0,
+            })
+
+        rotation_summary = {
+            'fast':  sum(1 for r in rotation_rows if r['class'] == 'fast'),
+            'slow':  sum(1 for r in rotation_rows if r['class'] == 'slow'),
+            'dead':  sum(1 for r in rotation_rows if r['class'] == 'dead'),
+            'empty': sum(1 for r in rotation_rows if r['class'] == 'empty'),
+            'value_at_risk': sum(r['value_at_risk'] for r in rotation_rows),
+        }
+        # Mostrar ordenados: dead primero (mayor valor en riesgo), luego slow, luego fast
+        rotation_rows.sort(key=lambda r: (
+            {'dead': 0, 'slow': 1, 'fast': 2, 'empty': 3}[r['class']],
+            -r['value_at_risk'],
+            -r['qty_out']
+        ))
+
+        # ----- Antigüedad de lotes -----
+        active_batches = (
+            db.session.query(ProductBatch, Product)
+            .join(Product, ProductBatch.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                ProductBatch.current_stock > 0
+            )
+            .order_by(ProductBatch.acquisition_date.asc())
+            .all()
+        )
+        aging_rows = []
+        for batch, p in active_batches:
+            acq = batch.acquisition_date
+            if acq is None:
+                continue
+            if hasattr(acq, 'date'):
+                acq_date = acq.date()
+            else:
+                acq_date = acq
+            days_in_stock = (today - acq_date).days
+            days_to_expire = (batch.expiration_date - today).days if batch.expiration_date else None
+            if days_in_stock >= 365:
+                bucket = 'over_year'
+            elif days_in_stock >= 180:
+                bucket = '180_365'
+            elif days_in_stock >= 90:
+                bucket = '90_180'
+            elif days_in_stock >= 30:
+                bucket = '30_90'
+            else:
+                bucket = 'fresh'
+            aging_rows.append({
+                'batch': batch,
+                'product': p,
+                'acq_date': acq_date,
+                'days_in_stock': days_in_stock,
+                'days_to_expire': days_to_expire,
+                'bucket': bucket,
+                'value': (batch.current_stock or 0) * (p.cost_price or 0.0),
+            })
+        aging_rows.sort(key=lambda r: r['days_in_stock'], reverse=True)
+        aging_summary = {
+            'over_year': sum(1 for r in aging_rows if r['bucket'] == 'over_year'),
+            '180_365':   sum(1 for r in aging_rows if r['bucket'] == '180_365'),
+            '90_180':    sum(1 for r in aging_rows if r['bucket'] == '90_180'),
+            '30_90':     sum(1 for r in aging_rows if r['bucket'] == '30_90'),
+            'fresh':     sum(1 for r in aging_rows if r['bucket'] == 'fresh'),
+            'old_value': sum(r['value'] for r in aging_rows if r['bucket'] in ('over_year', '180_365')),
+        }
+
+        return render_template(
+            'inventory/analytics.html',
+            company=company,
+            window_days=window_days,
+            abc_rows=abc_rows,
+            abc_summary=abc_summary,
+            rotation_rows=rotation_rows,
+            rotation_summary=rotation_summary,
+            aging_rows=aging_rows,
+            aging_summary=aging_summary,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/reorder')
+    @inventory_admin_required
+    def inventory_reorder(company_id):
+        """Sugerencia de reorden basada en consumo histórico × lead time."""
+        company = Company.query.get_or_404(company_id)
+
+        # Parámetros configurables
+        try:
+            lead_days = int(request.args.get('lead', 7))
+        except (TypeError, ValueError):
+            lead_days = 7
+        if lead_days < 1: lead_days = 1
+        if lead_days > 90: lead_days = 90
+
+        try:
+            window_days = int(request.args.get('window', 90))
+        except (TypeError, ValueError):
+            window_days = 90
+        if window_days not in (30, 60, 90, 180): window_days = 90
+
+        try:
+            target_days = int(request.args.get('target', 30))  # Cuántos días de stock objetivo después de reponer
+        except (TypeError, ValueError):
+            target_days = 30
+        if target_days < 7: target_days = 7
+        if target_days > 180: target_days = 180
+
+        today = now_mexico().date()
+        window_start = datetime.combine(today - timedelta(days=window_days), datetime.min.time())
+
+        products = (Product.query
+                    .filter_by(company_id=company_id, active=True)
+                    .order_by(Product.name)
+                    .all())
+
+        out_by_product = dict(
+            db.session.query(
+                InventoryTransaction.product_id,
+                func.coalesce(func.sum(InventoryTransaction.quantity), 0)
+            )
+            .join(Product, InventoryTransaction.product_id == Product.id)
+            .filter(
+                Product.company_id == company_id,
+                InventoryTransaction.type == 'OUT',
+                InventoryTransaction.date >= window_start
+            )
+            .group_by(InventoryTransaction.product_id)
+            .all()
+        )
+
+        # Cálculo: tasa diaria → punto de reorden = tasa × (lead + safety)
+        # Safety stock = 50% del lead time (conservador)
+        suggestions = []
+        for p in products:
+            qty_out = float(out_by_product.get(p.id, 0) or 0)
+            daily_rate = qty_out / window_days if window_days > 0 else 0
+            safety_days = max(1, int(round(lead_days * 0.5)))
+            reorder_point = daily_rate * (lead_days + safety_days)
+            target_stock = daily_rate * (lead_days + target_days)
+            stock = p.current_stock or 0
+
+            # ¿Reponer?
+            triggers_min = (p.min_stock_level or 0) > 0 and stock <= (p.min_stock_level or 0)
+            triggers_rop = daily_rate > 0 and stock <= reorder_point
+            should_reorder = triggers_min or triggers_rop
+
+            # Cantidad sugerida
+            suggested_qty = 0
+            if should_reorder:
+                if daily_rate > 0:
+                    suggested_qty = max(0, int(round(target_stock - stock)))
+                # Si solo dispara min_stock pero sin movimiento, usar min_stock × 2 - current
+                if suggested_qty <= 0 and triggers_min:
+                    suggested_qty = max(1, ((p.min_stock_level or 1) * 2) - stock)
+
+            # Días de stock restantes
+            days_left = (stock / daily_rate) if daily_rate > 0 else None
+
+            # Urgencia
+            if stock <= 0 and (qty_out > 0 or (p.min_stock_level or 0) > 0):
+                urgency = 'critical'
+            elif daily_rate > 0 and days_left is not None and days_left <= lead_days:
+                urgency = 'critical'
+            elif triggers_min:
+                urgency = 'high'
+            elif triggers_rop:
+                urgency = 'medium'
+            else:
+                urgency = 'ok'
+
+            suggestions.append({
+                'product': p,
+                'stock': stock,
+                'min_stock': p.min_stock_level or 0,
+                'qty_out': int(qty_out),
+                'daily_rate': daily_rate,
+                'monthly_rate': daily_rate * 30,
+                'reorder_point': reorder_point,
+                'target_stock': target_stock,
+                'suggested_qty': suggested_qty,
+                'estimated_cost': suggested_qty * (p.cost_price or 0),
+                'days_left': days_left,
+                'should_reorder': should_reorder,
+                'urgency': urgency,
+                'supplier': p.preferred_supplier,
+                'supplier_name': p.preferred_supplier.business_name if p.preferred_supplier else None,
+            })
+
+        # Ordenar: críticos primero, luego por costo estimado descendente
+        urgency_order = {'critical': 0, 'high': 1, 'medium': 2, 'ok': 3}
+        suggestions.sort(key=lambda r: (urgency_order[r['urgency']], -r['estimated_cost']))
+
+        # Resumen
+        to_reorder = [s for s in suggestions if s['should_reorder']]
+        summary = {
+            'critical':  sum(1 for s in suggestions if s['urgency'] == 'critical'),
+            'high':      sum(1 for s in suggestions if s['urgency'] == 'high'),
+            'medium':    sum(1 for s in suggestions if s['urgency'] == 'medium'),
+            'ok':        sum(1 for s in suggestions if s['urgency'] == 'ok'),
+            'to_reorder_count': len(to_reorder),
+            'estimated_total': sum(s['estimated_cost'] for s in to_reorder),
+        }
+
+        # Agrupar por proveedor
+        from collections import OrderedDict
+        by_supplier = OrderedDict()
+        for s in to_reorder:
+            key = s['supplier'].id if s['supplier'] else None
+            if key not in by_supplier:
+                by_supplier[key] = {
+                    'supplier': s['supplier'],
+                    'supplier_name': s['supplier_name'] or 'Sin proveedor preferente',
+                    'items': [],
+                    'total': 0,
+                }
+            by_supplier[key]['items'].append(s)
+            by_supplier[key]['total'] += s['estimated_cost']
+
+        return render_template(
+            'inventory/reorder.html',
+            company=company,
+            suggestions=suggestions,
+            summary=summary,
+            by_supplier=list(by_supplier.values()),
+            lead_days=lead_days,
+            window_days=window_days,
+            target_days=target_days,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/labels')
+    @inventory_admin_required
+    def inventory_labels(company_id):
+        """Etiquetas imprimibles con QR por lote."""
+        company = Company.query.get_or_404(company_id)
+
+        # Modo: 'batches' (lotes) o 'products' (productos sin lote)
+        mode = request.args.get('mode', 'batches')
+        size = request.args.get('size', 'medium')  # small | medium | large
+        if size not in ('small', 'medium', 'large'):
+            size = 'medium'
+
+        # Parámetros: filtros
+        product_filter = request.args.get('product_id', type=int)
+        batch_ids_raw = request.args.get('batch_ids', '')
+
+        # IDs específicos
+        batch_id_list = []
+        if batch_ids_raw:
+            for x in batch_ids_raw.split(','):
+                x = x.strip()
+                if x.isdigit():
+                    batch_id_list.append(int(x))
+
+        from services.qr_service import QRService
+
+        labels = []
+
+        if mode == 'batches':
+            q = (db.session.query(ProductBatch, Product)
+                 .join(Product, ProductBatch.product_id == Product.id)
+                 .filter(Product.company_id == company_id, ProductBatch.current_stock > 0))
+            if product_filter:
+                q = q.filter(Product.id == product_filter)
+            if batch_id_list:
+                q = q.filter(ProductBatch.id.in_(batch_id_list))
+            q = q.order_by(Product.name, ProductBatch.expiration_date)
+            for batch, p in q.all():
+                qr_payload = '|'.join([
+                    'L', str(company_id), str(p.id), str(batch.id),
+                    p.sku or '', batch.batch_number or '',
+                    batch.expiration_date.strftime('%Y%m%d') if batch.expiration_date else ''
+                ])
+                qr_b64 = QRService.generate_qr_base64(qr_payload, size=4, border=2)
+                labels.append({
+                    'kind': 'batch',
+                    'product': p,
+                    'batch': batch,
+                    'qr': qr_b64,
+                    'qr_data': qr_payload,
+                    'title': p.name,
+                    'sku': p.sku,
+                    'batch_number': batch.batch_number,
+                    'expiration': batch.expiration_date,
+                    'stock': batch.current_stock,
+                    'is_controlled': p.is_controlled,
+                })
+        else:  # products
+            q = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name)
+            if product_filter:
+                q = q.filter(Product.id == product_filter)
+            for p in q.all():
+                qr_payload = '|'.join(['P', str(company_id), str(p.id), p.sku or ''])
+                qr_b64 = QRService.generate_qr_base64(qr_payload, size=4, border=2)
+                labels.append({
+                    'kind': 'product',
+                    'product': p,
+                    'batch': None,
+                    'qr': qr_b64,
+                    'qr_data': qr_payload,
+                    'title': p.name,
+                    'sku': p.sku,
+                    'batch_number': None,
+                    'expiration': None,
+                    'stock': p.current_stock,
+                    'is_controlled': p.is_controlled,
+                })
+
+        # Productos disponibles para el selector
+        all_products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+
+        return render_template(
+            'inventory/labels.html',
+            company=company,
+            labels=labels,
+            mode=mode,
+            size=size,
+            product_filter=product_filter,
+            all_products=all_products,
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/cycle-count', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def inventory_cycle_count(company_id):
+        """Conteo cíclico de inventario en web."""
+        company = Company.query.get_or_404(company_id)
+
+        if request.method == 'POST':
+            import json as _json
+            items_raw = request.form.get('items_json', '')
+            try:
+                items = _json.loads(items_raw) if items_raw else []
+            except (ValueError, TypeError):
+                items = []
+
+            if not items:
+                flash('No se enviaron productos para aplicar.', 'warning')
+                return redirect(url_for('inventory_cycle_count', company_id=company_id))
+
+            applied = 0
+            skipped = 0
+            for item in items:
+                pid = item.get('product_id')
+                actual = item.get('actual_stock')
+                if pid is None or actual is None:
+                    skipped += 1
+                    continue
+                try:
+                    actual = int(actual)
+                except (TypeError, ValueError):
+                    skipped += 1
+                    continue
+                if actual < 0:
+                    skipped += 1
+                    continue
+
+                product = db.session.get(Product, pid)
+                if not product or product.company_id != company_id or not product.active:
+                    skipped += 1
+                    continue
+
+                previous = product.current_stock or 0
+                diff = actual - previous
+                if diff == 0:
+                    skipped += 1
+                    continue
+
+                product.current_stock = actual
+                tx = InventoryTransaction(
+                    product_id=pid,
+                    type='ADJUSTMENT',
+                    quantity=abs(diff),
+                    previous_stock=previous,
+                    new_stock=actual,
+                    reference='Conteo Cíclico Web',
+                    notes=f'Esperado: {previous}, Contado: {actual}, Dif: {diff:+d}',
+                    created_by_id=current_user.id
+                )
+                db.session.add(tx)
+                applied += 1
+
+            db.session.commit()
+            flash(f'Conteo aplicado: {applied} ajustes, {skipped} sin cambios.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id))
+
+        # GET: mostrar formulario
+        category_filter = request.args.get('category', type=int)
+        only_low = request.args.get('only_low') == '1'
+
+        q = Product.query.filter_by(company_id=company_id, active=True)
+        if category_filter:
+            q = q.filter(Product.category_id == category_filter)
+        if only_low:
+            q = q.filter(Product.current_stock <= Product.min_stock_level)
+        products = q.order_by(Product.name).all()
+
+        categories = ProductCategory.query.filter_by(company_id=company_id).order_by(ProductCategory.name).all()
+
+        return render_template(
+            'inventory/cycle_count.html',
+            company=company,
+            products=products,
+            categories=categories,
+            category_filter=category_filter,
+            only_low=only_low,
+        )
+
+    @app.route('/api/companies/<int:company_id>/inventory/search')
+    @login_required
+    def api_global_product_search(company_id):
+        """Búsqueda global de productos para autocomplete del navbar."""
+        if not current_user.can_access_company(company_id) and not current_user.is_admin:
+            return jsonify({'results': []}), 403
+
+        q = (request.args.get('q') or '').strip()
+        if len(q) < 2:
+            return jsonify({'results': []})
+
+        from sqlalchemy import or_ as _or
+        like = f'%{q}%'
+        products = (Product.query
+                    .filter(Product.company_id == company_id, Product.active == True)
+                    .filter(_or(
+                        Product.name.ilike(like),
+                        Product.sku.ilike(like),
+                        Product.description.ilike(like),
+                    ))
+                    .order_by(Product.name)
+                    .limit(15)
+                    .all())
+
+        results = []
+        for p in products:
+            results.append({
+                'id': p.id,
+                'name': p.name,
+                'sku': p.sku,
+                'stock': p.current_stock,
+                'min_stock': p.min_stock_level,
+                'is_low': (p.min_stock_level or 0) > 0 and (p.current_stock or 0) <= (p.min_stock_level or 0),
+                'url': url_for('product_history', company_id=company_id, product_id=p.id),
+            })
+        return jsonify({'results': results, 'query': q})
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/batches')
+    @login_required
+    def product_batches(company_id, product_id):
+        """List batches for a product"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        today = now_mexico().date()
+        batches = ProductBatch.query.filter_by(product_id=product_id).order_by(ProductBatch.expiration_date).all()
+        
+        return render_template('inventory/batches.html', 
+                             company=company, 
+                             product=product, 
+                             batches=batches, 
+                             today=today)
+
+    @app.route('/companies/<int:company_id>/inventory/<int:product_id>/receive', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def receive_batch(company_id, product_id):
+        """Recibir stock con lote y caducidad"""
+        company = Company.query.get_or_404(company_id)
+        product = Product.query.get_or_404(product_id)
+        
+        if product.company_id != company_id:
+            return redirect(url_for('inventory_list', company_id=company_id))
+            
+        form = BatchForm()
+        
+        if form.validate_on_submit():
+            quantity = form.quantity.data
+            
+            # Create Batch
+            batch = ProductBatch(
+                product_id=product.id,
+                batch_number=form.batch_number.data,
+                expiration_date=form.expiration_date.data,
+                initial_stock=quantity,
+                current_stock=quantity,
+                acquisition_date=form.acquisition_date.data
+            )
+            db.session.add(batch)
+            db.session.flush()
+            
+            # Create Transaction
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                batch_id=batch.id,
+                type='IN',
+                quantity=quantity,
+                previous_stock=product.current_stock,
+                new_stock=product.current_stock + quantity,
+                reference=f'Recibo Lote {batch.batch_number}',
+                notes='Recepción de stock con lote',
+                created_by_id=current_user.id
+            )
+            db.session.add(transaction)
+            
+            # Update Product Total Stock
+            product.current_stock += quantity
+            
+            db.session.commit()
+            flash(f'Lote {batch.batch_number} registrado correctamente.', 'success')
+            return redirect(url_for('product_batches', company_id=company_id, product_id=product_id))
+            
+        return render_template('inventory/receive_batch.html', company=company, product=product, form=form)
+
+    # ==================== LABORATORY ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_laboratory(company_id):
+        """Agregar nuevo laboratorio"""
+        company = Company.query.get_or_404(company_id)
+        form = LaboratoryForm()
+
+        if form.validate_on_submit():
+            laboratory = Laboratory(
+                company_id=company_id,
+                name=form.name.data,
+                sanitary_registration=form.sanitary_registration.data
+            )
+            db.session.add(laboratory)
+            db.session.commit()
+            flash(f'Laboratorio "{laboratory.name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        return render_template('inventory/laboratory_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_laboratory(company_id, laboratory_id):
+        """Editar laboratorio"""
+        company = Company.query.get_or_404(company_id)
+        laboratory = Laboratory.query.get_or_404(laboratory_id)
+
+        if laboratory.company_id != company_id:
+            flash('Laboratorio no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        form = LaboratoryForm(obj=laboratory)
+
+        if form.validate_on_submit():
+            form.populate_obj(laboratory)
+            db.session.commit()
+            flash(f'Laboratorio "{laboratory.name}" actualizado.', 'success')
+            return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
+
+        registrations = LaboratorySanitaryRegistration.query.filter_by(
+            laboratory_id=laboratory_id
+        ).order_by(LaboratorySanitaryRegistration.registration_number).all()
+
+        return render_template('inventory/laboratory_form.html', company=company, form=form,
+                               laboratory=laboratory, action='editar', registrations=registrations)
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/registrations/add', methods=['POST'])
+    @inventory_admin_required
+    def add_lab_registration(company_id, laboratory_id):
+        """Agregar registro sanitario a laboratorio"""
+        laboratory = Laboratory.query.get_or_404(laboratory_id)
+        if laboratory.company_id != company_id:
+            flash('Laboratorio no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        reg_number = request.form.get('registration_number', '').strip()
+        description = request.form.get('description', '').strip()
+
+        if not reg_number:
+            flash('El número de registro sanitario es requerido.', 'error')
+        else:
+            reg = LaboratorySanitaryRegistration(
+                laboratory_id=laboratory_id,
+                registration_number=reg_number,
+                description=description or None
+            )
+            db.session.add(reg)
+            db.session.commit()
+            flash(f'Registro sanitario "{reg_number}" agregado.', 'success')
+
+        return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
+
+    @app.route('/companies/<int:company_id>/inventory/laboratories/<int:laboratory_id>/registrations/<int:reg_id>/delete', methods=['POST'])
+    @inventory_admin_required
+    def delete_lab_registration(company_id, laboratory_id, reg_id):
+        """Eliminar registro sanitario de laboratorio"""
+        reg = LaboratorySanitaryRegistration.query.get_or_404(reg_id)
+        if reg.laboratory_id != laboratory_id:
+            flash('Registro no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='laboratories'))
+
+        reg_number = reg.registration_number
+        db.session.delete(reg)
+        db.session.commit()
+        flash(f'Registro sanitario "{reg_number}" eliminado.', 'success')
+        return redirect(url_for('edit_laboratory', company_id=company_id, laboratory_id=laboratory_id))
+
+    @app.route('/api/laboratory/<int:laboratory_id>/registrations')
+    @login_required
+    def get_lab_registrations(laboratory_id):
+        """API: obtener registros sanitarios de un laboratorio"""
+        regs = LaboratorySanitaryRegistration.query.filter_by(
+            laboratory_id=laboratory_id, active=True
+        ).order_by(LaboratorySanitaryRegistration.registration_number).all()
+        return jsonify([{
+            'id': r.id,
+            'registration_number': r.registration_number,
+            'description': r.description
+        } for r in regs])
+
+    # ==================== PRODUCT CATEGORY ROUTES ====================
+
+    def _ensure_default_product_categories(company_id):
+        """Crear categorías por defecto si no existen para esta empresa"""
+        defaults = [
+            {'name': 'Medicamento', 'description': 'Medicamentos y fármacos',
+             'requires_cofepris': True, 'requires_batch_tracking': True},
+            {'name': 'Insumo', 'description': 'Insumos médicos y materiales',
+             'requires_cofepris': False, 'requires_batch_tracking': False},
+        ]
+        created = False
+        for d in defaults:
+            existing = ProductCategory.query.filter_by(company_id=company_id, name=d['name']).first()
+            if not existing:
+                cat = ProductCategory(company_id=company_id, **d)
+                db.session.add(cat)
+                created = True
+        if created:
+            db.session.commit()
+
+    @app.route('/companies/<int:company_id>/inventory/categories/add', methods=['POST'])
+    @inventory_admin_required
+    def add_product_category(company_id):
+        """Agregar nueva categoría de producto"""
+        company = Company.query.get_or_404(company_id)
+        form = ProductCategoryForm()
+
+        if form.validate_on_submit():
+            # Verificar nombre único
+            existing = ProductCategory.query.filter_by(company_id=company_id, name=form.name.data).first()
+            if existing:
+                flash(f'Ya existe una categoría con el nombre "{form.name.data}".', 'error')
+                return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+            category = ProductCategory(
+                company_id=company_id,
+                name=form.name.data,
+                description=form.description.data,
+                requires_cofepris=form.requires_cofepris.data,
+                requires_batch_tracking=form.requires_batch_tracking.data
+            )
+            db.session.add(category)
+            db.session.commit()
+            flash(f'Categoría "{category.name}" creada correctamente.', 'success')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f'{error}', 'error')
+
+        return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+    @app.route('/companies/<int:company_id>/inventory/categories/<int:category_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_product_category(company_id, category_id):
+        """Editar categoría de producto"""
+        company = Company.query.get_or_404(company_id)
+        category = ProductCategory.query.get_or_404(category_id)
+
+        if category.company_id != company_id:
+            flash('Categoría no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+        form = ProductCategoryForm(obj=category)
+
+        if form.validate_on_submit():
+            category.name = form.name.data
+            category.description = form.description.data
+            category.requires_cofepris = form.requires_cofepris.data
+            category.requires_batch_tracking = form.requires_batch_tracking.data
+            db.session.commit()
+            flash(f'Categoría "{category.name}" actualizada.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+        return render_template('inventory/category_form.html', company=company, form=form, category=category)
+
+    @app.route('/companies/<int:company_id>/inventory/categories/<int:category_id>/toggle', methods=['POST'])
+    @inventory_admin_required
+    def toggle_product_category(company_id, category_id):
+        """Activar/desactivar categoría de producto"""
+        company = Company.query.get_or_404(company_id)
+        category = ProductCategory.query.get_or_404(category_id)
+
+        if category.company_id != company_id:
+            flash('Categoría no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+        category.active = not category.active
+        db.session.commit()
+        status = 'activada' if category.active else 'desactivada'
+        flash(f'Categoría "{category.name}" {status}.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='categories'))
+
+    @app.route('/api/product-category/<int:category_id>')
+    @login_required
+    def get_product_category_info(category_id):
+        """API: obtener info de categoría para JS dinámico"""
+        cat = ProductCategory.query.get_or_404(category_id)
+        return jsonify({
+            'id': cat.id,
+            'name': cat.name,
+            'requires_cofepris': cat.requires_cofepris,
+            'requires_batch_tracking': cat.requires_batch_tracking,
+        })
+
+    # ==================== SERVICE ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/services/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_service(company_id):
+        """Agregar nuevo servicio"""
+        company = Company.query.get_or_404(company_id)
+        form = ServiceForm()
+
+        if form.validate_on_submit():
+            service = Service(
+                company_id=company_id,
+                name=form.name.data,
+                description=form.description.data,
+                price=form.price.data or 0,
+                sat_key=form.sat_key.data or '01010101',
+                sat_unit_key=form.sat_unit_key.data or 'E48'
+            )
+            db.session.add(service)
+            db.session.commit()
+            flash(f'Servicio "{service.name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='services'))
+
+        return render_template('inventory/service_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/services/<int:service_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_service(company_id, service_id):
+        """Editar servicio"""
+        company = Company.query.get_or_404(company_id)
+        service = Service.query.get_or_404(service_id)
+
+        if service.company_id != company_id:
+            flash('Servicio no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='services'))
+
+        form = ServiceForm(obj=service)
+
+        if form.validate_on_submit():
+            form.populate_obj(service)
+            db.session.commit()
+            flash(f'Servicio "{service.name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='services'))
+
+        return render_template('inventory/service_form.html', company=company, form=form, service=service, action='editar')
+
+    # ==================== SUPPLIER MANUAL ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/suppliers/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_supplier_manual(company_id):
+        """Agregar proveedor manualmente"""
+        company = Company.query.get_or_404(company_id)
+        form = SupplierManualForm()
+
+        if form.validate_on_submit():
+            # Verificar si ya existe
+            existing = Supplier.query.filter_by(company_id=company_id, rfc=form.rfc.data.upper()).first()
+            if existing:
+                flash(f'Ya existe un proveedor con RFC {form.rfc.data.upper()}.', 'warning')
+                return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+            supplier = Supplier(
+                company_id=company_id,
+                rfc=form.rfc.data.upper(),
+                business_name=form.business_name.data,
+                commercial_name=form.commercial_name.data,
+                contact_name=form.contact_name.data,
+                email=form.email.data,
+                phone=form.phone.data,
+                address=form.address.data,
+                payment_terms=form.payment_terms.data,
+                notes=form.notes.data,
+                is_medication_supplier=form.is_medication_supplier.data,
+                sanitary_registration=form.sanitary_registration.data
+            )
+            db.session.add(supplier)
+            db.session.commit()
+            flash(f'Proveedor "{supplier.business_name}" agregado correctamente.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+        return render_template('inventory/supplier_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/suppliers/<int:supplier_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_supplier_inventory(company_id, supplier_id):
+        """Editar proveedor desde inventario"""
+        company = Company.query.get_or_404(company_id)
+        supplier = Supplier.query.get_or_404(supplier_id)
+
+        if supplier.company_id != company_id:
+            flash('Proveedor no encontrado.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+        form = SupplierManualForm(obj=supplier)
+
+        if form.validate_on_submit():
+            supplier.business_name = form.business_name.data
+            supplier.commercial_name = form.commercial_name.data
+            supplier.contact_name = form.contact_name.data
+            supplier.email = form.email.data
+            supplier.phone = form.phone.data
+            supplier.address = form.address.data
+            supplier.payment_terms = form.payment_terms.data
+            supplier.notes = form.notes.data
+            supplier.is_medication_supplier = form.is_medication_supplier.data
+            supplier.sanitary_registration = form.sanitary_registration.data
+            db.session.commit()
+            flash(f'Proveedor "{supplier.business_name}" actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='suppliers'))
+
+        return render_template('inventory/supplier_form.html', company=company, form=form, supplier=supplier, action='editar')
+
+    # ==================== PURCHASE ORDER ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/orders/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_purchase_order(company_id):
+        """Crear nueva orden de compra"""
+        company = Company.query.get_or_404(company_id)
+        form = PurchaseOrderForm()
+
+        # Cargar proveedores para el select
+        suppliers = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        form.supplier_id.choices = [(0, '-- Seleccionar Proveedor --')] + [(s.id, f"{s.business_name} ({s.rfc})") for s in suppliers]
+
+        if form.validate_on_submit():
+            order = PurchaseOrder(
+                company_id=company_id,
+                supplier_id=form.supplier_id.data,
+                status='DRAFT',
+                notes=form.notes.data
+            )
+            db.session.add(order)
+            db.session.commit()
+            flash('Orden de compra creada. Agregue los productos.', 'success')
+            return redirect(url_for('edit_purchase_order', company_id=company_id, order_id=order.id))
+
+        return render_template('inventory/purchase_order_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_purchase_order(company_id, order_id):
+        """Editar orden de compra (agregar/quitar productos)"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        if order.status not in ['DRAFT', 'SENT']:
+            flash('Esta orden no se puede editar.', 'warning')
+            return redirect(url_for('view_purchase_order', company_id=company_id, order_id=order_id))
+
+        # Cargar productos disponibles
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+
+            if action == 'add_product':
+                product_id = int(request.form.get('product_id'))
+                unit_cost = float(request.form.get('unit_cost', 0))
+                order_unit = request.form.get('order_unit', 'UNIDAD')
+
+                product_obj = Product.query.get(product_id)
+                upp = product_obj.units_per_package or 1
+
+                if order_unit == 'PAQUETE' and upp > 1:
+                    pkg_qty = int(request.form.get('package_quantity') or 0)
+                    loose_qty = int(request.form.get('loose_quantity') or 0)
+                    quantity = (pkg_qty * upp) + loose_qty
+                else:
+                    order_unit = 'UNIDAD'
+                    quantity = int(request.form.get('quantity', 1))
+                    pkg_qty = None
+                    loose_qty = 0
+
+                detail = PurchaseOrderDetail(
+                    order_id=order.id,
+                    product_id=product_id,
+                    quantity_requested=quantity,
+                    unit_cost=unit_cost,
+                    order_unit=order_unit,
+                    package_quantity=pkg_qty,
+                    loose_quantity=loose_qty
+                )
+                db.session.add(detail)
+
+                # Actualizar costo del producto con el nuevo precio
+                if unit_cost > 0:
+                    product_obj.cost_price = unit_cost
+
+            elif action == 'update_cost':
+                detail_id = int(request.form.get('detail_id'))
+                new_cost = float(request.form.get('new_cost', 0))
+                detail = PurchaseOrderDetail.query.get(detail_id)
+                if detail and detail.order_id == order.id:
+                    detail.unit_cost = new_cost
+                    # También actualizar el costo del producto
+                    if new_cost > 0:
+                        detail.product.cost_price = new_cost
+
+            elif action == 'remove_product':
+                detail_id = int(request.form.get('detail_id'))
+                detail = PurchaseOrderDetail.query.get(detail_id)
+                if detail and detail.order_id == order.id:
+                    db.session.delete(detail)
+
+            elif action == 'send_order':
+                order.status = 'SENT'
+                order.sent_at = now_mexico()
+                flash('Orden enviada correctamente.', 'success')
+
+            # Recalcular total estimado
+            order.estimated_total = sum(d.quantity_requested * d.unit_cost for d in order.details)
+            db.session.commit()
+
+            if action == 'send_order':
+                return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        return render_template('inventory/purchase_order_edit.html', company=company, order=order, products=products)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/view')
+    @login_required
+    def view_purchase_order(company_id, order_id):
+        """Ver detalles de orden de compra"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        return render_template('inventory/purchase_order_view.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/pdf')
+    @login_required
+    def purchase_order_pdf(company_id, order_id):
+        """Generar PDF de orden de compra"""
+        from flask import render_template, send_file, abort
+        from io import BytesIO
+        import weasyprint
+        import base64
+        import mimetypes
+
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        # Cargar logo como base64
+        logo_data_uri = None
+        if company.logo_path:
+            resolved_logo = None
+            if os.path.exists(company.logo_path):
+                resolved_logo = company.logo_path
+            else:
+                fallback = os.path.join(PROJECT_ROOT, 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
+                if os.path.exists(fallback):
+                    resolved_logo = fallback
+            
+            if resolved_logo:
+                try:
+                    with open(resolved_logo, 'rb') as lf:
+                        logo_b64 = base64.b64encode(lf.read()).decode('ascii')
+                    mime = mimetypes.guess_type(resolved_logo)[0] or 'image/png'
+                    logo_data_uri = f"data:{mime};base64,{logo_b64}"
+                except Exception as e:
+                    logger.error(f"Error loading logo for purchase order PDF: {e}")
+
+        html_string = render_template('inventory/purchase_order_pdf.html', company=company, order=order, logo_data_uri=logo_data_uri)
+        pdf_bytes = weasyprint.HTML(string=html_string).write_pdf()
+
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"Orden_Compra_{order.id}.pdf"
+        )
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/review', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def review_purchase_order(company_id, order_id):
+        """Revisar/recibir orden de compra (Fase 2)"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        if order.status not in ['SENT', 'IN_REVIEW']:
+            flash('Esta orden no puede ser revisada en este momento.', 'warning')
+            return redirect(url_for('view_purchase_order', company_id=company_id, order_id=order_id))
+
+        if request.method == 'POST':
+            # Actualizar cantidades recibidas y datos de lote
+            for detail in order.details:
+                product_obj = detail.product
+                upp = product_obj.units_per_package or 1
+
+                # Manejar recepción por paquete o unidad
+                if detail.order_unit == 'PAQUETE' and upp > 1:
+                    pkgs = int(request.form.get(f'packages_received_{detail.id}') or 0)
+                    loose = int(request.form.get(f'loose_received_{detail.id}') or 0)
+                    detail.packages_received = pkgs
+                    detail.loose_received = loose
+                    detail.quantity_received = (pkgs * upp) + loose
+                else:
+                    received = request.form.get(f'received_{detail.id}')
+                    if received is not None:
+                        detail.quantity_received = int(received or 0)
+
+                # Lote y caducidad solo si la categoría lo requiere
+                requires_batch = (product_obj.category and product_obj.category.requires_batch_tracking)
+                if requires_batch:
+                    batch_number = request.form.get(f'batch_{detail.id}')
+                    expiration_str = request.form.get(f'expiration_{detail.id}')
+                    detail.batch_number = batch_number if batch_number else None
+                    if expiration_str:
+                        detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                    else:
+                        detail.expiration_date = None
+                else:
+                    detail.batch_number = None
+                    detail.expiration_date = None
+
+            order.status = 'IN_REVIEW'
+            order.received_at = now_mexico()
+            db.session.commit()
+            flash('Datos de recepcion actualizados.', 'success')
+            return redirect(url_for('complete_purchase_order', company_id=company_id, order_id=order_id))
+
+        return render_template('inventory/purchase_order_review.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/complete', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def complete_purchase_order(company_id, order_id):
+        """Completar orden de compra (Fase 3) - Ajustar inventario"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        if order.status != 'IN_REVIEW':
+            flash('Esta orden no puede ser completada en este momento.', 'warning')
+            return redirect(url_for('view_purchase_order', company_id=company_id, order_id=order_id))
+
+        if request.method == 'POST':
+            # Actualizar inventario con las cantidades recibidas
+            for detail in order.details:
+                if detail.quantity_received > 0:
+                    product = detail.product
+                    previous_stock = product.current_stock
+                    batch_id = None
+
+                    # Crear lote solo si la categoría requiere batch tracking y hay datos de lote
+                    requires_batch = (product.category and product.category.requires_batch_tracking)
+                    if requires_batch and detail.batch_number:
+                        batch = ProductBatch(
+                            product_id=product.id,
+                            batch_number=detail.batch_number,
+                            expiration_date=detail.expiration_date,
+                            initial_stock=detail.quantity_received,
+                            current_stock=detail.quantity_received,
+                            acquisition_date=now_mexico().date()
+                        )
+                        db.session.add(batch)
+                        db.session.flush()
+                        batch_id = batch.id
+
+                    # Crear transaccion de inventario
+                    notes_parts = ['Recepcion de orden de compra']
+                    if detail.batch_number:
+                        notes_parts.append(f'Lote: {detail.batch_number}')
+                    if detail.order_unit == 'PAQUETE' and (product.units_per_package or 1) > 1:
+                        notes_parts.append(f'{detail.packages_received or 0} {product.packaging_type or "paq"} + {detail.loose_received or 0} pzas sueltas')
+
+                    transaction = InventoryTransaction(
+                        product_id=product.id,
+                        batch_id=batch_id,
+                        type='IN',
+                        quantity=detail.quantity_received,
+                        previous_stock=previous_stock,
+                        new_stock=previous_stock + detail.quantity_received,
+                        reference=f'Orden Compra #{order.id}',
+                        notes=' - '.join(notes_parts),
+                        created_by_id=current_user.id
+                    )
+                    db.session.add(transaction)
+
+                    # Actualizar stock del producto
+                    product.current_stock += detail.quantity_received
+
+            order.status = 'COMPLETED'
+            order.completed_at = now_mexico()
+            db.session.commit()
+            flash('Orden completada. El inventario ha sido actualizado.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        return render_template('inventory/purchase_order_complete.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/orders/<int:order_id>/delete', methods=['POST'])
+    @inventory_admin_required
+    def delete_purchase_order(company_id, order_id):
+        """Eliminar orden de compra"""
+        company = Company.query.get_or_404(company_id)
+        order = PurchaseOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+        # Guardar el nombre del proveedor antes de eliminar
+        supplier_name = order.supplier.business_name if order.supplier else f"#{order_id}"
+
+        # Eliminar la orden (los detalles se eliminan automáticamente por cascade)
+        db.session.delete(order)
+        db.session.commit()
+
+        flash(f'Orden para {supplier_name} eliminada correctamente.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='orders'))
+
+    # ==================== EXIT ORDER ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/exits/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_exit_order(company_id):
+        """Crear nueva orden de salida"""
+        company = Company.query.get_or_404(company_id)
+        form = ExitOrderForm()
+
+        if form.validate_on_submit():
+            order = ExitOrder(
+                company_id=company_id,
+                recipient_name=form.recipient_name.data,
+                recipient_type=form.recipient_type.data,
+                recipient_id=form.recipient_id.data,
+                notes=form.notes.data,
+                created_by_id=current_user.id
+            )
+            db.session.add(order)
+            db.session.commit()
+            flash('Orden de salida creada. Agregue los productos.', 'success')
+            return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order.id))
+
+        return render_template('inventory/exit_order_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_exit_order(company_id, order_id):
+        """Editar orden de salida (agregar productos)"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        if order.status != 'DRAFT':
+            flash('Esta orden ya no puede ser editada.', 'warning')
+            return redirect(url_for('view_exit_order', company_id=company_id, order_id=order_id))
+
+        # Productos disponibles con stock
+        products = Product.query.filter(
+            Product.company_id == company_id,
+            Product.active == True,
+            Product.current_stock > 0
+        ).order_by(Product.name).all()
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+
+            if action == 'add_product':
+                product_id = int(request.form.get('product_id'))
+                quantity = int(request.form.get('quantity', 1))
+                batch_id = request.form.get('batch_id')
+                batch_id = int(batch_id) if batch_id else None
+
+                product = Product.query.get(product_id)
+                if product and quantity > 0:
+                    # Verificar stock disponible
+                    if quantity > product.current_stock:
+                        flash(f'Stock insuficiente. Disponible: {product.current_stock}', 'error')
+                    else:
+                        detail = ExitOrderDetail(
+                            order_id=order.id,
+                            product_id=product_id,
+                            batch_id=batch_id,
+                            quantity=quantity
+                        )
+                        db.session.add(detail)
+                        db.session.commit()
+                        flash(f'Producto agregado: {product.name} x{quantity}', 'success')
+
+            elif action == 'remove_detail':
+                detail_id = int(request.form.get('detail_id'))
+                detail = ExitOrderDetail.query.get(detail_id)
+                if detail and detail.order_id == order.id:
+                    db.session.delete(detail)
+                    db.session.commit()
+                    flash('Producto eliminado de la orden.', 'success')
+
+            elif action == 'update_info':
+                form = ExitOrderForm()
+                order.recipient_name = form.recipient_name.data
+                order.recipient_type = form.recipient_type.data
+                order.recipient_id = form.recipient_id.data
+                order.notes = form.notes.data
+                db.session.commit()
+                flash('Informacion actualizada.', 'success')
+
+            return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order_id))
+
+        form = ExitOrderForm(obj=order)
+        return render_template('inventory/exit_order_edit.html', company=company, order=order, form=form, products=products)
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/complete', methods=['POST'])
+    @inventory_admin_required
+    def complete_exit_order(company_id, order_id):
+        """Completar orden de salida - descuenta del inventario"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        if order.status != 'DRAFT':
+            flash('Esta orden ya fue procesada.', 'warning')
+            return redirect(url_for('view_exit_order', company_id=company_id, order_id=order_id))
+
+        if not order.details:
+            flash('No hay productos en la orden.', 'error')
+            return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order_id))
+
+        # Verificar stock antes de procesar
+        for detail in order.details:
+            if detail.quantity > detail.product.current_stock:
+                flash(f'Stock insuficiente para {detail.product.name}. Disponible: {detail.product.current_stock}', 'error')
+                return redirect(url_for('edit_exit_order', company_id=company_id, order_id=order_id))
+
+        # Procesar salidas
+        for detail in order.details:
+            product = detail.product
+            previous_stock = product.current_stock
+
+            # Crear transaccion de inventario
+            transaction = InventoryTransaction(
+                product_id=product.id,
+                batch_id=detail.batch_id,
+                type='OUT',
+                quantity=detail.quantity,
+                previous_stock=previous_stock,
+                new_stock=previous_stock - detail.quantity,
+                reference=f'Orden Salida #{order.id}',
+                notes=f'Entrega a: {order.recipient_name}',
+                created_by_id=current_user.id
+            )
+            db.session.add(transaction)
+
+            # Actualizar stock del producto
+            product.current_stock -= detail.quantity
+
+            # Actualizar stock del lote si aplica
+            if detail.batch_id and detail.batch:
+                detail.batch.current_stock -= detail.quantity
+
+        order.status = 'COMPLETED'
+        order.completed_at = now_mexico()
+        db.session.commit()
+
+        flash(f'Orden #{order.id} completada. Inventario actualizado.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>')
+    @login_required
+    def view_exit_order(company_id, order_id):
+        """Ver detalle de orden de salida"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        return render_template('inventory/exit_order_view.html', company=company, order=order)
+
+    @app.route('/companies/<int:company_id>/inventory/exits/<int:order_id>/delete', methods=['POST'])
+    @inventory_admin_required
+    def delete_exit_order(company_id, order_id):
+        """Eliminar orden de salida (solo borradores)"""
+        company = Company.query.get_or_404(company_id)
+        order = ExitOrder.query.get_or_404(order_id)
+
+        if order.company_id != company_id:
+            flash('Orden no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        if order.status != 'DRAFT':
+            flash('Solo se pueden eliminar ordenes en borrador.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+        # Guardar el nombre del destinatario antes de eliminar
+        recipient_name = order.recipient_name or f"#{order_id}"
+
+        ExitOrderDetail.query.filter_by(order_id=order_id).delete()
+        db.session.delete(order)
+        db.session.commit()
+
+        flash(f'Orden para {recipient_name} eliminada.', 'success')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='exits'))
+
+    @app.route('/api/companies/<int:company_id>/products/<int:product_id>/batches')
+    @login_required
+    def api_product_batches(company_id, product_id):
+        """API para obtener lotes de un producto"""
+        product = Product.query.get_or_404(product_id)
+        if product.company_id != company_id:
+            return jsonify([])
+
+        batches = ProductBatch.query.filter(
+            ProductBatch.product_id == product_id,
+            ProductBatch.current_stock > 0,
+            ProductBatch.is_active == True
+        ).order_by(ProductBatch.expiration_date.asc()).all()
+
+        return jsonify([{
+            'id': b.id,
+            'batch_number': b.batch_number,
+            'expiration_date': b.expiration_date.strftime('%d/%m/%Y') if b.expiration_date else None,
+            'current_stock': b.current_stock
+        } for b in batches])
+
+    # ==================== INVENTORY REQUEST ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/requests/initial-stock', methods=['GET', 'POST'])
+    @login_required
+    def create_initial_stock_request(company_id):
+        """Crear solicitud de ingreso inicial de medicamentos"""
+        company = Company.query.get_or_404(company_id)
+        if not current_user.is_admin:
+            perms = current_user.get_company_permissions(company_id)
+            if not perms.get('perm_inventory'):
+                flash('No tienes permisos de inventario para esta empresa.', 'error')
+                return redirect(url_for('index'))
+
+        form = InitialStockRequestForm()
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        form.product_id.choices = [(0, '-- Producto Nuevo --')] + [(p.id, p.name) for p in products]
+
+        if form.validate_on_submit():
+            inv_request = InventoryRequest(
+                company_id=company_id,
+                request_type='INITIAL_STOCK',
+                status='PENDING',
+                product_id=form.product_id.data if form.product_id.data and form.product_id.data != 0 else None,
+                new_product_name=form.new_product_name.data if (not form.product_id.data or form.product_id.data == 0) else None,
+                new_product_sku=form.new_product_sku.data if (not form.product_id.data or form.product_id.data == 0) else None,
+                quantity=form.quantity.data,
+                batch_number=form.batch_number.data,
+                expiration_date=form.expiration_date.data,
+                cost_price=form.cost_price.data,
+                selling_price=form.selling_price.data,
+                notes=form.notes.data,
+                created_by_id=current_user.id,
+                created_at=now_mexico()
+            )
+            db.session.add(inv_request)
+            db.session.commit()
+            flash('Solicitud de ingreso inicial enviada. Pendiente de aprobacion.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        return render_template('inventory/request_initial_stock.html', form=form, company=company)
+
+    @app.route('/companies/<int:company_id>/inventory/requests/adjustment', methods=['GET', 'POST'])
+    @login_required
+    def create_adjustment_request(company_id):
+        """Crear solicitud de ajuste de inventario"""
+        company = Company.query.get_or_404(company_id)
+        if not current_user.is_admin:
+            perms = current_user.get_company_permissions(company_id)
+            if not perms.get('perm_inventory'):
+                flash('No tienes permisos de inventario para esta empresa.', 'error')
+                return redirect(url_for('index'))
+
+        form = AdjustmentRequestForm()
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        form.product_id.choices = [(p.id, f'{p.name} (Stock: {p.current_stock})') for p in products]
+
+        # Mapa de stock para JavaScript
+        products_stock = {p.id: p.current_stock for p in products}
+
+        if form.validate_on_submit():
+            product = Product.query.get_or_404(form.product_id.data)
+            if product.company_id != company_id:
+                flash('Producto no valido.', 'error')
+                return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+            current_stock = product.current_stock
+
+            if form.adjustment_mode.data == 'CORRECT_STOCK':
+                desired = form.desired_stock.data
+                quantity = abs(desired - current_stock)
+                direction = 'IN' if desired > current_stock else 'OUT'
+            else:
+                quantity = form.quantity.data
+                direction = form.adjustment_direction.data
+                desired = None
+
+            inv_request = InventoryRequest(
+                company_id=company_id,
+                request_type='ADJUSTMENT',
+                status='PENDING',
+                product_id=product.id,
+                quantity=quantity,
+                adjustment_mode=form.adjustment_mode.data,
+                adjustment_direction=direction,
+                current_stock_snapshot=current_stock,
+                desired_stock=desired,
+                notes=form.notes.data,
+                created_by_id=current_user.id,
+                created_at=now_mexico()
+            )
+            db.session.add(inv_request)
+            db.session.commit()
+            flash('Solicitud de ajuste enviada. Pendiente de aprobacion.', 'success')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        return render_template('inventory/request_adjustment.html', form=form, company=company,
+                               products_stock=products_stock)
+
+    @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>')
+    @login_required
+    def view_inventory_request(company_id, request_id):
+        """Ver detalle de solicitud de inventario"""
+        company = Company.query.get_or_404(company_id)
+        inv_request = InventoryRequest.query.get_or_404(request_id)
+
+        if inv_request.company_id != company_id:
+            flash('Solicitud no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        if not current_user.is_admin and inv_request.created_by_id != current_user.id:
+            flash('No tienes permiso para ver esta solicitud.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        return render_template('inventory/request_detail.html', company=company, inv_request=inv_request)
+
+    @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>/approve', methods=['POST'])
+    @inventory_admin_required
+    def approve_inventory_request(company_id, request_id):
+        """Aprobar solicitud de inventario (solo admin)"""
+        company = Company.query.get_or_404(company_id)
+        inv_request = InventoryRequest.query.get_or_404(request_id)
+
+        if inv_request.company_id != company_id:
+            flash('Solicitud no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        if inv_request.status != 'PENDING':
+            flash('Esta solicitud ya fue procesada.', 'error')
+            return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
+
+        try:
+            if inv_request.request_type == 'INITIAL_STOCK':
+                # Obtener o crear producto
+                if inv_request.product_id:
+                    product = Product.query.get(inv_request.product_id)
+                else:
+                    product = Product(
+                        company_id=company_id,
+                        name=inv_request.new_product_name,
+                        sku=inv_request.new_product_sku,
+                        cost_price=inv_request.cost_price or 0.0,
+                        selling_price=inv_request.selling_price or 0.0,
+                        current_stock=0
+                    )
+                    db.session.add(product)
+                    db.session.flush()
+                    inv_request.product_id = product.id
+
+                # Actualizar precios si se proporcionaron
+                if inv_request.cost_price is not None:
+                    product.cost_price = inv_request.cost_price
+                if inv_request.selling_price is not None:
+                    product.selling_price = inv_request.selling_price
+
+                # Crear lote si hay datos
+                batch = None
+                if inv_request.batch_number:
+                    batch = ProductBatch(
+                        product_id=product.id,
+                        batch_number=inv_request.batch_number,
+                        expiration_date=inv_request.expiration_date,
+                        initial_stock=inv_request.quantity,
+                        current_stock=inv_request.quantity,
+                        acquisition_date=now_mexico().date()
+                    )
+                    db.session.add(batch)
+                    db.session.flush()
+
+                # Crear transaccion
+                previous_stock = product.current_stock
+                product.current_stock += inv_request.quantity
+
+                transaction = InventoryTransaction(
+                    product_id=product.id,
+                    batch_id=batch.id if batch else None,
+                    type='IN',
+                    quantity=inv_request.quantity,
+                    previous_stock=previous_stock,
+                    new_stock=product.current_stock,
+                    date=now_mexico(),
+                    reference=f'Solicitud Ingreso #{inv_request.id}',
+                    notes=f'[APROBADO: {current_user.username}] {inv_request.notes}',
+                    created_by_id=current_user.id
+                )
+                db.session.add(transaction)
+
+            elif inv_request.request_type == 'ADJUSTMENT':
+                product = Product.query.get(inv_request.product_id)
+                previous_stock = product.current_stock
+
+                if inv_request.adjustment_mode == 'CORRECT_STOCK':
+                    new_stock = inv_request.desired_stock
+                elif inv_request.adjustment_direction == 'IN':
+                    new_stock = product.current_stock + inv_request.quantity
+                else:
+                    new_stock = max(0, product.current_stock - inv_request.quantity)
+
+                product.current_stock = new_stock
+
+                transaction = InventoryTransaction(
+                    product_id=product.id,
+                    type='ADJUSTMENT',
+                    quantity=inv_request.quantity,
+                    previous_stock=previous_stock,
+                    new_stock=new_stock,
+                    date=now_mexico(),
+                    reference=f'Solicitud Ajuste #{inv_request.id}',
+                    notes=f'[APROBADO: {current_user.username}] {inv_request.notes}',
+                    created_by_id=current_user.id
+                )
+                db.session.add(transaction)
+
+            inv_request.status = 'APPROVED'
+            inv_request.reviewed_by_id = current_user.id
+            inv_request.reviewed_at = now_mexico()
+            db.session.commit()
+            flash('Solicitud aprobada. El inventario ha sido actualizado.', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f'Error al aprobar solicitud #{request_id}: {str(e)}')
+            flash(f'Error al procesar la solicitud: {str(e)}', 'error')
+
+        return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
+
+    @app.route('/companies/<int:company_id>/inventory/requests/<int:request_id>/reject', methods=['POST'])
+    @inventory_admin_required
+    def reject_inventory_request(company_id, request_id):
+        """Rechazar solicitud de inventario (solo admin)"""
+        company = Company.query.get_or_404(company_id)
+        inv_request = InventoryRequest.query.get_or_404(request_id)
+
+        if inv_request.company_id != company_id:
+            flash('Solicitud no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+        if inv_request.status != 'PENDING':
+            flash('Esta solicitud ya fue procesada.', 'error')
+            return redirect(url_for('view_inventory_request', company_id=company_id, request_id=request_id))
+
+        inv_request.status = 'REJECTED'
+        inv_request.reviewed_by_id = current_user.id
+        inv_request.reviewed_at = now_mexico()
+        inv_request.rejection_reason = request.form.get('rejection_reason', '').strip()
+        db.session.commit()
+
+        flash('Solicitud rechazada.', 'info')
+        return redirect(url_for('inventory_list', company_id=company_id, tab='requests'))
+
+    # ==================== INVOICE TEMPLATE ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/inventory/templates/add', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def add_invoice_template(company_id):
+        """Crear nueva plantilla de factura"""
+        company = Company.query.get_or_404(company_id)
+        form = InvoiceTemplateForm()
+
+        if form.validate_on_submit():
+            template = InvoiceTemplate(
+                company_id=company_id,
+                name=form.name.data,
+                description=form.description.data
+            )
+            db.session.add(template)
+            db.session.commit()
+            flash('Plantilla creada. Agregue los items.', 'success')
+            return redirect(url_for('edit_invoice_template', company_id=company_id, template_id=template.id))
+
+        return render_template('inventory/template_form.html', company=company, form=form, action='crear')
+
+    @app.route('/companies/<int:company_id>/inventory/templates/<int:template_id>/edit', methods=['GET', 'POST'])
+    @inventory_admin_required
+    def edit_invoice_template(company_id, template_id):
+        """Editar plantilla de factura (agregar/quitar items)"""
+        company = Company.query.get_or_404(company_id)
+        template = InvoiceTemplate.query.get_or_404(template_id)
+
+        if template.company_id != company_id:
+            flash('Plantilla no encontrada.', 'error')
+            return redirect(url_for('inventory_list', company_id=company_id, tab='templates'))
+
+        # Cargar productos y servicios
+        products = Product.query.filter_by(company_id=company_id, active=True).order_by(Product.name).all()
+        services = Service.query.filter_by(company_id=company_id, active=True).order_by(Service.name).all()
+
+        form = InvoiceTemplateForm(obj=template)
+
+        if request.method == 'POST':
+            action = request.form.get('action')
+
+            if action == 'update_info':
+                template.name = form.name.data
+                template.description = form.description.data
+
+            elif action == 'add_product':
+                product_id = int(request.form.get('product_id'))
+                quantity = float(request.form.get('quantity', 1))
+                item = InvoiceTemplateItem(
+                    template_id=template.id,
+                    item_type='PRODUCT',
+                    product_id=product_id,
+                    quantity=quantity
+                )
+                db.session.add(item)
+
+            elif action == 'add_service':
+                service_id = int(request.form.get('service_id'))
+                quantity = float(request.form.get('quantity', 1))
+                item = InvoiceTemplateItem(
+                    template_id=template.id,
+                    item_type='SERVICE',
+                    service_id=service_id,
+                    quantity=quantity
+                )
+                db.session.add(item)
+
+            elif action == 'remove_item':
+                item_id = int(request.form.get('item_id'))
+                item = InvoiceTemplateItem.query.get(item_id)
+                if item and item.template_id == template.id:
+                    db.session.delete(item)
+
+            db.session.commit()
+            flash('Plantilla actualizada.', 'success')
+
+        return render_template('inventory/template_edit.html', company=company, template=template,
+                             products=products, services=services, form=form)
+
+    # ==================== AX MANAGMENT ROUTES ====================
+
+    @app.route('/companies/<int:company_id>/taxes')
+    @login_required
+    @require_company_perm('taxes')
+    def taxes_dashboard(company_id):
+        """Dashboard de Impuestos con IVA, ISR y resumen anual"""
+        company = Company.query.get_or_404(company_id)
+        
+        today = now_mexico()
+        current_year = today.year
+        
+        # Calculate monthly tax data
+        monthly_tax_data = []
+        month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        
+        # Annual totals
+        annual_iva_to_pay = 0
+        annual_iva_paid = 0
+        annual_isr_estimated = 0
+        annual_isr_paid = 0
+        annual_income = 0
+        annual_expense = 0
+        
+        # Chart data arrays
+        chart_months = []
+        chart_iva_collected = []
+        chart_iva_deductible = []
+        chart_isr_estimated = []
+        
+        for month_num in range(1, 13):
+            # IVA Trasladado (Cobrado en Ventas) - invoices where company is the issuer
+            iva_collected = db.session.query(func.sum(Invoice.tax)).filter(
+                Invoice.company_id == company_id,
+                Invoice.issuer_rfc == company.rfc,  # Company issued this invoice (income)
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # IVA Acreditable (Pagado en Gastos) - invoices where company is the receiver
+            iva_deductible = db.session.query(func.sum(Invoice.tax)).filter(
+                Invoice.company_id == company_id,
+                Invoice.receiver_rfc == company.rfc,  # Company received this invoice (expense)
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # Ingresos del mes (para ISR) - invoices where company is the issuer
+            month_income = db.session.query(func.sum(Invoice.subtotal)).filter(
+                Invoice.company_id == company_id,
+                Invoice.issuer_rfc == company.rfc,  # Company issued this invoice (income)
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # Egresos del mes (para ISR) - invoices where company is the receiver
+            month_expense = db.session.query(func.sum(Invoice.subtotal)).filter(
+                Invoice.company_id == company_id,
+                Invoice.receiver_rfc == company.rfc,  # Company received this invoice (expense)
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).scalar() or 0
+            
+            # Net IVA Position (+ a pagar, - a favor)
+            net_iva = iva_collected - iva_deductible
+            
+            # ISR Estimado (30% de utilidad bruta, solo si es positiva)
+            profit = month_income - month_expense
+            isr_estimated = max(0, profit * 0.30)
+            
+            # IVA Payments made
+            iva_payments = TaxPayment.query.filter_by(
+                company_id=company_id,
+                period_month=month_num,
+                period_year=current_year,
+                tax_type='IVA'
+            ).all()
+            iva_paid_amount = sum(p.amount for p in iva_payments)
+            
+            # ISR Payments made
+            isr_payments = TaxPayment.query.filter_by(
+                company_id=company_id,
+                period_month=month_num,
+                period_year=current_year,
+                tax_type='ISR'
+            ).all()
+            isr_paid_amount = sum(p.amount for p in isr_payments)
+            
+            # Accumulate annual totals
+            if net_iva > 0:
+                annual_iva_to_pay += net_iva
+            annual_iva_paid += iva_paid_amount
+            annual_isr_estimated += isr_estimated
+            annual_isr_paid += isr_paid_amount
+            annual_income += month_income
+            annual_expense += month_expense
+            
+            # Chart data
+            chart_months.append(month_names[month_num - 1][:3])  # Abbreviated
+            chart_iva_collected.append(float(iva_collected))
+            chart_iva_deductible.append(float(iva_deductible))
+            chart_isr_estimated.append(float(isr_estimated))
+            
+            monthly_tax_data.append({
+                'month_num': month_num,
+                'month_name': month_names[month_num - 1],
+                'iva_collected': float(iva_collected),
+                'iva_deductible': float(iva_deductible),
+                'net_iva': float(net_iva),
+                'iva_paid_amount': float(iva_paid_amount),
+                'iva_difference': float(net_iva - iva_paid_amount),
+                'income': float(month_income),
+                'expense': float(month_expense),
+                'profit': float(profit),
+                'isr_estimated': float(isr_estimated),
+                'isr_paid_amount': float(isr_paid_amount),
+                'isr_difference': float(isr_estimated - isr_paid_amount)
+            })
+        
+        # Annual summary
+        annual_summary = {
+            'iva_to_pay': float(annual_iva_to_pay),
+            'iva_paid': float(annual_iva_paid),
+            'iva_pending': float(annual_iva_to_pay - annual_iva_paid),
+            'isr_estimated': float(annual_isr_estimated),
+            'isr_paid': float(annual_isr_paid),
+            'isr_pending': float(annual_isr_estimated - annual_isr_paid),
+            'total_income': float(annual_income),
+            'total_expense': float(annual_expense),
+            'total_profit': float(annual_income - annual_expense)
+        }
+        
+        # Chart data for JavaScript
+        chart_data = {
+            'months': chart_months,
+            'iva_collected': chart_iva_collected,
+            'iva_deductible': chart_iva_deductible,
+            'isr_estimated': chart_isr_estimated
+        }
+            
+        return render_template('taxes/dashboard.html', 
+                             company=company, 
+                             current_year=current_year,
+                             monthly_tax_data=monthly_tax_data,
+                             annual_summary=annual_summary,
+                             chart_data=chart_data)
+
+    @app.route('/companies/<int:company_id>/taxes/payment', methods=['POST'])
+    @login_required
+    @require_company_perm('taxes')
+    def record_tax_payment(company_id):
+        """Registrar pago de impuestos manual"""
+        company = Company.query.get_or_404(company_id)
+        
+        try:
+            month = int(request.form.get('month'))
+            year = int(request.form.get('year'))
+            amount = float(request.form.get('amount'))
+            tax_type = request.form.get('tax_type', 'IVA')
+            notes = request.form.get('notes')
+            
+            payment = TaxPayment(
+                company_id=company_id,
+                period_month=month,
+                period_year=year,
+                tax_type=tax_type,
+                amount=amount,
+                notes=notes,
+                payment_date=now_mexico()
+            )
+            
+            db.session.add(payment)
+            db.session.commit()
+            
+            flash('Pago de impuestos registrado correctamente', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al registrar pago: {str(e)}', 'error')
+            
+        return redirect(url_for('taxes_dashboard', company_id=company_id))
+    
+    # ==================== SALES ANALYTICS ROUTES ====================
+    
+    @app.route('/sales')
+    @login_required
+    def sales_list():
+        """Show list of companies for sales analysis"""
+        companies_list = current_user.accessible_companies_with_perm('sales')
+        return render_template('sales_list.html', companies=companies_list)
+    
+    @app.route('/companies/<int:company_id>/sales')
+    @login_required
+    @require_company_perm('sales')
+    def sales_dashboard(company_id):
+        """Dashboard de Análisis de Ventas con comparación año a año"""
+        company = Company.query.get_or_404(company_id)
+        
+        today = now_mexico()
+        
+        # Get year parameters from query string, default to current and previous year
+        current_year = request.args.get('current_year', type=int, default=today.year)
+        previous_year = request.args.get('previous_year', type=int, default=today.year - 1)
+        
+        # Get available years from invoices
+        available_years = db.session.query(
+            extract('year', Invoice.date).label('year')
+        ).filter(
+            Invoice.company_id == company_id,
+            Invoice.type == 'I'  # Only income invoices
+        ).distinct().order_by(extract('year', Invoice.date).desc()).all()
+        available_years = [int(y[0]) for y in available_years]
+        
+        # Monthly comparison data
+        monthly_comparison = []
+        month_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        
+        # Chart data arrays
+        chart_months = []
+        chart_current_sales = []
+        chart_previous_sales = []
+        chart_growth_percentage = []
+        
+        # Annual totals
+        annual_current_total = 0
+        annual_previous_total = 0
+        annual_current_invoices = 0
+        annual_previous_invoices = 0
+        
+        for month_num in range(1, 13):
+            # Current year sales
+            current_sales_query = db.session.query(
+                func.sum(Invoice.total).label('total'),
+                func.count(Invoice.id).label('count')
+            ).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'I',
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == current_year
+            ).first()
+            
+            current_sales = float(current_sales_query.total or 0)
+            current_invoices = int(current_sales_query.count or 0)
+            
+            # Previous year sales
+            previous_sales_query = db.session.query(
+                func.sum(Invoice.total).label('total'),
+                func.count(Invoice.id).label('count')
+            ).filter(
+                Invoice.company_id == company_id,
+                Invoice.type == 'I',
+                extract('month', Invoice.date) == month_num,
+                extract('year', Invoice.date) == previous_year
+            ).first()
+            
+            previous_sales = float(previous_sales_query.total or 0)
+            previous_invoices = int(previous_sales_query.count or 0)
+            
+            # Calculate growth
+            growth_amount = current_sales - previous_sales
+            growth_percentage = ((growth_amount / previous_sales) * 100) if previous_sales > 0 else 0
+            
+            # Calculate average ticket
+            current_avg_ticket = (current_sales / current_invoices) if current_invoices > 0 else 0
+            previous_avg_ticket = (previous_sales / previous_invoices) if previous_invoices > 0 else 0
+            
+            # Accumulate annual totals
+            annual_current_total += current_sales
+            annual_previous_total += previous_sales
+            annual_current_invoices += current_invoices
+            annual_previous_invoices += previous_invoices
+            
+            # Chart data
+            chart_months.append(month_names[month_num - 1][:3])  # Abbreviated
+            chart_current_sales.append(current_sales)
+            chart_previous_sales.append(previous_sales)
+            chart_growth_percentage.append(round(growth_percentage, 2))
+            
+            monthly_comparison.append({
+                'month_num': month_num,
+                'month_name': month_names[month_num - 1],
+                'current_sales': current_sales,
+                'previous_sales': previous_sales,
+                'growth_amount': growth_amount,
+                'growth_percentage': round(growth_percentage, 2),
+                'current_invoices': current_invoices,
+                'previous_invoices': previous_invoices,
+                'current_avg_ticket': current_avg_ticket,
+                'previous_avg_ticket': previous_avg_ticket
+            })
+        
+        # Annual summary
+        annual_growth_amount = annual_current_total - annual_previous_total
+        annual_growth_percentage = ((annual_growth_amount / annual_previous_total) * 100) if annual_previous_total > 0 else 0
+        
+        current_avg_monthly = annual_current_total / 12
+        previous_avg_monthly = annual_previous_total / 12
+        
+        # Find best and worst months
+        months_with_sales = [m for m in monthly_comparison if m['current_sales'] > 0]
+        best_month = max(months_with_sales, key=lambda x: x['current_sales']) if months_with_sales else None
+        worst_month = min(months_with_sales, key=lambda x: x['current_sales']) if months_with_sales else None
+        
+        # Find month with highest growth
+        months_with_growth = [m for m in monthly_comparison if m['previous_sales'] > 0]
+        best_growth_month = max(months_with_growth, key=lambda x: x['growth_percentage']) if months_with_growth else None
+        worst_growth_month = min(months_with_growth, key=lambda x: x['growth_percentage']) if months_with_growth else None
+        
+        annual_summary = {
+            'current_year': current_year,
+            'previous_year': previous_year,
+            'current_total': annual_current_total,
+            'previous_total': annual_previous_total,
+            'growth_amount': annual_growth_amount,
+            'growth_percentage': round(annual_growth_percentage, 2),
+            'current_avg_monthly': current_avg_monthly,
+            'previous_avg_monthly': previous_avg_monthly,
+            'current_invoices': annual_current_invoices,
+            'previous_invoices': annual_previous_invoices,
+            'current_avg_ticket': (annual_current_total / annual_current_invoices) if annual_current_invoices > 0 else 0,
+            'previous_avg_ticket': (annual_previous_total / annual_previous_invoices) if annual_previous_invoices > 0 else 0,
+            'best_month': best_month,
+            'worst_month': worst_month,
+            'best_growth_month': best_growth_month,
+            'worst_growth_month': worst_growth_month
+        }
+        
+        # Top customers (receivers of income invoices)
+        top_customers = db.session.query(
+            Invoice.receiver_rfc,
+            Invoice.receiver_name,
+            func.sum(Invoice.total).label('total_sales'),
+            func.count(Invoice.id).label('invoice_count')
+        ).filter(
+            Invoice.company_id == company_id,
+            Invoice.type == 'I',
+            extract('year', Invoice.date) == current_year
+        ).group_by(
+            Invoice.receiver_rfc,
+            Invoice.receiver_name
+        ).order_by(
+            func.sum(Invoice.total).desc()
+        ).limit(10).all()
+        
+        top_customers_data = []
+        for customer in top_customers:
+            total_sales = float(customer.total_sales)
+            invoice_count = int(customer.invoice_count)
+            avg_ticket = total_sales / invoice_count if invoice_count > 0 else 0
+            percentage = (total_sales / annual_current_total * 100) if annual_current_total > 0 else 0
+            
+            top_customers_data.append({
+                'rfc': customer.receiver_rfc,
+                'name': customer.receiver_name or customer.receiver_rfc,
+                'total_sales': total_sales,
+                'invoice_count': invoice_count,
+                'avg_ticket': avg_ticket,
+                'percentage': round(percentage, 2)
+            })
+        
+        # Chart data for JavaScript
+        chart_data = {
+            'months': chart_months,
+            'current_sales': chart_current_sales,
+            'previous_sales': chart_previous_sales,
+            'growth_percentage': chart_growth_percentage
+        }
+        
+        return render_template('sales/dashboard.html',
+                             company=company,
+                             available_years=available_years,
+                             monthly_comparison=monthly_comparison,
+                             annual_summary=annual_summary,
+                             top_customers=top_customers_data,
+                             chart_data=chart_data)
+    
+    @app.route('/companies/<int:company_id>/search')
+    @login_required
+    @require_company_perm('invoices')
+    def search_invoices(company_id):
+        """Búsqueda avanzada de facturas"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Parámetros de búsqueda
+        supplier_id = request.args.get('supplier_id', type=int)
+        category_id = request.args.get('category_id', type=int)
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        min_amount = request.args.get('min_amount', type=float)
+        max_amount = request.args.get('max_amount', type=float)
+        search_text = request.args.get('q', '')
+        
+        # Query base
+        query = Invoice.query.filter_by(company_id=company_id)
+        
+        # Aplicar filtros
+        if supplier_id:
+            query = query.filter_by(supplier_id=supplier_id)
+        
+        if date_from:
+            query = query.filter(Invoice.date >= datetime.fromisoformat(date_from))
+        
+        if date_to:
+            query = query.filter(Invoice.date <= datetime.fromisoformat(date_to))
+        
+        if min_amount:
+            query = query.filter(Invoice.total >= min_amount)
+        
+        if max_amount:
+            query = query.filter(Invoice.total <= max_amount)
+        
+        if search_text:
+            query = query.filter(
+                db.or_(
+                    Invoice.descripcion.ilike(f'%{search_text}%'),
+                    Invoice.issuer_name.ilike(f'%{search_text}%'),
+                    Invoice.receiver_name.ilike(f'%{search_text}%')
+                )
+            )
+        
+        # Ordenar y paginar
+        invoices = query.order_by(Invoice.date.desc()).all()
+        
+        # Listas para filtros
+        suppliers_list = Supplier.query.filter_by(company_id=company_id, active=True).order_by(Supplier.business_name).all()
+        categories_list = Category.query.filter_by(company_id=company_id, active=True).all()
+        
+        return render_template('search/invoices.html',
+            company=company,
+            invoices=invoices,
+            suppliers=suppliers_list,
+            categories=categories_list,
+            filters={
+                'supplier_id': supplier_id,
+                'category_id': category_id,
+                'date_from': date_from,
+                'date_to': date_to,
+                'min_amount': min_amount,
+                'max_amount': max_amount,
+                'q': search_text
+            }
+        )
+    
+
+    @app.route('/companies/<int:company_id>/invoices/<int:invoice_id>')
+    @login_required
+    @require_company_perm('invoices')
+    def invoice_detail(company_id, invoice_id):
+        """Detalle completo de una factura"""
+        company = Company.query.get_or_404(company_id)
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('search_invoices', company_id=company_id))
+            
+        return render_template('invoices/detail.html', company=company, invoice=invoice)
+
+    # ==================== QR CODE ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/qr')
+    @login_required
+    @require_company_perm('invoices', 'facturacion')
+    def company_qr(company_id):
+        """Generate QR code for company"""
+        company = Company.query.get_or_404(company_id)
+        qr_base64 = QRService.generate_company_qr(company)
+        return render_template('qr_display.html', 
+            company=company, 
+            qr_image=qr_base64,
+            title=f'QR - {company.name}'
+        )
+    
+    @app.route('/companies/<int:company_id>/qr/download')
+    @login_required
+    @require_company_perm('invoices', 'facturacion')
+    def company_qr_download(company_id):
+        """Download QR code as PNG"""
+        company = Company.query.get_or_404(company_id)
+        data = f"RFC: {company.rfc}\nNombre: {company.name}"
+        qr_bytes = QRService.generate_qr_bytes(data)
+        
+        return Response(
+            qr_bytes,
+            mimetype='image/png',
+            headers={'Content-Disposition': f'attachment; filename=qr_{company.rfc}.png'}
+        )
+    
+    @app.route('/companies/<int:company_id>/invoices/<int:invoice_id>/qr')
+    @login_required
+    @require_company_perm('invoices', 'facturacion')
+    def invoice_qr(company_id, invoice_id):
+        """Generate SAT verification QR for invoice"""
+        invoice = Invoice.query.get_or_404(invoice_id)
+        
+        if invoice.company_id != company_id:
+            flash('Factura no encontrada', 'error')
+            return redirect(url_for('search_invoices', company_id=company_id))
+        
+        # Get seal last 8 chars from XML if available
+        seal_last_8 = "00000000"
+        if invoice.xml_content:
+            import re
+            match = re.search(r'Sello="([^"]+)"', invoice.xml_content)
+            if match:
+                seal_last_8 = match.group(1)[-8:]
+        
+        qr_base64 = QRService.generate_cfdi_qr(
+            uuid=invoice.uuid,
+            issuer_rfc=invoice.issuer_rfc,
+            receiver_rfc=invoice.receiver_rfc,
+            total=invoice.total,
+            seal_last_8=seal_last_8
+        )
+        
+        return render_template('qr_display.html',
+            invoice=invoice,
+            qr_image=qr_base64,
+            title=f'QR CFDI - {invoice.uuid}'
+        )
+
+    # ==================== API ROUTES ====================
+    
+    @app.route('/api/companies/<int:company_id>/stats')
+    @login_required
+    @cache.cached(timeout=60, query_string=True)
+    def api_company_stats(company_id):
+        """API endpoint para estadísticas en tiempo real (cached 60s)"""
+        month = request.args.get('month', type=int)
+        year = request.args.get('year', type=int)
+        
+        if not month or not year:
+            today = now_mexico()
+            month = today.month
+            year = today.year
+        
+        income = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'INCOME',
+            extract('month', Movement.date) == month,
+            extract('year', Movement.date) == year
+        ).scalar() or 0
+        
+        expense = db.session.query(func.sum(Movement.amount)).filter(
+            Movement.company_id == company_id,
+            Movement.type == 'EXPENSE',
+            extract('month', Movement.date) == month,
+            extract('year', Movement.date) == year
+        ).scalar() or 0
+        
+        return jsonify({
+            'income': float(income),
+            'expense': float(expense),
+            'balance': float(income - expense),
+            'month': month,
+            'year': year
+        })
+
+    # ==================== CUSTOMER API ROUTES ====================
+    
+    @app.route('/api/companies/<int:company_id>/customers/search')
+    @login_required
+    def api_search_customers(company_id):
+        """
+        Buscar clientes por RFC o nombre para autocompletado.
+        Query params: q (texto de búsqueda)
+        """
+        query_text = request.args.get('q', '').strip()
+        
+        if not query_text or len(query_text) < 2:
+            return jsonify([])
+        
+        # Buscar por RFC o nombre (case insensitive)
+        customers = Customer.query.filter(
+            Customer.company_id == company_id,
+            db.or_(
+                Customer.rfc.ilike(f'{query_text}%'),
+                Customer.nombre.ilike(f'%{query_text}%')
+            )
+        ).limit(10).all()
+        
+        results = []
+        for customer in customers:
+            results.append({
+                'rfc': customer.rfc,
+                'nombre': customer.nombre,
+                'codigo_postal': customer.codigo_postal,
+                'regimen_fiscal': customer.regimen_fiscal
+            })
+        
+        return jsonify(results)
+    
+    @app.route('/api/companies/<int:company_id>/customers/<rfc>')
+    @login_required
+    def api_get_customer(company_id, rfc):
+        """
+        Obtener datos completos de un cliente por RFC.
+        """
+        customer = Customer.query.filter_by(
+            company_id=company_id,
+            rfc=rfc.upper()
+        ).first()
+        
+        if not customer:
+            return jsonify({'error': 'Cliente no encontrado'}), 404
+        
+        return jsonify({
+            'rfc': customer.rfc,
+            'nombre': customer.nombre,
+            'codigo_postal': customer.codigo_postal,
+            'regimen_fiscal': customer.regimen_fiscal
+        })
+
+    # ==================== PRODUCTS API ROUTES ====================
+    
+    @app.route('/api/companies/<int:company_id>/products/search')
+    @login_required
+    def api_search_products(company_id):
+        """
+        Buscar productos por SKU, nombre o descripción para autocompletado.
+        Query params: q (texto de búsqueda)
+        """
+        query_text = request.args.get('q', '').strip()
+        
+        if not query_text or len(query_text) < 2:
+            return jsonify([])
+        
+        # Buscar por SKU, nombre o descripción (case insensitive)
+        products = Product.query.filter(
+            Product.company_id == company_id,
+            Product.active == True,
+            db.or_(
+                Product.sku.ilike(f'{query_text}%'),
+                Product.name.ilike(f'%{query_text}%'),
+                Product.description.ilike(f'%{query_text}%')
+            )
+        ).limit(10).all()
+        
+        results = []
+        for product in products:
+            results.append({
+                'id': product.id,
+                'sku': product.sku or '',
+                'name': product.name,
+                'description': product.description or '',
+                'selling_price': float(product.calculated_selling_price),
+                'unit_measure': product.unit_measure or 'Servicio'
+            })
+
+        return jsonify(results)
+
+    # ==================== TEMPLATES API ROUTES ====================
+
+    @app.route('/api/companies/<int:company_id>/templates/<int:template_id>/items')
+    @login_required
+    def api_template_items(company_id, template_id):
+        """
+        Get items from an invoice template for loading into factura form.
+        """
+        template = InvoiceTemplate.query.filter_by(
+            id=template_id,
+            company_id=company_id,
+            active=True
+        ).first()
+
+        if not template:
+            return jsonify({'error': 'Plantilla no encontrada'}), 404
+
+        items = []
+        for item in template.items:
+            items.append({
+                'type': item.item_type,
+                'name': item.item_name,
+                'quantity': item.quantity,
+                'price': item.item_price,
+                'product_id': item.product_id,
+                'service_id': item.service_id
+            })
+
+        return jsonify(items)
+
+    # ==================== CATÁLOGOS SAT API ====================
+    
+    @app.route('/api/catalogs/<catalog_type>/search')
+    @login_required
+    def api_catalog_search(catalog_type):
+        """
+        Buscar en catálogos del SAT (Productos, Unidades, etc.)
+        """
+        from services.catalogs_service import CatalogsService
+        
+        query = request.args.get('q', '').strip()
+        limit = request.args.get('limit', 50, type=int)
+        
+        # Limitar a 100 para evitar sobrecarga
+        limit = min(limit, 100)
+        
+        try:
+            results = CatalogsService.search_catalog(catalog_type, query, limit)
+            return jsonify(results)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f'Error en búsqueda de catálogo {catalog_type}: {str(e)}')
+            return jsonify({'error': 'Error al buscar en catálogo'}), 500
+    
+    @app.route('/api/catalogs/<catalog_type>/<code>')
+    @login_required
+    def api_catalog_get(catalog_type, code):
+        """
+        Obtener un elemento específico de un catálogo
+        """
+        from services.catalogs_service import CatalogsService
+        
+        item = CatalogsService.get_catalog_item(catalog_type, code)
+        if not item:
+            return jsonify({'error': 'Elemento no encontrado'}), 404
+        
+        return jsonify(item)
+
+    # ==================== FACTURACIÓN ROUTES ====================
+    
+    @app.route('/facturacion')
+    @login_required
+    def facturacion_list():
+        """Lista de empresas para acceder al módulo de facturación"""
+        companies_list = current_user.accessible_companies_with_perm('facturacion')
+        return render_template('facturacion/facturacion_list.html', companies=companies_list)
+    
+    @app.route('/companies/<int:company_id>/facturacion')
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_dashboard(company_id):
+        """Dashboard principal de facturación"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Check if Finkok credentials are configured
+        credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+        has_credentials = credentials is not None
+        environment = credentials.environment if credentials else None
+        
+        # Get issued invoices from XML files on disk
+        facturas_generadas = []
+        xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+        
+        if os.path.exists(xml_dir):
+            try:
+                from datetime import datetime as dt_util
+                for filename in os.listdir(xml_dir):
+                    if filename.endswith('.xml'):
+                        file_path = os.path.join(xml_dir, filename)
+                        file_stat = os.stat(file_path)
+                        
+                        # Extract UUID from filename (format: SERIEFOLIO_UUID.xml)
+                        uuid_val = None
+                        if '_' in filename:
+                            uuid_val = filename.split('_', 1)[1].replace('.xml', '')
+                        
+                        # Try to extract basic info from XML
+                        receptor_name = ''
+                        receptor_rfc = ''
+                        total = 0.0
+                        fecha = dt_util.fromtimestamp(file_stat.st_ctime)
+                        status_sat = 'VIGENTE'
+                        
+                        try:
+                            from lxml import etree
+                            tree = etree.parse(file_path)
+                            root = tree.getroot()
+                            ns = {'cfdi': 'http://www.sat.gob.mx/cfd/4'}
+                            
+                            total = float(root.get('Total', 0))
+                            fecha_str = root.get('Fecha', '')
+                            if fecha_str:
+                                fecha = dt_util.fromisoformat(fecha_str)
+                            
+                            receptor = root.find('cfdi:Receptor', ns)
+                            if receptor is not None:
+                                receptor_name = receptor.get('Nombre', '')
+                                receptor_rfc = receptor.get('Rfc', '')
+                            
+                            # Check if cancelled in DB
+                            if uuid_val:
+                                db_invoice = Invoice.query.filter_by(uuid=uuid_val).first()
+                                if db_invoice and db_invoice.status_sat == 'CANCELADO':
+                                    status_sat = 'CANCELADO'
+                        except Exception:
+                            pass
+                        
+                        facturas_generadas.append({
+                            'filename': filename,
+                            'uuid': uuid_val,
+                            'path': file_path,
+                            'size': file_stat.st_size,
+                            'created': fecha,
+                            'receiver_name': receptor_name,
+                            'receiver_rfc': receptor_rfc,
+                            'total': total,
+                            'status_sat': status_sat
+                        })
+                
+                facturas_generadas.sort(key=lambda x: x['created'], reverse=True)
+            except Exception as e:
+                logger.error(f'Error al listar facturas emitidas: {str(e)}')
+        
+        return render_template('facturacion/facturacion_dashboard.html',
+            company=company,
+            has_credentials=has_credentials,
+            environment=environment,
+            invoices=facturas_generadas
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/credenciales', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_credenciales(company_id):
+        """Configurar o actualizar credenciales de Finkok"""
+        company = Company.query.get_or_404(company_id)
+        credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+        
+        form = FinkokCredentialsForm()
+        
+        if request.method == 'POST' and form.validate_on_submit():
+            from utils.crypto import encrypt_password
+            
+            # Encrypt password
+            encrypted_password = encrypt_password(form.password.data)
+            
+            if credentials:
+                # Update existing
+                credentials.username = form.username.data
+                credentials.password_enc = encrypted_password
+                credentials.environment = form.environment.data
+                credentials.updated_at = now_mexico()
+                message = 'Credenciales actualizadas correctamente'
+            else:
+                # Create new
+                credentials = FinkokCredentials(
+                    company_id=company_id,
+                    username=form.username.data,
+                    password_enc=encrypted_password,
+                    environment=form.environment.data
+                )
+                db.session.add(credentials)
+                message = 'Credenciales configuradas correctamente'
+            
+            try:
+                db.session.commit()
+                flash(message, 'success')
+                return redirect(url_for('facturacion_dashboard', company_id=company_id))
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f'Error guardando credenciales: {str(e)}')
+                flash('Error al guardar credenciales', 'error')
+        
+        # Pre-populate form with existing credentials
+        if credentials and request.method == 'GET':
+            form.username.data = credentials.username
+            form.environment.data = credentials.environment
+        
+        return render_template('facturacion/credenciales.html',
+                company=company,
+                form=form,
+                has_credentials=credentials is not None
+            )
+    
+    @app.route('/companies/<int:company_id>/facturacion/download/<file_type>')
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_download_timbrado(company_id, file_type):
+        """Descargar archivo timbrado (XML o PDF)"""
+        from flask import session, send_file
+        
+        result = session.get('timbrado_result')
+        if not result or file_type not in result.get('files', {}):
+            flash('Archivo no encontrado', 'error')
+            return redirect(url_for('facturacion_timbrar', company_id=company_id))
+        
+        file_path = result['files'][file_type]
+        mimetype = 'application/xml' if file_type == 'xml' else 'application/pdf'
+        
+        return send_file(
+            file_path,
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=f"{result['uuid']}.{file_type}"
+        )
+
+    @app.route('/companies/<int:company_id>/facturacion/pdf/<path:filename>')
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_invoice_pdf(company_id, filename):
+        """Genera un PDF del CFDI a partir del XML usando satcfdi, con logo de la empresa."""
+        from flask import send_file, abort
+        from io import BytesIO
+        import base64
+        import mimetypes
+        from werkzeug.utils import secure_filename
+        from satcfdi.cfdi import CFDI
+        from satcfdi import render as cfdi_render
+
+        company = Company.query.get_or_404(company_id)
+
+        safe_name = secure_filename(filename)
+        if not safe_name.endswith('.xml'):
+            abort(404)
+
+        xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+        xml_path = os.path.realpath(os.path.join(xml_dir, safe_name))
+        if not xml_path.startswith(os.path.realpath(xml_dir) + os.sep) or not os.path.exists(xml_path):
+            abort(404)
+
+        with open(xml_path, 'rb') as f:
+            xml_bytes = f.read()
+        cfdi = CFDI.from_string(xml_bytes)
+
+        html = cfdi_render.html_str(cfdi)
+
+        logo_tag = ''
+        resolved_logo = None
+        if company.logo_path:
+            if os.path.exists(company.logo_path):
+                resolved_logo = company.logo_path
+            else:
+                fallback = os.path.join(PROJECT_ROOT, 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
+                if os.path.exists(fallback):
+                    resolved_logo = fallback
+                else:
+                    logger.warning(f'Logo no encontrado para {company.rfc}: stored={company.logo_path!r} fallback={fallback!r}')
+        if resolved_logo:
+            try:
+                with open(resolved_logo, 'rb') as lf:
+                    logo_b64 = base64.b64encode(lf.read()).decode('ascii')
+                mime = mimetypes.guess_type(resolved_logo)[0] or 'image/png'
+                logo_tag = (
+                    f'<div style="text-align:center;padding:8px 0;">'
+                    f'<img src="data:{mime};base64,{logo_b64}" '
+                    f'style="max-height:90px;max-width:280px;"/>'
+                    f'</div>'
+                )
+            except Exception as e:
+                logger.warning(f'No se pudo incrustar logo para {company.rfc}: {e}')
+
+        if logo_tag:
+            if '<body>' in html:
+                html = html.replace('<body>', '<body>' + logo_tag, 1)
+            else:
+                html = logo_tag + html
+
+        import weasyprint
+        pdf_bytes = weasyprint.HTML(string=html).write_pdf(stylesheets=[cfdi_render.PDF_CSS])
+
+        uuid_val = None
+        if '_' in safe_name:
+            uuid_val = safe_name.split('_', 1)[1].replace('.xml', '')
+        download_name = f"{uuid_val or safe_name.replace('.xml', '')}.pdf"
+
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=download_name
+        )
+
+    @app.route('/companies/<int:company_id>/facturacion/estado', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_estado(company_id):
+        """Consultar estado de CFDI"""
+        import os
+        from datetime import datetime
+
+        company = Company.query.get_or_404(company_id)
+        form = ConsultarEstadoForm()
+        
+        # Listar facturas generadas por el sistema
+        facturas_generadas = []
+        xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+        
+        if os.path.exists(xml_dir):
+            try:
+                for filename in os.listdir(xml_dir):
+                    if filename.endswith('.xml'):
+                        file_path = os.path.join(xml_dir, filename)
+                        file_stat = os.stat(file_path)
+                        
+                        # Extraer UUID del nombre del archivo (formato: SERIEFOLIO_UUID.xml)
+                        uuid = None
+                        if '_' in filename:
+                            uuid = filename.split('_')[1].replace('.xml', '')
+                        
+                        facturas_generadas.append({
+                            'filename': filename,
+                            'uuid': uuid,
+                            'path': file_path,
+                            'size': file_stat.st_size,
+                            'created': datetime.fromtimestamp(file_stat.st_ctime)
+                        })
+                
+                # Ordenar por fecha de creación (más recientes primero)
+                facturas_generadas.sort(key=lambda x: x['created'], reverse=True)
+            except Exception as e:
+                logger.error(f'Error al listar facturas: {str(e)}')
+        
+        # Consultar estado (cuando se envía el form o se hace clic en "Checar Status")
+        result = None
+        if request.method == 'POST':
+            # Verificar si es consulta de factura generada
+            xml_filepath = request.form.get('xml_filepath')
+            
+            if xml_filepath and os.path.exists(xml_filepath):
+                try:
+                    from services.facturacion_service import FacturacionService
+                    
+                    with open(xml_filepath, 'r', encoding='utf-8') as f:
+                        xml_content = f.read()
+                    
+                    service = FacturacionService()
+                    result = service.consultar_estado(cfdi_xml=xml_content)
+                    
+                    if not result['success']:
+                        flash(f'Error al consultar: {result["message"]}', 'error')
+                        
+                except Exception as e:
+                    logger.error(f'Error al consultar estado: {str(e)}')
+                    flash(f'Error: {str(e)}', 'error')
+            
+            # Consulta manual (formulario tradicional)
+            elif form.validate_on_submit():
+                try:
+                    from services.facturacion_service import FacturacionService
+                    
+                    service = FacturacionService()
+                    
+                    if form.xml_file.data:
+                        xml_content = form.xml_file.data.read().decode('utf-8')
+                        result = service.consultar_estado(cfdi_xml=xml_content)
+                    elif form.uuid.data:
+                        if not all([form.rfc_emisor.data, form.rfc_receptor.data, form.total.data]):
+                            flash('Para consultar por UUID, debe proporcionar RFC emisor, RFC receptor y total', 'warning')
+                        else:
+                            result = service.consultar_estado(
+                                uuid=form.uuid.data,
+                                rfc_emisor=form.rfc_emisor.data,
+                                rfc_receptor=form.rfc_receptor.data,
+                                total=str(form.total.data)
+                            )
+                    
+                    if result and not result['success']:
+                        flash(f'Error al consultar: {result["message"]}', 'error')
+                        
+                except Exception as e:
+                    logger.error(f'Error al consultar estado: {str(e)}')
+                    flash(f'Error: {str(e)}', 'error')
+        
+        return render_template('facturacion/estado.html',
+            company=company,
+            form=form,
+            result=result,
+            facturas_generadas=facturas_generadas
+        )
+    
+    @app.route('/companies/<int:company_id>/facturacion/lista69b', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_lista69b(company_id):
+        """Verificar RFC en lista 69B"""
+        company = Company.query.get_or_404(company_id)
+        form = Lista69BForm()
+        
+        if request.method == 'POST' and form.validate_on_submit():
+            try:
+                from services.facturacion_service import FacturacionService
+                
+                service = FacturacionService()  # No requiere credenciales
+                result = service.verificar_lista_69b(form.rfc.data)
+                
+                if result['success']:
+                    return render_template('facturacion/lista69b.html',
+                        company=company,
+                        form=form,
+                        result=result
+                    )
+                else:
+                    flash(f'Error al consultar: {result["message"]}', 'error')
+                    
+            except Exception as e:
+                logger.error(f'Error en consulta lista 69B: {str(e)}')
+                flash(f'Error al verificar RFC: {str(e)}', 'error')
+        
+        return render_template('facturacion/lista69b.html',
+            company=company,
+            form=form
+        )
+
+    @app.route('/companies/<int:company_id>/facturacion/actualizar_estado/<string:uuid>', methods=['POST'])
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_actualizar_estado_db(company_id, uuid):
+        """Actualiza el estado de una factura específica consultando al SAT."""
+        company = Company.query.get_or_404(company_id)
+        if not current_user.can_access_company(company_id):
+            flash('No tienes acceso a esta empresa', 'error')
+            return redirect(url_for('index'))
+            
+        invoice = Invoice.query.filter_by(company_id=company.id, uuid=uuid).first()
+        xml_content = invoice.xml_content if invoice and invoice.xml_content else None
+        created_from_xml = False
+
+        if not xml_content:
+            xml_path = find_company_invoice_xml_path(company.rfc, uuid)
+            if xml_path:
+                with open(xml_path, 'r', encoding='utf-8') as f:
+                    xml_content = f.read()
+
+        if not invoice and xml_content:
+            try:
+                invoice_data = parse_invoice_xml_for_db(xml_content, fallback_uuid=uuid)
+                invoice = Invoice(company_id=company.id, status_sat='VIGENTE', **invoice_data)
+                db.session.add(invoice)
+                db.session.flush()
+                created_from_xml = True
+            except Exception as e:
+                logger.warning(f"No se pudo registrar la factura {uuid} desde XML: {str(e)}")
+
+        if not invoice and not xml_content:
+            flash('No se encontrÃ³ la factura en la base de datos ni el XML emitido para consultar su estado.', 'warning')
+            return redirect(url_for('facturacion_dashboard', company_id=company.id))
+        
+        try:
+            from services.facturacion_service import FacturacionService
+            service = FacturacionService()
+            
+            # Use the XML to check status if available
+            result = None
+            if xml_content:
+                result = service.consultar_estado(cfdi_xml=xml_content)
+            elif invoice and invoice.issuer_rfc and invoice.receiver_rfc and invoice.total is not None:
+                result = service.consultar_estado(
+                    uuid=uuid,
+                    rfc_emisor=invoice.issuer_rfc,
+                    rfc_receptor=invoice.receiver_rfc,
+                    total=str(invoice.total)
+                )
+            else:
+                flash('No hay suficientes datos (XML o RFCs/Total) para consultar al SAT.', 'warning')
+                return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                
+            if result and result['success']:
+                estado = result.get('estado', '').upper()
+                if estado == 'CANCELADO':
+                    if invoice:
+                        invoice.status_sat = 'CANCELADO'
+                        db.session.commit()
+                    flash(f'El SAT confirmó que la factura {uuid[:8]} está CANCELADA.', 'success')
+                elif estado == 'VIGENTE':
+                    # Si estaba en proceso de cancelación pero el SAT dice vigente, puede que haya sido rechazada o siga en proceso
+                    # El SAT también devuelve un campo EstatusCancelacion si se solicita
+                    if invoice:
+                        invoice.status_sat = 'VIGENTE'
+                        db.session.commit()
+                    flash(f'El SAT indica que la factura {uuid[:8]} sigue VIGENTE.', 'info')
+                else:
+                    if created_from_xml:
+                        db.session.commit()
+                    flash(f'Estado devuelto por el SAT: {estado}', 'info')
+            else:
+                if created_from_xml:
+                    db.session.commit()
+                flash(f'Error al consultar el SAT: {result.get("message", "Error desconocido")}', 'error')
+                
+        except Exception as e:
+            if created_from_xml:
+                db.session.rollback()
+            logger.error(f"Error actualizando estado de {uuid}: {str(e)}")
+            flash(f'Error al conectar con el SAT: {str(e)}', 'error')
+            
+        return redirect(url_for('facturacion_dashboard', company_id=company.id))
+
+    # ==================== GENERADOR DE CFDI ROUTES ====================
+    
+    @app.route('/companies/<int:company_id>/facturacion/crear', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('facturacion')
+    def crear_factura(company_id):
+        """Generador de CFDI - Crear, generar XML y timbrar automáticamente"""
+        company = Company.query.get_or_404(company_id)
+        
+        # Verificar que tenga credenciales Finkok
+        credentials = FinkokCredentials.query.filter_by(company_id=company_id).first()
+        if not credentials:
+            flash('Debe configurar las credenciales de Finkok primero', 'warning')
+            return redirect(url_for('facturacion_credenciales', company_id=company_id))
+        
+        # Crear formularios
+        form_comprobante = CFDIComprobanteForm()
+        form_receptor = CFDIReceptorForm()
+        
+        # Si es POST, procesamos
+        if request.method == 'POST':
+            return generar_y_timbrar_cfdi(company, credentials, form_comprobante, form_receptor)
+        
+        # GET: Obtener serie y folio actual
+        # Si el usuario especifica una serie en la URL, usarla; sino, usar "A" por defecto
+        serie_param = request.args.get('serie', 'A')
+
+        # Buscar el contador para esta serie
+        folio_counter = InvoiceFolioCounter.query.filter_by(
+            company_id=company_id,
+            serie=serie_param
+        ).first()
+
+        if not folio_counter:
+            # Crear contador nuevo para esta serie
+            folio_counter = InvoiceFolioCounter(
+                company_id=company_id,
+                serie=serie_param,
+                current_folio=0
+            )
+            db.session.add(folio_counter)
+            db.session.commit()
+
+        # El siguiente folio es el actual + 1
+        next_folio = folio_counter.current_folio + 1
+
+        # Pre-poblar el formulario con serie y folio
+        form_comprobante.serie.data = serie_param
+        form_comprobante.folio.data = str(next_folio).zfill(7)  # Formato: 0000001
+
+        # Pre-llenar lugar de expedición con CP de la empresa
+        if company.postal_code:
+            form_comprobante.lugar_expedicion.data = company.postal_code
+
+        # Cargar plantilla si se proporciona template_id
+        template_items = []
+        selected_template = None
+        template_id = request.args.get('template_id')
+        if template_id:
+            selected_template = InvoiceTemplate.query.filter_by(
+                id=template_id,
+                company_id=company_id,
+                active=True
+            ).first()
+            if selected_template:
+                for item in selected_template.items:
+                    template_items.append({
+                        'type': item.item_type,
+                        'name': item.item_name,
+                        'quantity': item.quantity,
+                        'price': item.item_price,
+                        'product_id': item.product_id,
+                        'service_id': item.service_id
+                    })
+
+        # Cargar lista de plantillas disponibles
+        available_templates = InvoiceTemplate.query.filter_by(
+            company_id=company_id,
+            active=True
+        ).order_by(InvoiceTemplate.name).all()
+
+        return render_template('facturacion/crear_factura.html',
+            company=company,
+            form_comprobante=form_comprobante,
+            form_receptor=form_receptor,
+            available_templates=available_templates,
+            selected_template=selected_template,
+            template_items=template_items
+        )
+    
+    
+    def generar_y_timbrar_cfdi(company, credentials, form_comprobante, form_receptor):
+        """Generar XML, timbrar y guardar en carpeta xml/[RFC]/"""
+        try:
+            from services.cfdi_generator import CFDIGenerator
+            from services.facturacion_service import FacturacionService
+            from utils.crypto import decrypt_password
+            from werkzeug.utils import secure_filename
+            import json
+            import tempfile
+            
+            # Obtener conceptos
+            conceptos_json = request.form.get('conceptos')
+            if not conceptos_json:
+                flash('Debe agregar al menos un concepto', 'error')
+                return redirect(url_for('crear_factura', company_id=company.id))
+            
+            conceptos = json.loads(conceptos_json)
+            
+            # Procesar archivos FIEL
+            fiel_cer_file = form_comprobante.fiel_cer.data
+            fiel_key_file = form_comprobante.fiel_key.data
+            fiel_password = form_comprobante.fiel_password.data
+            
+            if not fiel_cer_file or not fiel_key_file or not fiel_password:
+                flash('Debe proporcionar certificado FIEL, llave privada y contraseña', 'error')
+                return redirect(url_for('crear_factura', company_id=company.id))
+            
+            # Guardar FIEL temporalmente
+            temp_dir = tempfile.gettempdir()
+            cer_filename = secure_filename(fiel_cer_file.filename)
+            key_filename = secure_filename(fiel_key_file.filename)
+            
+            cer_path = os.path.join(temp_dir, f"fiel_{company.id}_{cer_filename}")
+            key_path = os.path.join(temp_dir, f"fiel_{company.id}_{key_filename}")
+            
+            fiel_cer_file.save(cer_path)
+            fiel_key_file.save(key_path)
+            
+            try:
+                # Generar XML
+                generator = CFDIGenerator(
+                    certificado_path=cer_path,
+                    key_path=key_path,
+                    key_password=fiel_password
+                )
+                
+                # Validar
+                validacion = generator.validar_datos(
+                    receptor_rfc=form_receptor.receptor_rfc.data,
+                    receptor_cp=form_receptor.receptor_cp.data,
+                    receptor_regimen=form_receptor.receptor_regimen.data,
+                    receptor_uso_cfdi=form_receptor.receptor_uso_cfdi.data,
+                    lugar_expedicion=form_comprobante.lugar_expedicion.data,
+                    conceptos=conceptos
+                )
+                
+                if not validacion['valido']:
+                    for error in validacion['errores']:
+                        flash(error, 'error')
+                    return redirect(url_for('crear_factura', company_id=company.id))
+                
+                # Generar CFDI (retorna tupla: objeto firmado, XML string)
+                cfdi_firmado, xml_sin_timbrar = generator.crear_factura(
+                    serie=form_comprobante.serie.data,
+                    folio=form_comprobante.folio.data,
+                    fecha=form_comprobante.fecha.data,
+                    forma_pago=form_comprobante.forma_pago.data,
+                    metodo_pago=form_comprobante.metodo_pago.data,
+                    lugar_expedicion=form_comprobante.lugar_expedicion.data,
+                    receptor_rfc=form_receptor.receptor_rfc.data,
+                    receptor_nombre=form_receptor.receptor_nombre.data,
+                    receptor_uso_cfdi=form_receptor.receptor_uso_cfdi.data,
+                    receptor_regimen=form_receptor.receptor_regimen.data,
+                    receptor_cp=form_receptor.receptor_cp.data,
+                    conceptos=conceptos
+                )
+                
+                # Crear carpeta xml/RFC_EMPRESA/ si no existe
+                xml_base_dir = os.path.join(PROJECT_ROOT, 'xml')
+                company_xml_dir = os.path.join(xml_base_dir, company.rfc)
+                os.makedirs(company_xml_dir, exist_ok=True)
+                
+                # Timbrar con Finkok - pasar el objeto CFDI directamente
+                password = decrypt_password(credentials.password_enc)
+                facturacion_service = FacturacionService(
+                    finkok_username=credentials.username,
+                    finkok_password=password,
+                    environment=credentials.environment
+                )
+                
+                # CRÍTICO: Pasar el objeto CFDI, no el string XML
+                result = facturacion_service.timbrar_factura(cfdi_firmado, accept='XML')
+                
+                if result['success']:
+                    # Guardar XMLs en carpeta
+                    uuid = result['uuid']
+                    serie = form_comprobante.serie.data or ''
+                    folio = form_comprobante.folio.data or 'SN'
+                    
+                    # Nombre del archivo
+                    filename_base = f"{serie}{folio}_{uuid}"
+                    
+                    # Guardar XML timbrado
+                    if 'xml' in result:
+                        xml_path = os.path.join(company_xml_dir, f"{filename_base}.xml")
+                        with open(xml_path, 'wb') as f:
+                            f.write(result['xml'])
+                        logger.info(f"XML timbrado guardado en: {xml_path}")
+                    
+                    # Guardar PDF
+                    if 'pdf' in result:
+                        pdf_path = os.path.join(company_xml_dir, f"{filename_base}.pdf")
+                        with open(pdf_path, 'wb') as f:
+                            f.write(result['pdf'])
+                        logger.info(f"PDF guardado en: {pdf_path}")
+                    
+                    # INCREMENTAR CONTADOR DE FOLIO
+                    # Obtener o crear el contador para esta serie
+                    folio_counter = InvoiceFolioCounter.query.filter_by(
+                        company_id=company.id,
+                        serie=serie
+                    ).first()
+                    
+                    if not folio_counter:
+                        # Crear contador si no existe
+                        folio_counter = InvoiceFolioCounter(
+                            company_id=company.id,
+                            serie=serie,
+                            current_folio=0
+                        )
+                        db.session.add(folio_counter)
+                    
+                    # Extraer el número del folio (remover ceros a la izquierda)
+                    try:
+                        folio_num = int(folio)
+                    except ValueError:
+                        folio_num = 1
+                    
+                    # Actualizar el contador solo si el folio usado es mayor o igual al actual
+                    if folio_num >= folio_counter.current_folio:
+                        folio_counter.current_folio = folio_num
+                        folio_counter.updated_at = now_mexico()
+                        db.session.commit()
+                        logger.info(f"Contador de folio actualizado: Serie {serie}, Folio {folio_num}")
+                    
+                    # GUARDAR O ACTUALIZAR CLIENTE
+                    receptor_rfc = form_receptor.receptor_rfc.data.upper().strip()
+                    receptor_nombre = form_receptor.receptor_nombre.data.strip()
+                    receptor_cp = form_receptor.receptor_cp.data.strip()
+                    receptor_regimen = form_receptor.receptor_regimen.data
+                    
+                    # Buscar si el cliente ya existe
+                    existing_customer = Customer.query.filter_by(
+                        company_id=company.id,
+                        rfc=receptor_rfc
+                    ).first()
+                    
+                    if existing_customer:
+                        # Actualizar datos del cliente si han cambiado
+                        existing_customer.nombre = receptor_nombre
+                        existing_customer.codigo_postal = receptor_cp
+                        existing_customer.regimen_fiscal = receptor_regimen
+                        existing_customer.updated_at = now_mexico()
+                        logger.info(f"Cliente actualizado: {receptor_rfc}")
+                    else:
+                        # Crear nuevo cliente
+                        new_customer = Customer(
+                            company_id=company.id,
+                            rfc=receptor_rfc,
+                            nombre=receptor_nombre,
+                            codigo_postal=receptor_cp,
+                            regimen_fiscal=receptor_regimen
+                        )
+                        db.session.add(new_customer)
+                        logger.info(f"Nuevo cliente creado: {receptor_rfc}")
+                    
+                    db.session.commit()
+                    
+                    flash(f'✅ ¡Factura creada y timbrada exitosamente! UUID: {uuid}', 'success')
+                    flash(f'📁 Archivos guardados en: xml/{company.rfc}/', 'info')
+                    
+                    return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                else:
+                    # --- Save Failed XML (Timbrado Error) ---
+                    try:
+                        import time
+                        import uuid as uuid_lib
+                        from lxml import etree
+                        
+                        timestamp = int(time.time())
+                        unique_id = uuid_lib.uuid4().hex[:8]
+                        filename = f"FAILED_TIMBRADO_{timestamp}_{unique_id}.xml"
+                        
+                        fallidos_dir = os.path.join(PROJECT_ROOT, 'xml', 'fallidos')
+                        os.makedirs(fallidos_dir, exist_ok=True)
+                        filepath = os.path.join(fallidos_dir, filename)
+                        
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            f.write(xml_sin_timbrar)
+                            
+                        logger.info(f"XML rechazado por PAC guardado en: {filepath}")
+                        flash(f'El XML generado fue guardado en xml/fallidos para revisión.', 'warning')
+                        
+                    except Exception as save_err:
+                        logger.error(f"Error guardando XML fallido: {str(save_err)}")
+                    
+                    flash(f'Error al timbrar: {result["message"]}', 'error')
+                    return redirect(url_for('crear_factura', company_id=company.id))
+                    
+            finally:
+                # Limpiar archivos temporales
+                if os.path.exists(cer_path):
+                    os.remove(cer_path)
+                if os.path.exists(key_path):
+                    os.remove(key_path)
+                
+        except Exception as e:
+            logger.error(f'Error al generar y timbrar: {str(e)}')
+            flash(f'Error: {str(e)}', 'error')
+            return redirect(url_for('crear_factura', company_id=company.id))
+
+    @app.route('/companies/<int:company_id>/facturacion/cancelar/<string:uuid>', methods=['GET', 'POST'])
+    @login_required
+    @require_company_perm('facturacion')
+    def facturacion_cancelar(company_id, uuid):
+        company = Company.query.get_or_404(company_id)
+        if not current_user.can_access_company(company_id):
+            flash('No tienes acceso a esta empresa', 'error')
+            return redirect(url_for('index'))
+            
+        perms = current_user.get_company_permissions(company_id)
+        if not perms.get('facturacion'):
+            flash('No tienes permiso para facturación', 'error')
+            return redirect(url_for('dashboard', company_id=company_id))
+
+        invoice = Invoice.query.filter_by(company_id=company.id, uuid=uuid).first_or_404()
+        
+        # We need the credentials environment
+        credentials = FinkokCredentials.query.filter_by(company_id=company.id, active=True).first()
+        if not credentials:
+            flash('Credenciales de Finkok no configuradas.', 'error')
+            return redirect(url_for('facturacion_dashboard', company_id=company.id))
+
+        form = CancelarFacturaForm()
+        if form.validate_on_submit():
+            try:
+                from services.facturacion_service import FacturacionService
+                from utils.crypto import decrypt_password
+                from satcfdi.models import Signer
+                
+                fiel_cer_file = form.fiel_cer.data
+                fiel_key_file = form.fiel_key.data
+                fiel_password = form.fiel_password.data
+                motivo = form.motivo.data
+                sustitucion_uuid = form.sustitucion_uuid.data if form.sustitucion_uuid.data else None
+
+                # Leer archivos en memoria directamente
+                cer_bytes = fiel_cer_file.read()
+                key_bytes = fiel_key_file.read()
+
+                try:
+                    signer = Signer.load(cer_bytes, key_bytes, fiel_password)
+                    password = decrypt_password(credentials.password_enc)
+                    
+                    facturacion_service = FacturacionService(
+                        finkok_username=credentials.username,
+                        finkok_password=password,
+                        environment=credentials.environment,
+                        signer=signer
+                    )
+                    
+                    # Llamar a cancelar
+                    result = facturacion_service.cancelar_factura(
+                        cfdi_xml=invoice.xml_content,
+                        reason=motivo,
+                        substitution_uuid=sustitucion_uuid
+                    )
+                    
+                    if result['success']:
+                        # Guardar el acuse de cancelación
+                        if 'acuse' in result and result['acuse']:
+                            xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+                            os.makedirs(xml_dir, exist_ok=True)
+                            acuse_path = os.path.join(xml_dir, f"acuse_cancelacion_{uuid}.xml")
+                            with open(acuse_path, 'w', encoding='utf-8') as f:
+                                f.write(result['acuse'])
+                            logger.info(f"Acuse de cancelación guardado en {acuse_path}")
+                        
+                        # Marcar en proceso, ya que requiere consultar el estado después
+                        invoice.status_sat = 'EN_PROCESO_CANCELACION'
+                        db.session.commit()
+                        flash('Solicitud de cancelación enviada al SAT. El estado se actualizará a EN_PROCESO_CANCELACION. Consulte el estado más tarde.', 'success')
+                        return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                    else:
+                        error_msg = result.get('message', '').lower()
+                        if 'timeout' in error_msg or 'time out' in error_msg:
+                            invoice.status_sat = 'VERIFICACION_PENDIENTE'
+                            db.session.commit()
+                            flash('La solicitud tardó mucho en responder (Timeout). Se marcó como VERIFICACION_PENDIENTE. Por favor consulte el estado más tarde.', 'warning')
+                            return redirect(url_for('facturacion_dashboard', company_id=company.id))
+                        else:
+                            flash(f'Error al cancelar factura: {result["message"]}', 'error')
+
+                except ValueError as ve:
+                    # Error al cargar la FIEL por contraseña incorrecta
+                    flash(f'Error con los archivos FIEL o contraseña: {str(ve)}', 'error')
+                    
+            except Exception as e:
+                logger.error(f'Error cancelando factura: {str(e)}')
+                flash(f'Error inesperado: {str(e)}', 'error')
+
+        return render_template('facturacion/cancelar_factura.html', company=company, form=form, invoice=invoice)
+
+    # Register mobile API blueprint
+    from routes.mobile_api import mobile_api_bp
+    app.register_blueprint(mobile_api_bp, url_prefix='/api/mobile')
+    csrf.exempt(mobile_api_bp)
+
+    # Register CLI commands
+    from cli import register_commands
+    register_commands(app)
+
+    return app
+
+if __name__ == '__main__':
+    # Direct execution is for development only. Production must use a WSGI
+    # server (gunicorn / uWSGI / mod_wsgi) via wsgi.py, which selects
+    # ProductionConfig automatically.
+    #
+    # Debug mode exposes the Werkzeug interactive console which permits
+    # remote code execution if reachable, so it is now gated behind an
+    # explicit env var and defaults to OFF.
+    debug_enabled = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes')
+    app = create_app()
+    app.run(debug=debug_enabled)

@@ -229,7 +229,7 @@
                                 <button type="button" class="btn btn-outline-primary me-2" onclick="cargarPlantilla()">
                                     <i class="fas fa-download"></i> Cargar Plantilla
                                 </button>
-                                <a href="{{ url_for('inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-secondary" target="_blank">
+                                <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-secondary" target="_blank">
                                     <i class="fas fa-cog"></i> Gestionar Plantillas
                                 </a>
                             </div>
@@ -268,8 +268,18 @@
                                     <td></td>
                                 </tr>
                                 <tr class="fw-bold">
-                                    <td colspan="4" class="text-end">IVA:</td>
+                                    <td colspan="4" class="text-end">IVA Trasladado:</td>
                                     <td id="totalIVA">$0.00</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="fw-bold text-danger" id="tr_ret_isr" style="display: none;">
+                                    <td colspan="4" class="text-end">Retención ISR:</td>
+                                    <td id="totalRetISR">$0.00</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="fw-bold text-danger" id="tr_ret_iva" style="display: none;">
+                                    <td colspan="4" class="text-end">Retención IVA:</td>
+                                    <td id="totalRetIVA">$0.00</td>
                                     <td></td>
                                 </tr>
                                 <tr class="fw-bold table-success">
@@ -382,6 +392,33 @@
                         </select>
                     </div>
                 </div>
+                <div class="row mb-2">
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="modal_aplica_retenciones" onchange="toggleRetenciones()">
+                            <label class="form-check-label fw-bold" for="modal_aplica_retenciones">Aplicar Retenciones (ISR/IVA)</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3 d-none" id="modal_retenciones_container">
+                    <div class="col-md-6">
+                        <label class="form-label text-danger">Retención ISR</label>
+                        <select class="form-select border-danger" id="modal_tasa_ret_isr">
+                            <option value="0.00" selected>0% (No aplica)</option>
+                            <option value="0.0125">1.25% (RESICO)</option>
+                            <option value="0.10">10% (Honorarios/Arrendamiento)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-danger">Retención IVA</label>
+                        <select class="form-select border-danger" id="modal_tasa_ret_iva">
+                            <option value="0.00" selected>0% (No aplica)</option>
+                            <option value="0.106666">10.6667% (2/3 de IVA)</option>
+                            <option value="0.04">4% (Fletes)</option>
+                        </select>
+                    </div>
+                </div>
+                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Clave Producto/Servicio</label>
@@ -557,7 +594,32 @@
 </style>
 
 <script>
+    // ---------------------------------------------------------------------
+    // XSS-safe HTML escaping helper. Use this around ANY value that came
+    // from the server / DB / user input before interpolating it into a
+    // template literal that ends up assigned to an element via innerHTML.
+    // ---------------------------------------------------------------------
+    function escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     // Conceptos array
+    function toggleRetenciones() {
+        const isChecked = document.getElementById('modal_aplica_retenciones').checked;
+        const container = document.getElementById('modal_retenciones_container');
+        if (isChecked) {
+            container.classList.remove('d-none');
+        } else {
+            container.classList.add('d-none');
+        }
+    }
+
     let conceptos = [];
     let currentStep = 1;
     let editingIndex = -1; // Track if we're editing an existing concept
@@ -665,6 +727,10 @@
         document.getElementById('modal_tasa_iva').value = '0.16';
         document.getElementById('modal_clave_prod_serv').value = '01010101';
         document.getElementById('modal_clave_unidad').value = 'E48';
+        document.getElementById('modal_aplica_retenciones').checked = false;
+        document.getElementById('modal_tasa_ret_isr').value = '0.00';
+        document.getElementById('modal_tasa_ret_iva').value = '0.00';
+        toggleRetenciones();
 
         // Update modal title
         document.querySelector('#conceptoModal .modal-title').innerHTML = '<i class="fas fa-plus"></i> Agregar Producto/Servicio';
@@ -685,6 +751,17 @@
         document.getElementById('modal_tasa_iva').value = concepto.tasa_iva;
         document.getElementById('modal_clave_prod_serv').value = concepto.clave_prod_serv || '01010101';
         document.getElementById('modal_clave_unidad').value = concepto.clave_unidad || 'E48';
+        
+        const tieneRetenciones = (concepto.tasa_ret_isr > 0 || concepto.tasa_ret_iva > 0);
+        document.getElementById('modal_aplica_retenciones').checked = tieneRetenciones;
+        if (tieneRetenciones) {
+            document.getElementById('modal_tasa_ret_isr').value = concepto.tasa_ret_isr || '0.00';
+            document.getElementById('modal_tasa_ret_iva').value = concepto.tasa_ret_iva || '0.00';
+        } else {
+            document.getElementById('modal_tasa_ret_isr').value = '0.00';
+            document.getElementById('modal_tasa_ret_iva').value = '0.00';
+        }
+        toggleRetenciones();
 
         // Update modal title
         document.querySelector('#conceptoModal .modal-title').innerHTML = '<i class="fas fa-edit"></i> Editar Producto/Servicio';
@@ -701,6 +778,10 @@
         const tasa_iva = parseFloat(document.getElementById('modal_tasa_iva').value);
         const clave_prod_serv = document.getElementById('modal_clave_prod_serv').value;
         const clave_unidad = document.getElementById('modal_clave_unidad').value;
+        
+        const aplica_retenciones = document.getElementById('modal_aplica_retenciones').checked;
+        const tasa_ret_isr = aplica_retenciones ? parseFloat(document.getElementById('modal_tasa_ret_isr').value) : 0;
+        const tasa_ret_iva = aplica_retenciones ? parseFloat(document.getElementById('modal_tasa_ret_iva').value) : 0;
 
         if (!descripcion || !cantidad || !valor_unitario) {
             alert('Complete todos los campos obligatorios');
@@ -713,6 +794,8 @@
             valor_unitario: valor_unitario,
             descuento: 0,
             tasa_iva: tasa_iva,
+            tasa_ret_isr: tasa_ret_isr,
+            tasa_ret_iva: tasa_ret_iva,
             clave_prod_serv: clave_prod_serv,
             clave_unidad: clave_unidad,
             unidad: 'Servicio'
@@ -748,12 +831,19 @@
         } else {
             let subtotal = 0;
             let totalIVA = 0;
+            let totalRetISR = 0;
+            let totalRetIVA = 0;
 
             conceptos.forEach((c, index) => {
                 const importe = c.cantidad * c.valor_unitario;
                 const iva = importe * c.tasa_iva;
+                const ret_isr = c.tasa_ret_isr ? (importe * c.tasa_ret_isr) : 0;
+                const ret_iva = c.tasa_ret_iva ? (importe * c.tasa_ret_iva) : 0;
+                
                 subtotal += importe;
                 totalIVA += iva;
+                totalRetISR += ret_isr;
+                totalRetIVA += ret_iva;
 
                 tbody.innerHTML += `
                 <tr>
@@ -776,7 +866,17 @@
 
             document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
             document.getElementById('totalIVA').textContent = `$${totalIVA.toFixed(2)}`;
-            document.getElementById('total').textContent = `$${(subtotal + totalIVA).toFixed(2)}`;
+            document.getElementById('totalRetISR').textContent = `-$${totalRetISR.toFixed(2)}`;
+            document.getElementById('totalRetIVA').textContent = `-$${totalRetIVA.toFixed(2)}`;
+            
+            if (totalRetISR > 0) document.getElementById('tr_ret_isr').style.display = '';
+            else document.getElementById('tr_ret_isr').style.display = 'none';
+            
+            if (totalRetIVA > 0) document.getElementById('tr_ret_iva').style.display = '';
+            else document.getElementById('tr_ret_iva').style.display = 'none';
+            
+            const total = subtotal + totalIVA - totalRetISR - totalRetIVA;
+            document.getElementById('total').textContent = `$${total.toFixed(2)}`;
         }
     }
 

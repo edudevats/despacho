@@ -54,7 +54,7 @@
                         Generador de CFDI fácil
                     </p>
                     {% if has_credentials %}
-                    <a href="{{ url_for('crear_factura', company_id=company.id) }}" class="btn btn-success">
+                    <a href="{{ url_for('invoicing.crear_factura', company_id=company.id) }}" class="btn btn-success">
                         <i class="fas fa-arrow-right"></i> Crear
                     </a>
                     {% else %}
@@ -78,7 +78,7 @@
                     <p class="card-text text-muted">
                         Verifique el estado de un CFDI
                     </p>
-                    <a href="{{ url_for('facturacion_estado', company_id=company.id) }}" class="btn btn-info">
+                    <a href="{{ url_for('invoicing.facturacion_estado', company_id=company.id) }}" class="btn btn-info">
                         <i class="fas fa-arrow-right"></i> Consultar
                     </a>
                 </div>
@@ -97,7 +97,7 @@
                     <p class="card-text text-muted">
                         Verificar RFC en lista 69B
                     </p>
-                    <a href="{{ url_for('facturacion_lista69b', company_id=company.id) }}" class="btn btn-warning">
+                    <a href="{{ url_for('invoicing.facturacion_lista69b', company_id=company.id) }}" class="btn btn-warning">
                         <i class="fas fa-arrow-right"></i> Verificar
                     </a>
                 </div>
@@ -116,7 +116,7 @@
                     <p class="card-text text-muted">
                         Medicamentos y servicios
                     </p>
-                    <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-primary">
+                    <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-primary">
                         <i class="fas fa-arrow-right"></i> Gestionar
                     </a>
                 </div>
@@ -135,7 +135,7 @@
                     <p class="card-text text-muted">
                         Facturacion rapida
                     </p>
-                    <a href="{{ url_for('inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-primary" style="border-color: #6f42c1; color: #6f42c1;">
+                    <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-primary" style="border-color: #6f42c1; color: #6f42c1;">
                         <i class="fas fa-arrow-right"></i> Ver Plantillas
                     </a>
                 </div>
@@ -154,7 +154,7 @@
                     <p class="card-text text-muted">
                         Credenciales de Finkok
                     </p>
-                    <a href="{{ url_for('facturacion_credenciales', company_id=company.id) }}"
+                    <a href="{{ url_for('invoicing.facturacion_credenciales', company_id=company.id) }}"
                         class="btn btn-secondary">
                         <i class="fas fa-arrow-right"></i> Configurar
                     </a>
@@ -188,7 +188,7 @@
             <div class="card shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
                     <h5 class="mb-0"><i class="fas fa-file-invoice-dollar text-primary"></i> Facturas Emitidas Recientes</h5>
-                    <a href="{{ url_for('search_invoices', company_id=company.id) }}" class="btn btn-sm btn-outline-primary">Ver todas</a>
+                    <a href="{{ url_for('companies.search_invoices', company_id=company.id) }}" class="btn btn-sm btn-outline-primary">Ver todas</a>
                 </div>
                 <div class="card-body p-0">
                     {% if invoices %}
@@ -231,11 +231,11 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
-                                        <a href="{{ url_for('facturacion_invoice_pdf', company_id=company.id, filename=invoice.filename) }}" class="btn btn-sm btn-outline-secondary" title="Descargar PDF">
+                                        <a href="{{ url_for('invoicing.facturacion_invoice_pdf', company_id=company.id, filename=invoice.filename) }}" class="btn btn-sm btn-outline-secondary" title="Descargar PDF">
                                             <i class="fas fa-file-pdf"></i>
                                         </a>
                                         {% if invoice.uuid %}
-                                            <form action="{{ url_for('facturacion_actualizar_estado_db', company_id=company.id, uuid=invoice.uuid) }}" method="POST" class="d-inline">
+                                            <form action="{{ url_for('invoicing.facturacion_actualizar_estado_db', company_id=company.id, uuid=invoice.uuid) }}" method="POST" class="d-inline">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-sm btn-outline-info" title="Actualizar Estado desde SAT">
                                                     <i class="fas fa-sync-alt"></i>
@@ -243,7 +243,7 @@
                                             </form>
                                             
                                             {% if invoice.status_sat != 'CANCELADO' and invoice.status_sat != 'EN_PROCESO_CANCELACION' %}
-                                            <a href="{{ url_for('facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}" class="btn btn-sm btn-outline-danger" title="Cancelar Factura">
+                                            <a href="{{ url_for('invoicing.facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}" class="btn btn-sm btn-outline-danger" title="Cancelar Factura">
                                                 <i class="fas fa-ban"></i>
                                             </a>
                                             {% endif %}
@@ -260,7 +260,7 @@
                         <h5>No hay facturas emitidas</h5>
                         <p>Aún no se han generado facturas para esta empresa.</p>
                         {% if has_credentials %}
-                        <a href="{{ url_for('crear_factura', company_id=company.id) }}" class="btn btn-primary mt-2">
+                        <a href="{{ url_for('invoicing.crear_factura', company_id=company.id) }}" class="btn btn-primary mt-2">
                             Crear primera factura
                         </a>
                         {% endif %}

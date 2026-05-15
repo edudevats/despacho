@@ -86,10 +86,10 @@
             <div class="company-tag">{{ company.name }} · ventana {{ window_days }}d · lead {{ lead_days }}d · objetivo {{ target_days }}d de stock</div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left me-1"></i>Inventario
             </a>
-            <a href="{{ url_for('inventory_analytics', company_id=company.id) }}" class="btn btn-outline-primary btn-sm">
+            <a href="{{ url_for('inventory.inventory_analytics', company_id=company.id) }}" class="btn btn-outline-primary btn-sm">
                 <i class="fas fa-chart-line me-1"></i>Análisis
             </a>
             <button id="exportCsvBtn" class="btn btn-outline-secondary btn-sm" aria-label="Exportar CSV">
@@ -195,7 +195,7 @@
                 </div>
                 <div class="d-flex gap-2">
                     {% if group.supplier %}
-                        <a href="{{ url_for('add_purchase_order', company_id=company.id) }}?supplier_id={{ group.supplier.id }}"
+                        <a href="{{ url_for('inventory.add_purchase_order', company_id=company.id) }}?supplier_id={{ group.supplier.id }}"
                            class="btn btn-sm btn-warning">
                             <i class="fas fa-file-invoice me-1"></i>Nueva orden de compra
                         </a>

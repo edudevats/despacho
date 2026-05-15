@@ -125,7 +125,7 @@
                                 <i class="fas fa-check-circle"></i> PPD
                             </span>
                             {% else %}
-                            <a href="{{ url_for('ppd_list', company_id=company.id) }}?invoice_id={{ invoice.id }}"
+                            <a href="{{ url_for('inventory.ppd_list', company_id=company.id) }}?invoice_id={{ invoice.id }}"
                                 class="badge bg-warning text-dark text-decoration-none"
                                 title="PPD Pendiente - Click para acreditar">
                                 <i class="fas fa-hourglass-half"></i> PPD
@@ -155,11 +155,11 @@
                         </td>
 
                         <td class="text-center">
-                            <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
+                            <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
                                 class="btn btn-sm btn-outline-primary" title="Descargar XML">
                                 <i class="fas fa-file-code"></i>
                             </a>
-                            <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}"
+                            <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}"
                                 class="btn btn-sm btn-outline-danger" title="Descargar PDF">
                                 <i class="fas fa-file-pdf"></i>
                             </a>
@@ -172,7 +172,7 @@
                             </a>
                             {% if invoice.issuer_rfc == company.rfc %}
                                 {% if invoice.status_sat != 'CANCELADO' %}
-                                <a href="{{ url_for('facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}"
+                                <a href="{{ url_for('invoicing.facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}"
                                     class="btn btn-sm btn-outline-danger mb-1" title="Cancelar Factura">
                                     <i class="fas fa-ban"></i>
                                 </a>

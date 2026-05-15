@@ -121,12 +121,12 @@
     {% endif %}
 
     <div class="d-flex justify-content-between">
-        <a href="{{ url_for('inventory_list', company_id=company.id, tab='orders') }}" class="btn btn-outline-secondary">
+        <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='orders') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> Volver
         </a>
         <div>
             {% if order.status == 'SENT' %}
-            <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}" class="btn btn-warning">
+            <a href="{{ url_for('inventory.review_purchase_order', company_id=company.id, order_id=order.id) }}" class="btn btn-warning">
                 <i class="fas fa-clipboard-check"></i> Revisar Recepcion
             </a>
             {% endif %}

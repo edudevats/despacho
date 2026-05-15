@@ -82,7 +82,7 @@
             <div class="company-tag">{{ company.name }} · {{ products|length }} productos a contar</div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left me-1"></i>Inventario
             </a>
         </div>

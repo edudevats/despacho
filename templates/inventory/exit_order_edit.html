@@ -166,11 +166,11 @@
 
             <!-- Acciones -->
             <div class="d-flex justify-content-between">
-                <a href="{{ url_for('inventory_list', company_id=company.id, tab='exits') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='exits') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left"></i> Volver
                 </a>
                 {% if order.details %}
-                <form method="POST" action="{{ url_for('complete_exit_order', company_id=company.id, order_id=order.id) }}">
+                <form method="POST" action="{{ url_for('inventory.complete_exit_order', company_id=company.id, order_id=order.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-success btn-lg" onclick="return confirm('¿Completar la orden? Esto descontara los productos del inventario.')">
                         <i class="fas fa-check-circle"></i> Completar Orden

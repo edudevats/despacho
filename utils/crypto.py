@@ -34,30 +34,24 @@ def generate_key() -> str:
 def load_key() -> bytes:
     """
     Load encryption key from environment variable.
-    
+
     Returns:
         bytes: Fernet-compatible encryption key
-        
+
     Raises:
-        CryptoKeyError: If FERNET_KEY is not set or invalid
+        CryptoKeyError: If FERNET_KEY is not set
     """
     key = os.environ.get('FERNET_KEY')
-    
+
     if not key:
-        # Check for legacy file-based key (migration support)
-        legacy_path = os.path.join(os.path.dirname(__file__), '..', 'secret.key')
-        if os.path.exists(legacy_path):
-            logger.warning(
-                "Using legacy secret.key file. Please migrate to FERNET_KEY environment variable."
-            )
-            with open(legacy_path, 'rb') as f:
-                return f.read()
-        
+        # Legacy `secret.key` file fallback was REMOVED (security finding A-20):
+        # the file was easily committed to git, leaking the master key for all
+        # encrypted PAC credentials. Migration must now go through FERNET_KEY env.
         raise CryptoKeyError(
             "FERNET_KEY environment variable not set. "
             "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
         )
-    
+
     # Handle both string and bytes
     return key.encode() if isinstance(key, str) else key
 

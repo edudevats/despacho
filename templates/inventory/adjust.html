@@ -101,7 +101,7 @@
                             <button type="submit" class="btn btn-warning">
                                 <i class="fas fa-save me-1"></i> Registrar Corrección
                             </button>
-                            <a href="{{ url_for('inventory_list', company_id=company.id) }}"
+                            <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}"
                                 class="btn btn-light">Cancelar</a>
                         </div>
                     </form>
@@ -173,7 +173,7 @@
                                     </td>
                                     <td colspan="2">
                                         <form method="POST" class="d-flex align-items-center gap-2"
-                                            action="{{ url_for('update_batch_expiration', company_id=company.id, product_id=product.id, batch_id=batch.id) }}"
+                                            action="{{ url_for('inventory.update_batch_expiration', company_id=company.id, product_id=product.id, batch_id=batch.id) }}"
                                             onsubmit="return confirmExpirationChange(this, '{{ batch.batch_number }}', '{{ batch.expiration_date.strftime('%d/%m/%Y') if batch.expiration_date else 'N/A' }}');">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="reason" value="">

@@ -198,6 +198,7 @@
                 <th>Descripción del Producto</th>
                 <th class="text-center">Cant.</th>
                 <th class="text-center">U.M.</th>
+                <th class="text-center">Total de unidades</th>
             </tr>
         </thead>
         <tbody>
@@ -210,8 +211,18 @@
                     <span style="color:#666; font-size:10px;">{{ detail.product.description[:80] }}{% if detail.product.description|length > 80 %}...{% endif %}</span>
                     {% endif %}
                 </td>
-                <td class="text-center">{{ detail.quantity_requested }}</td>
+                <td class="text-center">
+                    {% if detail.order_unit == 'PAQUETE' and detail.package_quantity is not none %}
+                        {{ detail.package_quantity }}
+                        {% if detail.loose_quantity %}
+                            <br><small>(+{{ detail.loose_quantity }} sueltas)</small>
+                        {% endif %}
+                    {% else %}
+                        {{ detail.quantity_requested }}
+                    {% endif %}
+                </td>
                 <td class="text-center">{{ detail.order_unit|capitalize }}</td>
+                <td class="text-center">{{ detail.quantity_requested }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -222,7 +233,10 @@
     {% if order.notes %}
     <div class="notes">
         <strong>Observaciones / Notas:</strong><br>
-        {{ order.notes|replace('\n', '<br>')|safe }}
+        {# Escape user-supplied notes BEFORE injecting <br> tags, otherwise
+           Jinja's autoescape is bypassed by the trailing |safe and arbitrary
+           HTML/JS in the notes field renders in the PDF. #}
+        {{ order.notes | e | replace('\n', '<br>'|safe) | safe }}
     </div>
     {% endif %}
 

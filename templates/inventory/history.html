@@ -9,7 +9,7 @@
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
-                        <a href="{{ url_for('inventory_list', company_id=company.id) }}">Inventario</a>
+                        <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}">Inventario</a>
                     </li>
                     <li class="breadcrumb-item active">Historial: {{ product.name }}</li>
                 </ol>
@@ -28,11 +28,11 @@
             </p>
         </div>
         <div class="col-auto">
-            <a href="{{ url_for('inventory_movements', company_id=company.id, product_id=product.id) }}"
+            <a href="{{ url_for('inventory.inventory_movements', company_id=company.id, product_id=product.id) }}"
                class="btn btn-outline-secondary me-2">
                 <i class="fas fa-list"></i> Ver todos los movimientos
             </a>
-            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left"></i> Volver al Inventario
             </a>
         </div>

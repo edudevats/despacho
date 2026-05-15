@@ -9,7 +9,7 @@
         <p class="text-muted">{{ company.name }} ({{ company.rfc }})</p>
     </div>
     <div class="col-md-4 text-end">
-        <a href="{{ url_for('companies') }}" class="btn btn-secondary">
+        <a href="{{ url_for('companies.companies') }}" class="btn btn-secondary">
             <i class="fas fa-arrow-left me-1"></i> Volver a Empresas
         </a>
     </div>
@@ -143,7 +143,7 @@
                                             <button type="button" class="btn-close btn-close-white"
                                                 data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
-                                        <form action="{{ url_for('record_tax_payment', company_id=company.id) }}"
+                                        <form action="{{ url_for('movements.record_tax_payment', company_id=company.id) }}"
                                             method="POST">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <div class="modal-body">
@@ -248,7 +248,7 @@
                                             <button type="button" class="btn-close btn-close-white"
                                                 data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
-                                        <form action="{{ url_for('record_tax_payment', company_id=company.id) }}"
+                                        <form action="{{ url_for('movements.record_tax_payment', company_id=company.id) }}"
                                             method="POST">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <div class="modal-body">

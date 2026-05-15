@@ -118,10 +118,10 @@
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
             {% if not (current_user.is_admin or is_inv_admin(company.id)) and perms.get('perm_inventory') %}
-            <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-sm btn-outline-info" aria-label="Solicitar ingreso inicial">
+            <a href="{{ url_for('inventory.create_initial_stock_request', company_id=company.id) }}" class="btn btn-sm btn-outline-info" aria-label="Solicitar ingreso inicial">
                 <i class="fas fa-box-open me-1"></i> Ingreso Inicial
             </a>
-            <a href="{{ url_for('create_adjustment_request', company_id=company.id) }}" class="btn btn-sm btn-outline-warning" aria-label="Solicitar ajuste">
+            <a href="{{ url_for('inventory.create_adjustment_request', company_id=company.id) }}" class="btn btn-sm btn-outline-warning" aria-label="Solicitar ajuste">
                 <i class="fas fa-balance-scale me-1"></i> Solicitar Ajuste
             </a>
             {% elif not (current_user.is_admin or is_inv_admin(company.id)) %}
@@ -130,19 +130,19 @@
             </span>
             {% endif %}
             {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-            <a href="{{ url_for('inventory_analytics', company_id=company.id) }}" class="btn btn-sm btn-outline-primary" aria-label="Ver análisis de inventario">
+            <a href="{{ url_for('inventory.inventory_analytics', company_id=company.id) }}" class="btn btn-sm btn-outline-primary" aria-label="Ver análisis de inventario">
                 <i class="fas fa-chart-line me-1"></i> Análisis
             </a>
-            <a href="{{ url_for('inventory_reorder', company_id=company.id) }}" class="btn btn-sm btn-warning" aria-label="Sugerencia de reorden">
+            <a href="{{ url_for('inventory.inventory_reorder', company_id=company.id) }}" class="btn btn-sm btn-warning" aria-label="Sugerencia de reorden">
                 <i class="fas fa-truck-loading me-1"></i> Reorden
             </a>
-            <a href="{{ url_for('inventory_labels', company_id=company.id) }}" class="btn btn-sm btn-outline-secondary" aria-label="Imprimir etiquetas">
+            <a href="{{ url_for('inventory.inventory_labels', company_id=company.id) }}" class="btn btn-sm btn-outline-secondary" aria-label="Imprimir etiquetas">
                 <i class="fas fa-tags me-1"></i> Etiquetas
             </a>
-            <a href="{{ url_for('inventory_cycle_count', company_id=company.id) }}" class="btn btn-sm btn-outline-success" aria-label="Conteo cíclico">
+            <a href="{{ url_for('inventory.inventory_cycle_count', company_id=company.id) }}" class="btn btn-sm btn-outline-success" aria-label="Conteo cíclico">
                 <i class="fas fa-clipboard-check me-1"></i> Conteo
             </a>
-            <a href="{{ url_for('inventory_movements', company_id=company.id) }}" class="btn btn-sm btn-outline-info" aria-label="Ver movimientos">
+            <a href="{{ url_for('inventory.inventory_movements', company_id=company.id) }}" class="btn btn-sm btn-outline-info" aria-label="Ver movimientos">
                 <i class="fas fa-exchange-alt me-1"></i> Movimientos
             </a>
             {% endif %}
@@ -310,7 +310,7 @@
                     </div>
                 </div>
                 <div class="col-12 col-md-4">
-                    <form method="GET" action="{{ url_for('inventory_list', company_id=company.id) }}" class="d-flex gap-2">
+                    <form method="GET" action="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="d-flex gap-2">
                         <input type="hidden" name="tab" value="products">
                         <select name="category_id" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filtrar por categoría">
                             <option value="">Todas las categorías</option>
@@ -325,7 +325,7 @@
                         <i class="fas fa-file-csv me-1"></i> Exportar
                     </button>
                     {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                    <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary" id="invAddProduct" title="Nuevo producto (atajo: n)">
+                    <a href="{{ url_for('inventory.add_product', company_id=company.id) }}" class="btn btn-primary" id="invAddProduct" title="Nuevo producto (atajo: n)">
                         <i class="fas fa-plus me-1"></i> Nuevo
                     </a>
                     {% endif %}
@@ -462,15 +462,15 @@
                                     <td class="text-center" onclick="event.stopPropagation();">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <div class="btn-group btn-group-sm">
-                                            <a href="{{ url_for('product_history', company_id=company.id, product_id=product.id) }}"
+                                            <a href="{{ url_for('inventory.product_history', company_id=company.id, product_id=product.id) }}"
                                                 class="btn btn-outline-info" aria-label="Ver historial de {{ product.name }}" title="Historial">
                                                 <i class="fas fa-history"></i>
                                             </a>
-                                            <a href="{{ url_for('adjust_stock', company_id=company.id, product_id=product.id) }}"
+                                            <a href="{{ url_for('inventory.adjust_stock', company_id=company.id, product_id=product.id) }}"
                                                 class="btn btn-outline-warning" aria-label="Corregir stock de {{ product.name }}" title="Corregir stock">
                                                 <i class="fas fa-tools"></i>
                                             </a>
-                                            <a href="{{ url_for('edit_product', company_id=company.id, product_id=product.id) }}"
+                                            <a href="{{ url_for('inventory.edit_product', company_id=company.id, product_id=product.id) }}"
                                                 class="btn btn-outline-secondary" aria-label="Editar {{ product.name }}" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </a>
@@ -486,7 +486,7 @@
                                             <div class="title">No hay productos registrados</div>
                                             <p class="mb-3">Empieza agregando tu primer producto al catálogo.</p>
                                             {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                            <a href="{{ url_for('add_product', company_id=company.id) }}" class="btn btn-primary btn-sm">
+                                            <a href="{{ url_for('inventory.add_product', company_id=company.id) }}" class="btn btn-primary btn-sm">
                                                 <i class="fas fa-plus me-1"></i> Nuevo Producto
                                             </a>
                                             {% endif %}
@@ -515,7 +515,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Laboratorios</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_laboratory', company_id=company.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.add_laboratory', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Laboratorio
                 </a>
                 {% endif %}
@@ -550,7 +550,7 @@
                                     </td>
                                     <td class="text-center">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                        <a href="{{ url_for('edit_laboratory', company_id=company.id, laboratory_id=lab.id) }}"
+                                        <a href="{{ url_for('inventory.edit_laboratory', company_id=company.id, laboratory_id=lab.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
@@ -585,7 +585,7 @@
                     <h6 class="mb-0"><i class="fas fa-plus-circle"></i> Nueva Categoría</h6>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('add_product_category', company_id=company.id) }}">
+                    <form method="POST" action="{{ url_for('inventory.add_product_category', company_id=company.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row align-items-end">
                             <div class="col-md-3 mb-2">
@@ -666,11 +666,11 @@
                                     <td class="text-center">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                         <div class="btn-group btn-group-sm">
-                                            <a href="{{ url_for('edit_product_category', company_id=company.id, category_id=cat.id) }}"
+                                            <a href="{{ url_for('inventory.edit_product_category', company_id=company.id, category_id=cat.id) }}"
                                                 class="btn btn-outline-secondary" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <form method="POST" action="{{ url_for('toggle_product_category', company_id=company.id, category_id=cat.id) }}" class="d-inline">
+                                            <form method="POST" action="{{ url_for('inventory.toggle_product_category', company_id=company.id, category_id=cat.id) }}" class="d-inline">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-outline-{{ 'danger' if cat.active else 'success' }}" title="{{ 'Desactivar' if cat.active else 'Activar' }}">
                                                     <i class="fas fa-{{ 'ban' if cat.active else 'check' }}"></i>
@@ -700,7 +700,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Proveedores</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_supplier_manual', company_id=company.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.add_supplier_manual', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Proveedor
                 </a>
                 {% endif %}
@@ -742,7 +742,7 @@
                                     </td>
                                     <td class="text-center">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                        <a href="{{ url_for('edit_supplier_inventory', company_id=company.id, supplier_id=supplier.id) }}"
+                                        <a href="{{ url_for('inventory.edit_supplier_inventory', company_id=company.id, supplier_id=supplier.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
@@ -769,7 +769,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Ordenes de Compra</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_purchase_order', company_id=company.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.add_purchase_order', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Orden
                 </a>
                 {% endif %}
@@ -809,7 +809,7 @@
                                     <!-- Editar -->
                                     <td class="text-center align-middle" style="width: 40px;">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) and (order.status == 'DRAFT' or order.status == 'SENT') %}
-                                            <a href="{{ url_for('edit_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                            <a href="{{ url_for('inventory.edit_purchase_order', company_id=company.id, order_id=order.id) }}"
                                                 class="btn btn-link text-primary text-decoration-none p-1" title="Editar">
                                                 <i class="fas fa-edit fs-5"></i>
                                             </a>
@@ -820,12 +820,12 @@
                                     <td class="text-center align-middle" style="width: 60px;">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
                                             {% if order.status == 'SENT' %}
-                                            <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                            <a href="{{ url_for('inventory.review_purchase_order', company_id=company.id, order_id=order.id) }}"
                                                 class="btn btn-warning rounded-3 px-3 py-1 shadow-sm border-0" title="Revisar Recepcion">
                                                 <i class="fas fa-clipboard-check fs-6 text-dark"></i>
                                             </a>
                                             {% elif order.status == 'IN_REVIEW' %}
-                                            <a href="{{ url_for('complete_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                            <a href="{{ url_for('inventory.complete_purchase_order', company_id=company.id, order_id=order.id) }}"
                                                 class="btn btn-success rounded-3 px-3 py-1 shadow-sm border-0" title="Completar">
                                                 <i class="fas fa-check fs-6 text-white"></i>
                                             </a>
@@ -835,7 +835,7 @@
 
                                     <!-- Ver Detalles -->
                                     <td class="text-center align-middle" style="width: 40px;">
-                                        <a href="{{ url_for('view_purchase_order', company_id=company.id, order_id=order.id) }}"
+                                        <a href="{{ url_for('inventory.view_purchase_order', company_id=company.id, order_id=order.id) }}"
                                             class="btn btn-link text-secondary text-decoration-none p-1" title="Ver Detalles">
                                             <i class="fas fa-eye fs-5"></i>
                                         </a>
@@ -843,7 +843,7 @@
 
                                     <!-- PDF -->
                                     <td class="text-center align-middle" style="width: 40px;">
-                                        <button type="button" onclick="downloadOrderPdf('{{ url_for('purchase_order_pdf', company_id=company.id, order_id=order.id) }}', '{{ order.id }}')"
+                                        <button type="button" onclick="downloadOrderPdf('{{ url_for('inventory.purchase_order_pdf', company_id=company.id, order_id=order.id) }}', '{{ order.id }}')"
                                             class="btn btn-link text-danger text-decoration-none p-1 border-0" title="Descargar PDF">
                                             <i class="fas fa-file-pdf fs-5"></i>
                                         </button>
@@ -879,7 +879,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Ordenes de Salida</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_exit_order', company_id=company.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.add_exit_order', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Salida
                 </a>
                 {% endif %}
@@ -914,6 +914,10 @@
                                         <span class="badge bg-primary">Paciente</span>
                                         {% elif order.recipient_type == 'DEPARTMENT' %}
                                         <span class="badge bg-info">Departamento</span>
+                                        {% elif order.recipient_type == 'MEDICO' %}
+                                        <span class="badge bg-success">Médico</span>
+                                        {% elif order.recipient_type == 'CIRUGIA' %}
+                                        <span class="badge bg-warning text-dark">Cirugía</span>
                                         {% else %}
                                         <span class="badge bg-secondary">Otro</span>
                                         {% endif %}
@@ -933,7 +937,7 @@
                                     </td>
                                     <td class="text-center">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) and order.status == 'DRAFT' %}
-                                        <a href="{{ url_for('edit_exit_order', company_id=company.id, order_id=order.id) }}"
+                                        <a href="{{ url_for('inventory.edit_exit_order', company_id=company.id, order_id=order.id) }}"
                                             class="btn btn-sm btn-outline-primary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
@@ -942,7 +946,7 @@
                                             <i class="fas fa-trash"></i>
                                         </button>
                                         {% endif %}
-                                        <a href="{{ url_for('view_exit_order', company_id=company.id, order_id=order.id) }}"
+                                        <a href="{{ url_for('inventory.view_exit_order', company_id=company.id, order_id=order.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Ver Detalles">
                                             <i class="fas fa-eye"></i>
                                         </a>
@@ -968,7 +972,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Servicios Medicos</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_service', company_id=company.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.add_service', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nuevo Servicio
                 </a>
                 {% endif %}
@@ -1003,7 +1007,7 @@
                                     </td>
                                     <td class="text-center">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                        <a href="{{ url_for('edit_service', company_id=company.id, service_id=service.id) }}"
+                                        <a href="{{ url_for('inventory.edit_service', company_id=company.id, service_id=service.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
@@ -1030,7 +1034,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4>Plantillas de Factura</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                <a href="{{ url_for('add_invoice_template', company_id=company.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.add_invoice_template', company_id=company.id) }}" class="btn btn-primary">
                     <i class="fas fa-plus"></i> Nueva Plantilla
                 </a>
                 {% endif %}
@@ -1065,12 +1069,12 @@
                                     </td>
                                     <td class="text-center">
                                         {% if (current_user.is_admin or is_inv_admin(company.id)) %}
-                                        <a href="{{ url_for('edit_invoice_template', company_id=company.id, template_id=template.id) }}"
+                                        <a href="{{ url_for('inventory.edit_invoice_template', company_id=company.id, template_id=template.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
                                         {% endif %}
-                                        <a href="{{ url_for('crear_factura', company_id=company.id, template_id=template.id) }}"
+                                        <a href="{{ url_for('invoicing.crear_factura', company_id=company.id, template_id=template.id) }}"
                                             class="btn btn-sm btn-success" title="Usar para Facturar">
                                             <i class="fas fa-file-invoice-dollar"></i>
                                         </a>
@@ -1098,10 +1102,10 @@
                 <h4>Solicitudes de Inventario</h4>
                 {% if (current_user.is_admin or is_inv_admin(company.id)) or perms.get('perm_inventory') %}
                 <div class="btn-group">
-                    <a href="{{ url_for('create_initial_stock_request', company_id=company.id) }}" class="btn btn-info text-white">
+                    <a href="{{ url_for('inventory.create_initial_stock_request', company_id=company.id) }}" class="btn btn-info text-white">
                         <i class="fas fa-box-open"></i> Ingreso Inicial
                     </a>
-                    <a href="{{ url_for('create_adjustment_request', company_id=company.id) }}" class="btn btn-warning">
+                    <a href="{{ url_for('inventory.create_adjustment_request', company_id=company.id) }}" class="btn btn-warning">
                         <i class="fas fa-balance-scale"></i> Solicitud de Ajuste
                     </a>
                 </div>
@@ -1160,7 +1164,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        <a href="{{ url_for('view_inventory_request', company_id=company.id, request_id=req.id) }}"
+                                        <a href="{{ url_for('inventory.view_inventory_request', company_id=company.id, request_id=req.id) }}"
                                             class="btn btn-sm btn-outline-secondary" title="Ver Detalle">
                                             <i class="fas fa-eye"></i>
                                         </a>
@@ -1287,7 +1291,7 @@
 // Confirm delete order
 function confirmDeleteOrder(orderId, supplierName) {
     document.getElementById('deleteOrderSupplier').textContent = supplierName;
-    document.getElementById('deleteOrderForm').action = "{{ url_for('delete_purchase_order', company_id=company.id, order_id=0) }}".replace('/0', '/' + orderId);
+    document.getElementById('deleteOrderForm').action = "{{ url_for('inventory.delete_purchase_order', company_id=company.id, order_id=0) }}".replace('/0', '/' + orderId);
     var deleteModal = new bootstrap.Modal(document.getElementById('deleteOrderModal'));
     deleteModal.show();
 }
@@ -1295,7 +1299,7 @@ function confirmDeleteOrder(orderId, supplierName) {
 // Confirm delete exit order
 function confirmDeleteExitOrder(orderId, recipientName) {
     document.getElementById('deleteExitOrderRecipient').textContent = recipientName;
-    document.getElementById('deleteExitOrderForm').action = "{{ url_for('delete_exit_order', company_id=company.id, order_id=0) }}".replace('/0', '/' + orderId);
+    document.getElementById('deleteExitOrderForm').action = "{{ url_for('inventory.delete_exit_order', company_id=company.id, order_id=0) }}".replace('/0', '/' + orderId);
     var deleteModal = new bootstrap.Modal(document.getElementById('deleteExitOrderModal'));
     deleteModal.show();
 }

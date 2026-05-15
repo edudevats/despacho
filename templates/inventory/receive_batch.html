@@ -57,7 +57,7 @@
                         </div>
 
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                            <a href="{{ url_for('product_batches', company_id=company.id, product_id=product.id) }}"
+                            <a href="{{ url_for('inventory.product_batches', company_id=company.id, product_id=product.id) }}"
                                 class="btn btn-light me-md-2">Cancelar</a>
                             <button type="submit" class="btn btn-success">Guardar Lote</button>
                         </div>

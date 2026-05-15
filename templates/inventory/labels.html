@@ -63,7 +63,7 @@
             <div class="company-tag">{{ company.name }} · {{ labels|length }} etiqueta(s) generadas</div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left me-1"></i>Inventario
             </a>
             <button id="printBtn" class="btn btn-primary btn-sm" aria-label="Imprimir">

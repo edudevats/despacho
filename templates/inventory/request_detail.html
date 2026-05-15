@@ -12,7 +12,7 @@
                     <i class="fas fa-clipboard-check text-primary"></i>
                     Solicitud #{{ inv_request.id }}
                 </h3>
-                <a href="{{ url_for('inventory_list', company_id=company.id, tab='requests') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='requests') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left"></i> Volver
                 </a>
             </div>
@@ -235,7 +235,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form method="POST" action="{{ url_for('approve_inventory_request', company_id=company.id, request_id=inv_request.id) }}">
+                <form method="POST" action="{{ url_for('inventory.approve_inventory_request', company_id=company.id, request_id=inv_request.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-success">
                         <i class="fas fa-check"></i> Confirmar Aprobacion
@@ -254,7 +254,7 @@
                 <h5 class="modal-title"><i class="fas fa-times-circle"></i> Rechazar Solicitud</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('reject_inventory_request', company_id=company.id, request_id=inv_request.id) }}">
+            <form method="POST" action="{{ url_for('inventory.reject_inventory_request', company_id=company.id, request_id=inv_request.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <p>Indique el motivo del rechazo (opcional):</p>

@@ -1,125 +1,175 @@
-"""
-API routes - JSON endpoints for AJAX and integrations.
-"""
-
+import os
 import logging
-from datetime import datetime
-from utils.timezone_helper import now_mexico
-from flask import Blueprint, jsonify, request
-from flask_login import login_required
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response, current_app
+from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from extensions import db, limiter, cache, mail, csrf, migrate
 from sqlalchemy import func, extract
-from extensions import db, cache
-from models import Company, Movement
+from datetime import datetime, timedelta, timezone
+from utils.timezone_helper import now_mexico, to_mexico_time
+from utils.helpers import safe_redirect_target, find_company_invoice_xml_path, parse_invoice_xml_for_db, get_or_create_supplier, update_supplier_stats
+from utils.decorators import admin_required, inventory_admin_required, require_company_perm
+from models import *
+from forms import *
+from services.sat_service import SATService, SATError
+from services.qr_service import QRService
 
 logger = logging.getLogger(__name__)
 
+
 api_bp = Blueprint('api', __name__)
 
-
-@api_bp.route('/companies/<int:company_id>/stats')
+@api_bp.route('/api/companies/<int:company_id>/customers/search')
 @login_required
-@cache.cached(timeout=60, query_string=True)
-def company_stats(company_id):
-    """API endpoint para estadísticas en tiempo real (cached 60s)."""
-    company = Company.query.get_or_404(company_id)
+def api_search_customers(company_id):
+    """
+    Buscar clientes por RFC o nombre para autocompletado.
+    Query params: q (texto de búsqueda)
+    """
+    query_text = request.args.get('q', '').strip()
     
-    month = request.args.get('month', type=int)
-    year = request.args.get('year', type=int)
+    if not query_text or len(query_text) < 2:
+        return jsonify([])
     
-    if not month or not year:
-        today = now_mexico()
-        month = today.month
-        year = today.year
+    # Buscar por RFC o nombre (case insensitive)
+    customers = Customer.query.filter(
+        Customer.company_id == company_id,
+        db.or_(
+            Customer.rfc.ilike(f'{query_text}%'),
+            Customer.nombre.ilike(f'%{query_text}%')
+        )
+    ).limit(10).all()
     
-    income = db.session.query(func.sum(Movement.amount)).filter(
-        Movement.company_id == company_id,
-        Movement.type == 'INCOME',
-        extract('month', Movement.date) == month,
-        extract('year', Movement.date) == year
-    ).scalar() or 0
-    
-    expense = db.session.query(func.sum(Movement.amount)).filter(
-        Movement.company_id == company_id,
-        Movement.type == 'EXPENSE',
-        extract('month', Movement.date) == month,
-        extract('year', Movement.date) == year
-    ).scalar() or 0
-    
-    return jsonify({
-        'company_id': company_id,
-        'company_name': company.name,
-        'income': float(income),
-        'expense': float(expense),
-        'balance': float(income - expense),
-        'month': month,
-        'year': year
-    })
-
-
-@api_bp.route('/companies/<int:company_id>/monthly-stats')
-@login_required
-@cache.cached(timeout=300, query_string=True)
-def company_monthly_stats(company_id):
-    """Get all monthly statistics for a company in one call."""
-    company = Company.query.get_or_404(company_id)
-    
-    year = request.args.get('year', type=int) or now_mexico().year
-    
-    # Optimized single query for all months
-    stats = db.session.query(
-        extract('month', Movement.date).label('month'),
-        Movement.type,
-        func.sum(Movement.amount).label('total')
-    ).filter(
-        Movement.company_id == company_id,
-        extract('year', Movement.date) == year
-    ).group_by('month', Movement.type).all()
-    
-    # Organize by month
-    monthly_data = {i: {'income': 0, 'expense': 0} for i in range(1, 13)}
-    for row in stats:
-        month = int(row.month) if row.month else 0
-        if month in monthly_data:
-            if row.type == 'INCOME':
-                monthly_data[month]['income'] = float(row.total or 0)
-            elif row.type == 'EXPENSE':
-                monthly_data[month]['expense'] = float(row.total or 0)
-    
-    # Format response
-    month_names = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-                   'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-    
-    result = []
-    for month_num in range(1, 13):
-        data = monthly_data[month_num]
-        result.append({
-            'month': month_num,
-            'month_name': month_names[month_num - 1],
-            'income': data['income'],
-            'expense': data['expense'],
-            'balance': data['income'] - data['expense']
+    results = []
+    for customer in customers:
+        results.append({
+            'rfc': customer.rfc,
+            'nombre': customer.nombre,
+            'codigo_postal': customer.codigo_postal,
+            'regimen_fiscal': customer.regimen_fiscal
         })
     
-    return jsonify({
-        'company_id': company_id,
-        'year': year,
-        'data': result
-    })
+    return jsonify(results)
 
-
-@api_bp.route('/health')
-def health_check():
-    """Health check endpoint for monitoring."""
-    try:
-        # Test database connection
-        db.session.execute(db.text('SELECT 1'))
-        db_status = 'healthy'
-    except Exception as e:
-        logger.error(f"Database health check failed: {e}")
-        db_status = 'unhealthy'
+@api_bp.route('/api/companies/<int:company_id>/customers/<rfc>')
+@login_required
+def api_get_customer(company_id, rfc):
+    """
+    Obtener datos completos de un cliente por RFC.
+    """
+    customer = Customer.query.filter_by(
+        company_id=company_id,
+        rfc=rfc.upper()
+    ).first()
+    
+    if not customer:
+        return jsonify({'error': 'Cliente no encontrado'}), 404
     
     return jsonify({
-        'status': 'healthy' if db_status == 'healthy' else 'degraded',
-        'database': db_status,
-        'timestamp': now_mexico().isoformat()
+        'rfc': customer.rfc,
+        'nombre': customer.nombre,
+        'codigo_postal': customer.codigo_postal,
+        'regimen_fiscal': customer.regimen_fiscal
     })
+
+@api_bp.route('/api/companies/<int:company_id>/products/search')
+@login_required
+def api_search_products(company_id):
+    """
+    Buscar productos por SKU, nombre o descripción para autocompletado.
+    Query params: q (texto de búsqueda)
+    """
+    query_text = request.args.get('q', '').strip()
+    
+    if not query_text or len(query_text) < 2:
+        return jsonify([])
+    
+    # Buscar por SKU, nombre o descripción (case insensitive)
+    products = Product.query.filter(
+        Product.company_id == company_id,
+        Product.active == True,
+        db.or_(
+            Product.sku.ilike(f'{query_text}%'),
+            Product.name.ilike(f'%{query_text}%'),
+            Product.description.ilike(f'%{query_text}%')
+        )
+    ).limit(10).all()
+    
+    results = []
+    for product in products:
+        results.append({
+            'id': product.id,
+            'sku': product.sku or '',
+            'name': product.name,
+            'description': product.description or '',
+            'selling_price': float(product.calculated_selling_price),
+            'unit_measure': product.unit_measure or 'Servicio'
+        })
+
+    return jsonify(results)
+
+@api_bp.route('/api/companies/<int:company_id>/templates/<int:template_id>/items')
+@login_required
+def api_template_items(company_id, template_id):
+    """
+    Get items from an invoice template for loading into factura form.
+    """
+    template = InvoiceTemplate.query.filter_by(
+        id=template_id,
+        company_id=company_id,
+        active=True
+    ).first()
+
+    if not template:
+        return jsonify({'error': 'Plantilla no encontrada'}), 404
+
+    items = []
+    for item in template.items:
+        items.append({
+            'type': item.item_type,
+            'name': item.item_name,
+            'quantity': item.quantity,
+            'price': item.item_price,
+            'product_id': item.product_id,
+            'service_id': item.service_id
+        })
+
+    return jsonify(items)
+
+@api_bp.route('/api/catalogs/<catalog_type>/search')
+@login_required
+def api_catalog_search(catalog_type):
+    """
+    Buscar en catálogos del SAT (Productos, Unidades, etc.)
+    """
+    from services.catalogs_service import CatalogsService
+    
+    query = request.args.get('q', '').strip()
+    limit = request.args.get('limit', 50, type=int)
+    
+    # Limitar a 100 para evitar sobrecarga
+    limit = min(limit, 100)
+    
+    try:
+        results = CatalogsService.search_catalog(catalog_type, query, limit)
+        return jsonify(results)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f'Error en búsqueda de catálogo {catalog_type}: {str(e)}')
+        return jsonify({'error': 'Error al buscar en catálogo'}), 500
+
+@api_bp.route('/api/catalogs/<catalog_type>/<code>')
+@login_required
+def api_catalog_get(catalog_type, code):
+    """
+    Obtener un elemento específico de un catálogo
+    """
+    from services.catalogs_service import CatalogsService
+    
+    item = CatalogsService.get_catalog_item(catalog_type, code)
+    if not item:
+        return jsonify({'error': 'Elemento no encontrado'}), 404
+    
+    return jsonify(item)
+

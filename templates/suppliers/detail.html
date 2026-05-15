@@ -119,11 +119,11 @@
                         </td>
 
                         <td class="text-center">
-                            <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
+                            <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
                                 class="btn btn-sm btn-outline-primary" title="Descargar XML">
                                 <i class="fas fa-file-code"></i>
                             </a>
-                            <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}"
+                            <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}"
                                 class="btn btn-sm btn-outline-danger" title="Descargar PDF">
                                 <i class="fas fa-file-pdf"></i>
                             </a>

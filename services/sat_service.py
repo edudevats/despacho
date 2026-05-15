@@ -203,14 +203,19 @@ class SATService:
         """
         if isinstance(xml_content, bytes):
             xml_content = xml_content.decode('utf-8')
-        
+
+        # Defense-in-depth: reject XML with DOCTYPE / entities / external
+        # references before satcfdi parses it. Defeats XXE / billion-laughs.
+        from utils.xml_safety import assert_safe_xml
+        assert_safe_xml(xml_content)
+
         # Cargar el CFDI desde el XML
         cfdi = CFDI.from_string(xml_content)
-        
+
         # Generar PDF usando satcfdi render
         # pdf_bytes retorna los bytes del PDF directamente
         pdf_content = render.pdf_bytes(cfdi)
-        
+
         return pdf_content
 
 
@@ -350,7 +355,15 @@ class SATService:
 
     def _parse_xml_bytes(self, xml_content):
         from satcfdi.cfdi import CFDI
+        from utils.xml_safety import assert_safe_xml, UnsafeXMLError
         try:
+            # Defense-in-depth XXE check before satcfdi parses untrusted bytes
+            # (these come from SAT-downloaded ZIPs which an MITM could replace).
+            try:
+                assert_safe_xml(xml_content)
+            except UnsafeXMLError as ux:
+                logger.warning("Skipping unsafe XML in bulk download: %s", ux)
+                return None
             cfdi = CFDI.from_string(xml_content)
             
             # Handle Complemento - it can be a list or a dict

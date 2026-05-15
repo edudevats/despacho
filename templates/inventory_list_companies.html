@@ -18,7 +18,7 @@
                 <div class="card-body text-center">
                     <h5 class="card-title">{{ company.name }}</h5>
                     <p class="card-text text-muted">{{ company.rfc }}</p>
-                    <a href="{{ url_for('inventory_list', company_id=company.id) }}" class="btn btn-primary">
+                    <a href="{{ url_for('inventory.inventory_list', company_id=company.id) }}" class="btn btn-primary">
                         <i class="fas fa-boxes"></i> Ver Inventario
                     </a>
                 </div>
@@ -27,7 +27,7 @@
         {% else %}
         <div class="col-md-12">
             <div class="alert alert-info">
-                No hay empresas registradas. <a href="{{ url_for('companies') }}">Agregar empresa</a>
+                No hay empresas registradas. <a href="{{ url_for('companies.companies') }}">Agregar empresa</a>
             </div>
         </div>
         {% endfor %}

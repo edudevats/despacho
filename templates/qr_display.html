@@ -9,10 +9,10 @@
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     {% if company %}
-                    <li class="breadcrumb-item"><a href="{{ url_for('companies') }}">Empresas</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('companies.companies') }}">Empresas</a></li>
                     <li class="breadcrumb-item active" aria-current="page">QR {{ company.name }}</li>
                     {% elif invoice %}
-                    <li class="breadcrumb-item"><a href="{{ url_for('companies') }}">Empresas</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('companies.companies') }}">Empresas</a></li>
                     <li class="breadcrumb-item active" aria-current="page">QR Factura</li>
                     {% endif %}
                 </ol>
@@ -43,7 +43,7 @@
                     </div>
 
                     <!-- Download Button -->
-                    <a href="{{ url_for('company_qr_download', company_id=company.id) }}"
+                    <a href="{{ url_for('companies.company_qr_download', company_id=company.id) }}"
                         class="btn btn-success btn-lg">
                         <i class="bi bi-download"></i> Descargar PNG
                     </a>

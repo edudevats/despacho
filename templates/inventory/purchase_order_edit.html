@@ -131,7 +131,7 @@
 
             <!-- Botones de Accion -->
             <div class="d-flex justify-content-between">
-                <a href="{{ url_for('inventory_list', company_id=company.id, tab='orders') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='orders') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left"></i> Volver
                 </a>
                 {% if order.details %}

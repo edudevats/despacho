@@ -130,7 +130,7 @@
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="d-flex justify-content-between">
-            <a href="{{ url_for('review_purchase_order', company_id=company.id, order_id=order.id) }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('inventory.review_purchase_order', company_id=company.id, order_id=order.id) }}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left"></i> Volver a Editar Cantidades
             </a>
             <button type="submit" class="btn btn-success btn-lg">

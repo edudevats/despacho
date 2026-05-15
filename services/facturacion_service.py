@@ -31,12 +31,15 @@ def _patched_get_listado_69b(refresh_time=sat.REFRESH_TIME):
 
     if time.time() > t + refresh_time:
         try:
+            # Force HTTPS + verify TLS to defeat MITM/DNS-poisoning attacks
+            # against the EFOS blacklist (which gates whether RFCs can issue CFDIs).
             r = requests.get(
-                url="http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv",
+                url="https://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv",
                 headers={
                     "User-Agent": sat.__version__.__user_agent__
                 },
-                timeout=30 # Add timeout for safety
+                timeout=30,
+                verify=True
             )
 
             if r.status_code == 200:
@@ -162,7 +165,10 @@ class FacturacionService:
             pac = self._get_finkok_client()
             doc = pac.stamp(cfdi_obj, accept=accept_type)
             
-            # Parsear el XML timbrado para obtener información
+            # Parsear el XML timbrado para obtener información.
+            # PAC response is treated as untrusted (defense-in-depth XXE check).
+            from utils.xml_safety import assert_safe_xml
+            assert_safe_xml(doc.xml)
             cfdi = CFDI.from_string(doc.xml)
             # Acceder al Timbre Fiscal Digital mediante claves de diccionario
             tfd = cfdi['Complemento']['TimbreFiscalDigital']
@@ -217,9 +223,11 @@ class FacturacionService:
             sat = SAT()  # No requiere FIEL para consulta de estado
             
             if cfdi_xml:
-                # Consultar desde XML completo
+                # Consultar desde XML completo. Validate against XXE first.
                 if isinstance(cfdi_xml, str):
                     cfdi_xml = cfdi_xml.encode('utf-8')
+                from utils.xml_safety import assert_safe_xml
+                assert_safe_xml(cfdi_xml)
                 cfdi = CFDI.from_string(cfdi_xml)
                 res = sat.status(cfdi=cfdi)
             else:
@@ -377,7 +385,9 @@ class FacturacionService:
             
             if isinstance(cfdi_xml, str):
                 cfdi_xml = cfdi_xml.encode('utf-8')
-                
+
+            from utils.xml_safety import assert_safe_xml
+            assert_safe_xml(cfdi_xml)
             cfdi = CFDI.from_string(cfdi_xml)
             
             pac = self._get_finkok_client()

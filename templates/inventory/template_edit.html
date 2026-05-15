@@ -120,11 +120,11 @@
             </div>
 
             <div class="d-flex justify-content-between">
-                <a href="{{ url_for('inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='templates') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left"></i> Volver
                 </a>
                 {% if template.items %}
-                <a href="{{ url_for('crear_factura', company_id=company.id, template_id=template.id) }}" class="btn btn-success">
+                <a href="{{ url_for('invoicing.crear_factura', company_id=company.id, template_id=template.id) }}" class="btn btn-success">
                     <i class="fas fa-file-invoice-dollar"></i> Usar para Facturar
                 </a>
                 {% endif %}

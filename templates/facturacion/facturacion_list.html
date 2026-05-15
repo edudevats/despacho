@@ -21,7 +21,7 @@
                 <div class="card-body text-center">
                     <div class="mb-3">
                         {% if company.logo_filename %}
-                        <img src="{{ url_for('serve_logo', filename=company.logo_filename) }}"
+                        <img src="{{ url_for('inventory.serve_logo', filename=company.logo_filename) }}"
                              alt="{{ company.name }}"
                              class="img-fluid rounded"
                              style="max-height: 80px;">
@@ -33,7 +33,7 @@
                     <p class="card-text text-muted">
                         <small><i class="fas fa-id-card"></i> {{ company.rfc }}</small>
                     </p>
-                    <a href="{{ url_for('facturacion_dashboard', company_id=company.id) }}" 
+                    <a href="{{ url_for('invoicing.facturacion_dashboard', company_id=company.id) }}" 
                        class="btn btn-primary btn-lg w-100">
                         <i class="fas fa-cogs"></i> Gestionar Facturación
                     </a>
@@ -47,7 +47,7 @@
             <div class="alert alert-info">
                 <i class="fas fa-info-circle"></i>
                 No hay empresas registradas. 
-                <a href="{{ url_for('companies') }}" class="alert-link">Agregar empresa</a>
+                <a href="{{ url_for('companies.companies') }}" class="alert-link">Agregar empresa</a>
             </div>
         </div>
         {% endif %}

@@ -182,16 +182,16 @@
         </div>
 
         <div class="d-grid gap-2">
-            <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
+            <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='xml') }}"
                 class="btn btn-primary">
                 <i class="fas fa-file-code"></i> Descargar XML
             </a>
-            <a href="{{ url_for('download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}" class="btn btn-danger">
+            <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}" class="btn btn-danger">
                 <i class="fas fa-file-pdf"></i> Descargar PDF
             </a>
             {% if invoice.issuer_rfc == company.rfc %}
                 {% if invoice.status_sat != 'CANCELADO' %}
-                <a href="{{ url_for('facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}" class="btn btn-outline-danger">
+                <a href="{{ url_for('invoicing.facturacion_cancelar', company_id=company.id, uuid=invoice.uuid) }}" class="btn btn-outline-danger">
                     <i class="fas fa-ban"></i> Cancelar Factura
                 </a>
                 {% else %}

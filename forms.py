@@ -681,6 +681,8 @@ class ExitOrderForm(FlaskForm):
     recipient_type = SelectField('Tipo de Destinatario', choices=[
         ('PATIENT', 'Paciente'),
         ('DEPARTMENT', 'Departamento'),
+        ('MEDICO', 'Médico'),
+        ('CIRUGIA', 'Cirugía'),
         ('OTHER', 'Otro')
     ])
     recipient_id = StringField('ID/Expediente', validators=[

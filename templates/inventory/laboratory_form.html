@@ -40,7 +40,7 @@
                 </div>
 
                 <div class="d-flex justify-content-between mt-2">
-                    <a href="{{ url_for('inventory_list', company_id=company.id, tab='laboratories') }}" class="btn btn-outline-secondary">
+                    <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='laboratories') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left"></i> Cancelar
                     </a>
                     <button type="submit" class="btn btn-primary">
@@ -75,7 +75,7 @@
                             <td><small class="text-muted">{{ reg.description or '--' }}</small></td>
                             <td class="text-center">
                                 <form method="POST"
-                                      action="{{ url_for('delete_lab_registration', company_id=company.id, laboratory_id=laboratory.id, reg_id=reg.id) }}"
+                                      action="{{ url_for('inventory.delete_lab_registration', company_id=company.id, laboratory_id=laboratory.id, reg_id=reg.id) }}"
                                       style="display:inline;"
                                       onsubmit="return confirm('Eliminar este registro sanitario?')">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -97,7 +97,7 @@
             </div>
 
             <!-- Formulario para agregar nuevo registro -->
-            <form method="POST" action="{{ url_for('add_lab_registration', company_id=company.id, laboratory_id=laboratory.id) }}">
+            <form method="POST" action="{{ url_for('inventory.add_lab_registration', company_id=company.id, laboratory_id=laboratory.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row align-items-end">
                     <div class="col-md-4 mb-2">

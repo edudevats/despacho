@@ -110,7 +110,7 @@
                            autocomplete="off"
                            aria-label="Búsqueda global de productos"
                            data-company-id="{{ _navbar_company.id }}"
-                           data-search-url="{{ url_for('api_global_product_search', company_id=_navbar_company.id) }}">
+                           data-search-url="{{ url_for('inventory.api_global_product_search', company_id=_navbar_company.id) }}">
                     <div id="globalSearchResults" class="dropdown-menu w-100 shadow-sm"
                          style="max-height:420px; overflow:auto; display:none;"
                          role="listbox" aria-label="Resultados de búsqueda"></div>
@@ -126,13 +126,13 @@
                             {% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                            <li><a class="dropdown-item" href="{{ url_for('change_password') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">
                                     <i class="fas fa-key me-2"></i>Cambiar Contraseña
                                 </a></li>
                             <li>
                                 <hr class="dropdown-divider">
                             </li>
-                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
                                     <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
                                 </a></li>
                         </ul>
@@ -210,7 +210,7 @@
                             <ul class="nav flex-column ms-3">
                                 <li class="nav-item">
                                     <a class="nav-link py-1"
-                                        href="{{ url_for('ppd_list', company_id=nav_company.id) }}">
+                                        href="{{ url_for('inventory.ppd_list', company_id=nav_company.id) }}">
                                         <small><i class="fas fa-hourglass-half"></i> Facturas PPD</small>
                                     </a>
                                 </li>
@@ -265,7 +265,7 @@
                     </h6>
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('admin_users') }}">
+                            <a class="nav-link" href="{{ url_for('admin.admin_users') }}">
                                 <i class="fas fa-users-cog"></i> Gestión de Usuarios
                             </a>
                         </li>

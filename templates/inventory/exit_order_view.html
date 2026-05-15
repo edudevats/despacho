@@ -43,6 +43,10 @@
                                 <span class="badge bg-primary">Paciente</span>
                                 {% elif order.recipient_type == 'DEPARTMENT' %}
                                 <span class="badge bg-info">Departamento</span>
+                                {% elif order.recipient_type == 'MEDICO' %}
+                                <span class="badge bg-success">Médico</span>
+                                {% elif order.recipient_type == 'CIRUGIA' %}
+                                <span class="badge bg-warning text-dark">Cirugía</span>
                                 {% else %}
                                 <span class="badge bg-secondary">Otro</span>
                                 {% endif %}
@@ -150,11 +154,11 @@
             </div>
 
             <div class="d-flex justify-content-between">
-                <a href="{{ url_for('inventory_list', company_id=company.id, tab='exits') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='exits') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left"></i> Volver a Ordenes de Salida
                 </a>
                 {% if order.status == 'DRAFT' %}
-                <a href="{{ url_for('edit_exit_order', company_id=company.id, order_id=order.id) }}" class="btn btn-primary">
+                <a href="{{ url_for('inventory.edit_exit_order', company_id=company.id, order_id=order.id) }}" class="btn btn-primary">
                     <i class="fas fa-edit"></i> Editar Orden
                 </a>
                 {% endif %}
