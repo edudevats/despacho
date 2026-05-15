@@ -5,3 +5,15 @@ logs/sat_app.log
 routes/__pycache__/__init__.cpython-313.pyc
 routes/__pycache__/mobile_api.cpython-313.pyc
 services/__pycache__/sat_service.cpython-313.pyc
+
+# Ignorar bases de datos locales
+instance/*.db
+*.db
+
+# Ignorar archivos de logs
+logs/*.log
+*.log
+
+# Ignorar archivos compilados de Python (que también se ven en tu captura)
+**/__pycache__/
+*.pyc
