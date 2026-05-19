@@ -2,6 +2,7 @@ instance/
 instance/sat_app.db
 logs/
 logs/sat_app.log
+routes/__pycache__/
 routes/__pycache__/__init__.cpython-313.pyc
 routes/__pycache__/mobile_api.cpython-313.pyc
 services/__pycache__/sat_service.cpython-313.pyc
@@ -15,5 +16,8 @@ logs/*.log
 *.log
 
 # Ignorar archivos compilados de Python (que también se ven en tu captura)
+*.pyc
 **/__pycache__/
 *.pyc
+*.pyo
+*.pyd
