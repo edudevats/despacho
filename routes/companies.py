@@ -31,11 +31,24 @@ def companies():
 @companies_bp.route('/companies/add', methods=['POST'])
 @login_required
 def add_company():
-    rfc = request.form['rfc']
-    name = request.form['name']
+    from sqlalchemy.exc import IntegrityError
+
+    rfc = request.form.get('rfc', '').strip().upper()
+    name = request.form.get('name', '').strip()
     postal_code = request.form.get('postal_code')
     logo = request.files.get('logo')
-    
+
+    # Validar que RFC no esté vacío
+    if not rfc:
+        flash('El RFC es obligatorio.', 'error')
+        return redirect(url_for('companies.companies'))
+
+    # Verificar duplicado antes de intentar insertar
+    existing = Company.query.filter_by(rfc=rfc).first()
+    if existing:
+        flash(f'Ya existe una empresa registrada con el RFC "{rfc}" ({existing.name}).', 'error')
+        return redirect(url_for('companies.companies'))
+
     logo_path = None
     if logo and logo.filename:
         # Validar extensión
@@ -46,21 +59,26 @@ def add_company():
                 # Crear carpeta logos si no existe
                 logos_dir = os.path.join(os.path.dirname(__file__), 'logos')
                 os.makedirs(logos_dir, exist_ok=True)
-                
+
                 # Guardar con nombre único (RFC)
                 filename = f"{rfc}.{ext}"
                 logo_path = os.path.join(logos_dir, filename)
                 logo.save(logo_path)
-    
+
     new_company = Company(
-        rfc=rfc, 
+        rfc=rfc,
         name=name,
         postal_code=postal_code,
         logo_path=logo_path
     )
     db.session.add(new_company)
-    db.session.commit()
-    
+    try:
+        db.session.commit()
+        flash(f'Empresa "{name}" registrada correctamente.', 'success')
+    except IntegrityError:
+        db.session.rollback()
+        flash(f'Ya existe una empresa con el RFC "{rfc}". No se pudo guardar.', 'error')
+
     return redirect(url_for('companies.companies'))
 
 @companies_bp.route('/companies/delete/<int:company_id>', methods=['POST'])
