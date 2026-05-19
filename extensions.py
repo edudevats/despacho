@@ -10,6 +10,27 @@ from flask_mail import Mail
 from flask_caching import Cache
 from flask_wtf.csrf import CSRFProtect
 
+# Database
+db = SQLAlchemy()
+
+# Authentication
+login_manager = LoginManager()
+login_manager.login_view = 'auth.login'
+login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
+login_manager.login_message_category = 'warning'
+
+# Database migrations
+migrate = Migrate()
+
+# Email
+mail = Mail()
+
+# Caching
+cache = Cache()
+
+# CSRF Protection
+csrf = CSRFProtect()
+
 # ── Rate Limiter (desactivado temporalmente) ─────────────────────────────────
 # Flask-Limiter no está instalado en este entorno. Se usa un stub no-op para
 # que la app arranque sin errores. Cuando instales Flask-Limiter en el server,
