@@ -26,9 +26,10 @@ except AttributeError:
     # time.tzset() is only available on Unix
     pass
 
-# Add your project directory to the sys.path
-# For PythonAnywhere, this should be the absolute path to your project
-project_home = '/home/edudracos/despacho'
+# Add your project directory to the sys.path.
+# For PythonAnywhere, this should be the absolute path to your project.
+# e.g., '/home/yourusername/yourproject'
+project_home = '/home/RedMedicaPro/despacho'
 if project_home not in sys.path:
     sys.path.insert(0, project_home)
 
@@ -60,11 +61,12 @@ if not os.environ.get('FERNET_KEY'):
     )
 
 from app import create_app
-from config import Config
+from config import ProductionConfig
 
-# Create the Flask application instance
-# Use the Config class, not a string
-app = create_app(Config)
+# Create the Flask application instance using the production config so that
+# SESSION_COOKIE_SECURE, MAIL_SUPPRESS_SEND, and DEBUG are correctly set.
+# The base Config class is INSECURE for production (cookies-over-HTTP).
+app = create_app(ProductionConfig)
 
 # PythonAnywhere expects the variable to be called 'application'
 application = app

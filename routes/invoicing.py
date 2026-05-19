@@ -683,6 +683,220 @@ def facturacion_actualizar_estado_db(company_id, uuid):
         
     return redirect(url_for('invoicing.facturacion_dashboard', company_id=company.id))
 
+def generar_y_timbrar_cfdi(company, credentials, form_comprobante, form_receptor):
+    """Generar XML, timbrar y guardar en carpeta xml/[RFC]/"""
+    try:
+        from services.cfdi_generator import CFDIGenerator
+        from services.facturacion_service import FacturacionService
+        from utils.crypto import decrypt_password
+        from werkzeug.utils import secure_filename
+        import json
+        import tempfile
+
+        # Obtener conceptos
+        conceptos_json = request.form.get('conceptos')
+        if not conceptos_json:
+            flash('Debe agregar al menos un concepto', 'error')
+            return redirect(url_for('invoicing.crear_factura', company_id=company.id))
+
+        conceptos = json.loads(conceptos_json)
+
+        # Procesar archivos FIEL
+        fiel_cer_file = form_comprobante.fiel_cer.data
+        fiel_key_file = form_comprobante.fiel_key.data
+        fiel_password = form_comprobante.fiel_password.data
+
+        if not fiel_cer_file or not fiel_key_file or not fiel_password:
+            flash('Debe proporcionar certificado FIEL, llave privada y contraseña', 'error')
+            return redirect(url_for('invoicing.crear_factura', company_id=company.id))
+
+        # Guardar FIEL temporalmente
+        temp_dir = tempfile.gettempdir()
+        cer_filename = secure_filename(fiel_cer_file.filename)
+        key_filename = secure_filename(fiel_key_file.filename)
+
+        cer_path = os.path.join(temp_dir, f"fiel_{company.id}_{cer_filename}")
+        key_path = os.path.join(temp_dir, f"fiel_{company.id}_{key_filename}")
+
+        fiel_cer_file.save(cer_path)
+        fiel_key_file.save(key_path)
+
+        try:
+            # Generar XML
+            generator = CFDIGenerator(
+                certificado_path=cer_path,
+                key_path=key_path,
+                key_password=fiel_password
+            )
+
+            # Validar
+            validacion = generator.validar_datos(
+                receptor_rfc=form_receptor.receptor_rfc.data,
+                receptor_cp=form_receptor.receptor_cp.data,
+                receptor_regimen=form_receptor.receptor_regimen.data,
+                receptor_uso_cfdi=form_receptor.receptor_uso_cfdi.data,
+                lugar_expedicion=form_comprobante.lugar_expedicion.data,
+                conceptos=conceptos
+            )
+
+            if not validacion['valido']:
+                for error in validacion['errores']:
+                    flash(error, 'error')
+                return redirect(url_for('invoicing.crear_factura', company_id=company.id))
+
+            # Generar CFDI (retorna tupla: objeto firmado, XML string)
+            cfdi_firmado, xml_sin_timbrar = generator.crear_factura(
+                serie=form_comprobante.serie.data,
+                folio=form_comprobante.folio.data,
+                fecha=form_comprobante.fecha.data,
+                forma_pago=form_comprobante.forma_pago.data,
+                metodo_pago=form_comprobante.metodo_pago.data,
+                lugar_expedicion=form_comprobante.lugar_expedicion.data,
+                receptor_rfc=form_receptor.receptor_rfc.data,
+                receptor_nombre=form_receptor.receptor_nombre.data,
+                receptor_uso_cfdi=form_receptor.receptor_uso_cfdi.data,
+                receptor_regimen=form_receptor.receptor_regimen.data,
+                receptor_cp=form_receptor.receptor_cp.data,
+                conceptos=conceptos
+            )
+
+            # Crear carpeta xml/RFC_EMPRESA/ si no existe
+            xml_base_dir = os.path.join(PROJECT_ROOT, 'xml')
+            company_xml_dir = os.path.join(xml_base_dir, company.rfc)
+            os.makedirs(company_xml_dir, exist_ok=True)
+
+            # Timbrar con Finkok - pasar el objeto CFDI directamente
+            password = decrypt_password(credentials.password_enc)
+            facturacion_service = FacturacionService(
+                finkok_username=credentials.username,
+                finkok_password=password,
+                environment=credentials.environment
+            )
+
+            # CRÍTICO: Pasar el objeto CFDI, no el string XML
+            result = facturacion_service.timbrar_factura(cfdi_firmado, accept='XML')
+
+            if result['success']:
+                # Guardar XMLs en carpeta
+                uuid = result['uuid']
+                serie = form_comprobante.serie.data or ''
+                folio = form_comprobante.folio.data or 'SN'
+
+                # Nombre del archivo
+                filename_base = f"{serie}{folio}_{uuid}"
+
+                # Guardar XML timbrado
+                if 'xml' in result:
+                    xml_path = os.path.join(company_xml_dir, f"{filename_base}.xml")
+                    with open(xml_path, 'wb') as f:
+                        f.write(result['xml'])
+                    logger.info(f"XML timbrado guardado en: {xml_path}")
+
+                # Guardar PDF
+                if 'pdf' in result:
+                    pdf_path = os.path.join(company_xml_dir, f"{filename_base}.pdf")
+                    with open(pdf_path, 'wb') as f:
+                        f.write(result['pdf'])
+                    logger.info(f"PDF guardado en: {pdf_path}")
+
+                # INCREMENTAR CONTADOR DE FOLIO
+                folio_counter = InvoiceFolioCounter.query.filter_by(
+                    company_id=company.id,
+                    serie=serie
+                ).first()
+
+                if not folio_counter:
+                    folio_counter = InvoiceFolioCounter(
+                        company_id=company.id,
+                        serie=serie,
+                        current_folio=0
+                    )
+                    db.session.add(folio_counter)
+
+                try:
+                    folio_num = int(folio)
+                except ValueError:
+                    folio_num = 1
+
+                if folio_num >= folio_counter.current_folio:
+                    folio_counter.current_folio = folio_num
+                    folio_counter.updated_at = now_mexico()
+                    db.session.commit()
+                    logger.info(f"Contador de folio actualizado: Serie {serie}, Folio {folio_num}")
+
+                # GUARDAR O ACTUALIZAR CLIENTE
+                receptor_rfc = form_receptor.receptor_rfc.data.upper().strip()
+                receptor_nombre = form_receptor.receptor_nombre.data.strip()
+                receptor_cp = form_receptor.receptor_cp.data.strip()
+                receptor_regimen = form_receptor.receptor_regimen.data
+
+                existing_customer = Customer.query.filter_by(
+                    company_id=company.id,
+                    rfc=receptor_rfc
+                ).first()
+
+                if existing_customer:
+                    existing_customer.nombre = receptor_nombre
+                    existing_customer.codigo_postal = receptor_cp
+                    existing_customer.regimen_fiscal = receptor_regimen
+                    existing_customer.updated_at = now_mexico()
+                    logger.info(f"Cliente actualizado: {receptor_rfc}")
+                else:
+                    new_customer = Customer(
+                        company_id=company.id,
+                        rfc=receptor_rfc,
+                        nombre=receptor_nombre,
+                        codigo_postal=receptor_cp,
+                        regimen_fiscal=receptor_regimen
+                    )
+                    db.session.add(new_customer)
+                    logger.info(f"Nuevo cliente creado: {receptor_rfc}")
+
+                db.session.commit()
+
+                flash(f'✅ ¡Factura creada y timbrada exitosamente! UUID: {uuid}', 'success')
+                flash(f'📁 Archivos guardados en: xml/{company.rfc}/', 'info')
+
+                return redirect(url_for('invoicing.facturacion_dashboard', company_id=company.id))
+            else:
+                # Guardar XML fallido para revisión
+                try:
+                    import time
+                    import uuid as uuid_lib
+
+                    timestamp = int(time.time())
+                    unique_id = uuid_lib.uuid4().hex[:8]
+                    failed_filename = f"FAILED_TIMBRADO_{timestamp}_{unique_id}.xml"
+
+                    fallidos_dir = os.path.join(PROJECT_ROOT, 'xml', 'fallidos')
+                    os.makedirs(fallidos_dir, exist_ok=True)
+                    filepath = os.path.join(fallidos_dir, failed_filename)
+
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(xml_sin_timbrar)
+
+                    logger.info(f"XML rechazado por PAC guardado en: {filepath}")
+                    flash('El XML generado fue guardado en xml/fallidos para revisión.', 'warning')
+
+                except Exception as save_err:
+                    logger.error(f"Error guardando XML fallido: {str(save_err)}")
+
+                flash(f'Error al timbrar: {result["message"]}', 'error')
+                return redirect(url_for('invoicing.crear_factura', company_id=company.id))
+
+        finally:
+            # Limpiar archivos temporales
+            if os.path.exists(cer_path):
+                os.remove(cer_path)
+            if os.path.exists(key_path):
+                os.remove(key_path)
+
+    except Exception as e:
+        logger.error(f'Error al generar y timbrar: {str(e)}')
+        flash(f'Error: {str(e)}', 'error')
+        return redirect(url_for('invoicing.crear_factura', company_id=company.id))
+
+
 @invoicing_bp.route('/companies/<int:company_id>/facturacion/crear', methods=['GET', 'POST'])
 @login_required
 @require_company_perm('facturacion')

@@ -85,42 +85,92 @@ def add_company():
 @login_required
 def delete_company(company_id):
     company = Company.query.get_or_404(company_id)
-    
-    try:
-        # Delete dependencies in order to respect FK constraints
-        
-        # 1. Delete Movements (referencing Invoice, Category, Company)
-        Movement.query.filter_by(company_id=company.id).delete()
-        
-        # 2. Delete Invoices (referencing Supplier, Company)
-        Invoice.query.filter_by(company_id=company.id).delete()
-        
-        # 3. Delete Suppliers (referencing Company)
-        Supplier.query.filter_by(company_id=company.id).delete()
-        
-        # 4. Delete Categories (referencing Company)
-        Category.query.filter_by(company_id=company.id).delete()
 
-        # 5. Delete Inventory (Product referencing Company, Transaction referencing Product)
-        # Need to find products first to delete transactions
-        products = Product.query.filter_by(company_id=company.id).all()
+    try:
+        cid = company.id
+
+        # ── 1. ExitOrderDetail → ExitOrder ─────────────────────────────────
+        exit_orders = ExitOrder.query.filter_by(company_id=cid).all()
+        for eo in exit_orders:
+            ExitOrderDetail.query.filter_by(order_id=eo.id).delete()
+        ExitOrder.query.filter_by(company_id=cid).delete()
+
+        # ── 2. PurchaseOrderDetail → PurchaseOrder ──────────────────────────
+        purchase_orders = PurchaseOrder.query.filter_by(company_id=cid).all()
+        for po in purchase_orders:
+            PurchaseOrderDetail.query.filter_by(order_id=po.id).delete()
+        PurchaseOrder.query.filter_by(company_id=cid).delete()
+
+        # ── 3. InventoryRequest ─────────────────────────────────────────────
+        InventoryRequest.query.filter_by(company_id=cid).delete()
+
+        # ── 4. Products → Batches, Transactions ─────────────────────────────
+        products = Product.query.filter_by(company_id=cid).all()
         for p in products:
+            batches = ProductBatch.query.filter_by(product_id=p.id).all()
+            for b in batches:
+                ExitOrderDetail.query.filter_by(batch_id=b.id).delete()
+                InventoryTransaction.query.filter_by(batch_id=b.id).delete()
+            ProductBatch.query.filter_by(product_id=p.id).delete()
             InventoryTransaction.query.filter_by(product_id=p.id).delete()
-        Product.query.filter_by(company_id=company.id).delete()
-        
-        # 6. Delete TaxPayments (referencing Company)
-        TaxPayment.query.filter_by(company_id=company.id).delete()
-        
-        # 7. Delete Company
+        Product.query.filter_by(company_id=cid).delete()
+
+        # ── 5. ProductCategory ──────────────────────────────────────────────
+        ProductCategory.query.filter_by(company_id=cid).delete()
+
+        # ── 6. Laboratory → LaboratorySanitaryRegistration ──────────────────
+        labs = Laboratory.query.filter_by(company_id=cid).all()
+        for lab in labs:
+            LaboratorySanitaryRegistration.query.filter_by(laboratory_id=lab.id).delete()
+        Laboratory.query.filter_by(company_id=cid).delete()
+
+        # ── 7. InvoiceTemplate → InvoiceTemplateItem ────────────────────────
+        templates = InvoiceTemplate.query.filter_by(company_id=cid).all()
+        for tmpl in templates:
+            InvoiceTemplateItem.query.filter_by(template_id=tmpl.id).delete()
+        InvoiceTemplate.query.filter_by(company_id=cid).delete()
+
+        # ── 8. Services ─────────────────────────────────────────────────────
+        Service.query.filter_by(company_id=cid).delete()
+
+        # ── 9. Customers ────────────────────────────────────────────────────
+        Customer.query.filter_by(company_id=cid).delete()
+
+        # ── 10. InvoiceFolioCounter ──────────────────────────────────────────
+        InvoiceFolioCounter.query.filter_by(company_id=cid).delete()
+
+        # ── 11. FinkokCredentials ────────────────────────────────────────────
+        FinkokCredentials.query.filter_by(company_id=cid).delete()
+
+        # ── 12. Movements ────────────────────────────────────────────────────
+        Movement.query.filter_by(company_id=cid).delete()
+
+        # ── 13. Invoices ─────────────────────────────────────────────────────
+        Invoice.query.filter_by(company_id=cid).delete()
+
+        # ── 14. Suppliers ─────────────────────────────────────────────────────
+        Supplier.query.filter_by(company_id=cid).delete()
+
+        # ── 15. Categories (financial) ────────────────────────────────────────
+        Category.query.filter_by(company_id=cid).delete()
+
+        # ── 16. TaxPayments ───────────────────────────────────────────────────
+        TaxPayment.query.filter_by(company_id=cid).delete()
+
+        # ── 17. UserCompanyAccess ─────────────────────────────────────────────
+        UserCompanyAccess.query.filter_by(company_id=cid).delete()
+
+        # ── 18. Delete the Company itself ─────────────────────────────────────
         db.session.delete(company)
-        
+
         db.session.commit()
-        flash('Empresa y todos sus datos eliminados correctamente.', 'success')
-        
+        flash(f'Empresa "{company.name}" y todos sus datos fueron eliminados permanentemente.', 'success')
+
     except Exception as e:
         db.session.rollback()
+        logger.error(f'Error eliminando empresa {company_id}: {str(e)}')
         flash(f'Error al eliminar empresa: {str(e)}', 'error')
-        
+
     return redirect(url_for('companies.companies'))
 
 @companies_bp.route('/companies/edit/<int:company_id>', methods=['GET', 'POST'])

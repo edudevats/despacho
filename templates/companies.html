@@ -106,7 +106,6 @@
         {% endif %}
     </div>
 </div>
-</div>
 
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
@@ -121,12 +120,17 @@
                 <p>¿Estás seguro que deseas eliminar la empresa <strong id="deleteCompanyName"></strong>?</p>
                 <div class="alert alert-warning">
                     <i class="fas fa-exclamation-circle"></i> <strong>¡ADVERTENCIA!</strong>
-                    Esta acción es irreversible. Se eliminarán permanentemente:
-                    <ul>
-                        <li>Todas las facturas asociadas</li>
-                        <li>Todos los movimientos (ingresos y egresos)</li>
-                        <li>El catálogo de proveedores</li>
-                        <li>El catálogo de categorías</li>
+                    Esta acción es irreversible. Se eliminarán permanentemente <strong>todos</strong> los datos de la empresa:
+                    <ul class="mb-0 mt-2">
+                        <li>Facturas y movimientos financieros</li>
+                        <li>Proveedores y categorías</li>
+                        <li>Inventario completo (productos, lotes, transacciones)</li>
+                        <li>Órdenes de compra y salida</li>
+                        <li>Laboratorios y categorías de producto</li>
+                        <li>Clientes, servicios y plantillas de factura</li>
+                        <li>Credenciales Finkok y contadores de folio</li>
+                        <li>Impuestos registrados</li>
+                        <li>Accesos de usuarios a esta empresa</li>
                     </ul>
                 </div>
             </div>
@@ -134,7 +138,9 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <form id="deleteForm" method="POST" action="">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger">Eliminar Definitivamente</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Eliminar Definitivamente
+                    </button>
                 </form>
             </div>
         </div>
@@ -145,8 +151,8 @@
     function confirmDelete(id, name) {
         document.getElementById('deleteCompanyName').textContent = name;
         document.getElementById('deleteForm').action = '/companies/delete/' + id;
-        var deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
-        deleteModal.show();
+        var modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        modal.show();
     }
 </script>
 {% endblock %}
