@@ -43,8 +43,60 @@ def create_app(config_class=Config):
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash('La página expiró por inactividad. Hemos recargado la página para que puedas continuar de forma segura.', 'warning')
-        # Validate referrer against the current host to prevent open-redirect via Referer.
-        return redirect(safe_redirect_target(request.referrer, request.url))
+        
+        # Devolver una vista más estética con recarga automática por Javascript,
+        # evitando la pantalla blanca o el 405 Method Not Allowed en redirecciones POST.
+        html_content = """
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Recargando sesión...</title>
+            <style>
+                body {
+                    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f8f9fa;
+                    color: #495057;
+                    text-align: center;
+                }
+                .loader {
+                    border: 4px solid #f3f3f3;
+                    border-top: 4px solid #198754;
+                    border-radius: 50%;
+                    width: 40px;
+                    height: 40px;
+                    animation: spin 1s linear infinite;
+                    margin: 0 auto 1rem auto;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            </style>
+            <script>
+                // Recargar a la página anterior de forma segura o al inicio
+                setTimeout(function() {
+                    var target = document.referrer ? document.referrer : '/';
+                    window.location.replace(target);
+                }, 800);
+            </script>
+        </head>
+        <body>
+            <div>
+                <div class="loader"></div>
+                <h2>Sesión protegida</h2>
+                <p>Recargando la página de forma segura...</p>
+            </div>
+        </body>
+        </html>
+        """
+        return html_content, 200
 
     @app.context_processor
     def inject_inventory_admin_helper():

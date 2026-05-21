@@ -231,7 +231,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
-                                        <a href="{{ url_for('invoicing.facturacion_invoice_pdf', company_id=company.id, filename=invoice.filename) }}" class="btn btn-sm btn-outline-secondary" title="Descargar PDF">
+                                        <a href="{{ url_for('invoicing.facturacion_invoice_pdf', company_id=company.id, filename=invoice.filename) }}" onclick="downloadPdfWithOverlay(event, this.href, '{{ invoice.uuid }}.pdf')" class="btn btn-sm btn-outline-secondary" title="Descargar PDF">
                                             <i class="fas fa-file-pdf"></i>
                                         </a>
                                         {% if invoice.uuid %}

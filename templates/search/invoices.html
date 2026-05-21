@@ -160,6 +160,7 @@
                                 <i class="fas fa-file-code"></i>
                             </a>
                             <a href="{{ url_for('inventory.download_invoice_file', uuid=invoice.uuid, file_type='pdf') }}"
+                                onclick="downloadPdfWithOverlay(event, this.href, '{{ invoice.uuid }}.pdf')"
                                 class="btn btn-sm btn-outline-danger" title="Descargar PDF">
                                 <i class="fas fa-file-pdf"></i>
                             </a>
