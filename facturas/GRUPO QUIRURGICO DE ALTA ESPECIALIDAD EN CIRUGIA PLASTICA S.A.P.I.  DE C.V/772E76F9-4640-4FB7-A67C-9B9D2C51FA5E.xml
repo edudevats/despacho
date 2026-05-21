@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Moneda="MXN" NoCertificado="00001000000510477834" Folio="4269727" LugarExpedicion="53220" Exportacion="01" Certificado="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" MetodoPago="PUE" FormaPago="04" SubTotal="400.99" Total="449.40" TipoDeComprobante="I" Sello="pfxxNKqo/NSBPGEPA5JO/0jZYbhFpHuh4TyG22XAXOQdm8rpN33BSTdMhj5yf5Od0GFu41RMd7PDHI/rapb1GMQ7srjOlca8xYGpqYDs6be6oitfn3reaZMlEn1Hbr10TlfuSiwa5R8a8WnAhwYeN64zDESR80qPYpnPaVzBwnuVAU47HLDyg9BFqpqge58bZDmBMVS3XLIvvD44KaM0TtHaM4hUgyNoN6um3Vp6W+pI2Bx9F4F78XBMXXgMSyQunMVpn8jjPAgB0+TcvvRwd+m2OVK7R75PPVCee8fc0Ax74JAV2t+WxenLViVUQlhjyV13zV4FY5BVPfyZ/9PKVA==" Fecha="2025-11-28T09:51:03" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cfdi:Emisor Rfc="GZA9104307K6" Nombre="GRUPO ZORRO ABARROTERO" RegimenFiscal="601" />
+  <cfdi:Receptor Rfc="GQA170124FQA" Nombre="GRUPO QUIRURGICO DE ALTA ESPECIALIDAD EN CIRUGIA PLASTICA" UsoCFDI="G03" DomicilioFiscalReceptor="54050" RegimenFiscalReceptor="626" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="12161902" NoIdentificacion="1000025" Cantidad="1.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="ROMA BULTO 1-10 KG (DETERG)" ValorUnitario="302.59" Importe="302.59" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="302.59" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="48.41" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50192405" NoIdentificacion="6622310" Cantidad="8.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="GELATINA DANY LIMON 48/125 GR (DANONE)" ValorUnitario="6.15" Importe="49.20" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="49.20" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50192405" NoIdentificacion="6622312" Cantidad="8.000000" ClaveUnidad="H87" Unidad="PZA" Descripcion="GELATINA DANY PI?A 48/125 GR (DANONE)" ValorUnitario="6.15" Importe="49.20" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="49.20" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="48.41">
+    <cfdi:Traslados>
+      <cfdi:Traslado Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" Base="98.40" />
+      <cfdi:Traslado Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="48.41" Base="302.59" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="772E76F9-4640-4FB7-A67C-9B9D2C51FA5E" FechaTimbrado="2025-11-28T09:51:05" RfcProvCertif="INT020124V62" SelloCFD="pfxxNKqo/NSBPGEPA5JO/0jZYbhFpHuh4TyG22XAXOQdm8rpN33BSTdMhj5yf5Od0GFu41RMd7PDHI/rapb1GMQ7srjOlca8xYGpqYDs6be6oitfn3reaZMlEn1Hbr10TlfuSiwa5R8a8WnAhwYeN64zDESR80qPYpnPaVzBwnuVAU47HLDyg9BFqpqge58bZDmBMVS3XLIvvD44KaM0TtHaM4hUgyNoN6um3Vp6W+pI2Bx9F4F78XBMXXgMSyQunMVpn8jjPAgB0+TcvvRwd+m2OVK7R75PPVCee8fc0Ax74JAV2t+WxenLViVUQlhjyV13zV4FY5BVPfyZ/9PKVA==" NoCertificadoSAT="00001000000708361008" SelloSAT="gN/h4wonsPWzVxrHDT3RsRL/Vm93FL1u4mkvCHZlZuA63IMgJBQGUgcF1KDBcjIAW/kC5B7P3bRRgFSNlsOk+IsLndeUCUHitMm328Cx08Up/yTNf8NTgi2YRRlor5pgKudFhDrGgg+egCSQAd21CT2pNjQPaQmVL4M7D9IgQwuHT0OMvCVUd1pXKkEitIDvoUsbwnGwfhtgmtQMmxsl9Nbotsj26Kvzlz9qUCRfNiocOCFzWRh7ySWb5eQxG5yKJR2S10tkKCN6QgQQQcOxtIEXa5So3bRzp3XDu3fpuKKLIpYVedrMmf7eX8pozuMmGR/q1Oyf+tBFnJHSXwtiZA==" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>

@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Fecha="2026-01-08T23:20:45" Sello="lW2/xnPEJgS8fr1E3gSi5ftARTKOcXlCHbeJENOGsb9PhT38u499R+RWjGMcnmVWNJH6AsLzjewPQ2OeI8luJrx6VSjuKCyG4l0OJJPUNNrrnnbKZvPyrlyTmNXLQ0ThYFZfNOtuCpYQBo+hWoLwmerjFbziKZtMkr68u4uYqVGKQThrlr3bG6Sg3TgzoooH0kWENqsWSOt5vBIETL3ARZPDFTwMESp2UxgftW8k1N/ddSpukOUypEUB8RTIC0hx9DcuM10AwjzWBRVyG4Qr9XK6oTehjt2GJGUIqcAGYyY+XcNtuFnsEC3eOB6uozh+euwlPm0sbJpFaGzRyDiaAg==" FormaPago="03" NoCertificado="00001000000700474398" Certificado="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" SubTotal="2168.49" Moneda="MXN" Total="2488.35" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" LugarExpedicion="11290" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cfdi:Emisor Rfc="RAPJ911221CU8" Nombre="JULIO ANTONIO RAYA PALACIOS" RegimenFiscal="626" />
+  <cfdi:Receptor Rfc="GQA170124FQA" Nombre="GRUPO QUIRURGICO DE ALTA ESPECIALIDAD EN CIRUGIA PLASTICA" DomicilioFiscalReceptor="54050" RegimenFiscalReceptor="626" UsoCFDI="G03" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="24111503" Cantidad="100" ClaveUnidad="H87" Unidad="Pieza" Descripcion="BOLSA RPBI ROJA 55x60" ValorUnitario="4.40" Importe="440.000000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="440.000000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="70.400000" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="440.000000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="5.500000" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="24112600" Cantidad="1" ClaveUnidad="H87" Unidad="Pieza" Descripcion="PL-13 RECOLECTOR LIQUIDOS AMARILLO 13L" ValorUnitario="199.41" Importe="199.410000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="199.410000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="31.905600" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="199.410000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="2.492625" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="24112600" Cantidad="2" ClaveUnidad="H87" Unidad="Pieza" Descripcion="PL-8 RECOLECTOR LIQUIDOS AMARILLO 8.5L" ValorUnitario="169.67" Importe="339.340000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="339.340000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="54.294400" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="339.340000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="4.241750" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="42142531" Cantidad="2" ClaveUnidad="H87" Unidad="Pieza" Descripcion="PC-30 RECOLECTOR PUNZOCORTANTES 30L" ValorUnitario="361.00" Importe="722.000000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="722.000000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="115.520000" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="722.000000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="9.025000" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="42142531" Cantidad="1" ClaveUnidad="H87" Unidad="Pieza" Descripcion="PC-3 RECOLECTOR PUNZOCORTANTES 3L" ValorUnitario="72.35" Importe="72.350000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="72.350000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="11.576000" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="72.350000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="0.904375" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="42142531" Cantidad="2" ClaveUnidad="H87" Unidad="Pieza" Descripcion="PC-8 RECOLECTOR PUNZOCORTANTES 8.5L" ValorUnitario="169.67" Importe="339.340000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="339.340000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="54.294400" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="339.340000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="4.241750" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="42142531" Cantidad="1" ClaveUnidad="H87" Unidad="Pieza" Descripcion="PC-1 RECOLECTOR PUNZOCORTANTES 1.8L" ValorUnitario="56.05" Importe="56.050000" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="56.050000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="8.968000" />
+        </cfdi:Traslados>
+        <cfdi:Retenciones>
+          <cfdi:Retencion Base="56.050000" Impuesto="001" TipoFactor="Tasa" TasaOCuota="0.012500" Importe="0.700625" />
+        </cfdi:Retenciones>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="346.96" TotalImpuestosRetenidos="27.10">
+    <cfdi:Retenciones>
+      <cfdi:Retencion Impuesto="001" Importe="27.10" />
+    </cfdi:Retenciones>
+    <cfdi:Traslados>
+      <cfdi:Traslado Base="2168.49" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="346.96" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" Version="1.1" UUID="42D0B783-9436-4C23-B5B7-70475DCC4050" FechaTimbrado="2026-01-08T23:21:13" RfcProvCertif="SAT970701NN3" SelloCFD="lW2/xnPEJgS8fr1E3gSi5ftARTKOcXlCHbeJENOGsb9PhT38u499R+RWjGMcnmVWNJH6AsLzjewPQ2OeI8luJrx6VSjuKCyG4l0OJJPUNNrrnnbKZvPyrlyTmNXLQ0ThYFZfNOtuCpYQBo+hWoLwmerjFbziKZtMkr68u4uYqVGKQThrlr3bG6Sg3TgzoooH0kWENqsWSOt5vBIETL3ARZPDFTwMESp2UxgftW8k1N/ddSpukOUypEUB8RTIC0hx9DcuM10AwjzWBRVyG4Qr9XK6oTehjt2GJGUIqcAGYyY+XcNtuFnsEC3eOB6uozh+euwlPm0sbJpFaGzRyDiaAg==" NoCertificadoSAT="00001000000705250068" SelloSAT="FGW+4feuFQya94WXiVL7DXEWRBgRzlWyt01WvD4tI3EsXS2PyuJCErMUUA9/4svWWMUBI5OKXpImgiPNtWR/rIiR84gxR6d552GvDp0+TWE1bPJBpKjwj1DTkWq8XAL6S0zkAzDu/kETtwFOZ6HrUnSNQw4djDau18Kp4Dk+UVhoZWUI9iEKK+2m7iomH/gcOoypKnPU8jktXyeW2PQM/PM7I+KvCYjU/Nu7I5td4cMRZ3KFZj+/hLRlSJdtmqrnWkUWsVgVvECpZg1ZYxA1fwT22N1/FKIaqLR1JXZ3V5QuwdORkg7+LEN/856YuPD+TiJk+S2gf4MIgT40KCyN+g==" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>
