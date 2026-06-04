@@ -22,6 +22,15 @@
         <strong>Instrucciones:</strong> Ingrese las cantidades realmente recibidas. Para medicamentos, ingrese tambien el numero de lote y la fecha de caducidad.
     </div>
 
+    {% set any_requires_expiration = order.details | selectattr('product.category') | map(attribute='product.category.requires_expiration_date') | select | list | length > 0 %}
+    {% if any_requires_expiration %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Caducidad obligatoria:</strong> Algunos productos pertenecen a categorías que exigen
+        fecha de caducidad. No podrá completar la recepción de esos productos sin capturarla.
+    </div>
+    {% endif %}
+
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card shadow-sm mb-4">
@@ -46,6 +55,7 @@
                             {% set product = detail.product %}
                             {% set upp = product.units_per_package or 1 %}
                             {% set requires_batch = product.category and product.category.requires_batch_tracking %}
+                            {% set requires_expiration = product.category and product.category.requires_expiration_date %}
                             <tr>
                                 <td>
                                     <strong>{{ product.name }}</strong>
@@ -99,8 +109,14 @@
                                 </td>
                                 <td>
                                     <input type="date" name="expiration_{{ detail.id }}"
-                                           class="form-control form-control-sm"
-                                           value="{{ detail.expiration_date.strftime('%Y-%m-%d') if detail.expiration_date else '' }}">
+                                           class="form-control form-control-sm{{ ' border-warning' if requires_expiration else '' }}"
+                                           value="{{ detail.expiration_date.strftime('%Y-%m-%d') if detail.expiration_date else '' }}"
+                                           {% if requires_expiration %}required{% endif %}>
+                                    {% if requires_expiration %}
+                                    <small class="text-warning d-block">
+                                        <i class="fas fa-exclamation-triangle"></i> Obligatoria
+                                    </small>
+                                    {% endif %}
                                 </td>
                                 {% else %}
                                 <td colspan="2" class="text-center align-middle">

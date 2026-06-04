@@ -351,9 +351,9 @@ def _ensure_default_product_categories(company_id):
     """Crear categorías por defecto si no existen para esta empresa"""
     defaults = [
         {'name': 'Medicamento', 'description': 'Medicamentos y fármacos',
-         'requires_cofepris': True, 'requires_batch_tracking': True},
+         'requires_cofepris': True, 'requires_batch_tracking': True, 'requires_expiration_date': True},
         {'name': 'Insumo', 'description': 'Insumos médicos y materiales',
-         'requires_cofepris': False, 'requires_batch_tracking': False},
+         'requires_cofepris': False, 'requires_batch_tracking': True, 'requires_expiration_date': True},
     ]
     created = False
     for d in defaults:
@@ -1582,7 +1582,8 @@ def add_product_category(company_id):
             name=form.name.data,
             description=form.description.data,
             requires_cofepris=form.requires_cofepris.data,
-            requires_batch_tracking=form.requires_batch_tracking.data
+            requires_batch_tracking=form.requires_batch_tracking.data,
+            requires_expiration_date=form.requires_expiration_date.data
         )
         db.session.add(category)
         db.session.commit()
@@ -1612,6 +1613,7 @@ def edit_product_category(company_id, category_id):
         category.description = form.description.data
         category.requires_cofepris = form.requires_cofepris.data
         category.requires_batch_tracking = form.requires_batch_tracking.data
+        category.requires_expiration_date = form.requires_expiration_date.data
         db.session.commit()
         flash(f'Categoría "{category.name}" actualizada.', 'success')
         return redirect(url_for('inventory.inventory_list', company_id=company_id, tab='categories'))
@@ -1645,6 +1647,7 @@ def get_product_category_info(category_id):
         'name': cat.name,
         'requires_cofepris': cat.requires_cofepris,
         'requires_batch_tracking': cat.requires_batch_tracking,
+        'requires_expiration_date': cat.requires_expiration_date,
     })
 
 @inventory_bp.route('/companies/<int:company_id>/inventory/services/add', methods=['GET', 'POST'])
@@ -1845,6 +1848,23 @@ def edit_purchase_order(company_id, order_id):
                 if new_cost > 0:
                     detail.product.cost_price = new_cost
 
+        elif action == 'update_quantity':
+            detail_id = int(request.form.get('detail_id'))
+            detail = PurchaseOrderDetail.query.get(detail_id)
+            if detail and detail.order_id == order.id:
+                upp = detail.product.units_per_package or 1
+                if detail.order_unit == 'PAQUETE' and upp > 1:
+                    pkg_qty = int(request.form.get('new_package_quantity') or 0)
+                    loose_qty = int(request.form.get('new_loose_quantity') or 0)
+                    detail.package_quantity = pkg_qty
+                    detail.loose_quantity = loose_qty
+                    detail.quantity_requested = (pkg_qty * upp) + loose_qty
+                else:
+                    qty = int(request.form.get('new_quantity') or 1)
+                    detail.quantity_requested = qty
+                    detail.package_quantity = None
+                    detail.loose_quantity = 0
+
         elif action == 'remove_product':
             detail_id = int(request.form.get('detail_id'))
             detail = PurchaseOrderDetail.query.get(detail_id)
@@ -1859,6 +1879,31 @@ def edit_purchase_order(company_id, order_id):
         # Recalcular total estimado
         order.estimated_total = sum(d.quantity_requested * d.unit_cost for d in order.details)
         db.session.commit()
+
+        # Si es una petición AJAX, retornar respuesta JSON con los datos actualizados
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('ajax'):
+            if action == 'update_cost':
+                detail_id = int(request.form.get('detail_id'))
+                detail = PurchaseOrderDetail.query.get(detail_id)
+                return jsonify({
+                    'success': True,
+                    'action': action,
+                    'estimated_total': order.estimated_total,
+                    'subtotal': detail.quantity_requested * detail.unit_cost if detail else 0
+                })
+            elif action == 'update_quantity':
+                detail_id = int(request.form.get('detail_id'))
+                detail = PurchaseOrderDetail.query.get(detail_id)
+                if detail:
+                    return jsonify({
+                        'success': True,
+                        'action': action,
+                        'estimated_total': order.estimated_total,
+                        'quantity_requested': detail.quantity_requested,
+                        'package_quantity': detail.package_quantity,
+                        'loose_quantity': detail.loose_quantity,
+                        'subtotal': detail.quantity_requested * detail.unit_cost
+                    })
 
         if action == 'send_order':
             return redirect(url_for('inventory.inventory_list', company_id=company_id, tab='orders'))
@@ -1902,7 +1947,7 @@ def purchase_order_pdf(company_id, order_id):
         if os.path.exists(company.logo_path):
             resolved_logo = company.logo_path
         else:
-            fallback = os.path.join(PROJECT_ROOT, 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
+            fallback = os.path.join(PROJECT_ROOT, 'routes', 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
             if os.path.exists(fallback):
                 resolved_logo = fallback
         
@@ -1941,6 +1986,7 @@ def review_purchase_order(company_id, order_id):
         return redirect(url_for('inventory.view_purchase_order', company_id=company_id, order_id=order_id))
 
     if request.method == 'POST':
+        validation_errors = []
         # Actualizar cantidades recibidas y datos de lote
         for detail in order.details:
             product_obj = detail.product
@@ -1968,9 +2014,22 @@ def review_purchase_order(company_id, order_id):
                     detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
                 else:
                     detail.expiration_date = None
+
+                # La categoría puede exigir caducidad obligatoria (COFEPRIS)
+                requires_expiration = product_obj.category.requires_expiration_date
+                if requires_expiration and (detail.quantity_received or 0) > 0 and not detail.expiration_date:
+                    validation_errors.append(
+                        f'"{product_obj.name}" (categoría {product_obj.category.name}) requiere fecha de caducidad obligatoria.'
+                    )
             else:
                 detail.batch_number = None
                 detail.expiration_date = None
+
+        if validation_errors:
+            for err in validation_errors:
+                flash(err, 'error')
+            # No se confirma la recepción; se re-muestra el formulario con los datos capturados
+            return render_template('inventory/purchase_order_review.html', company=company, order=order)
 
         order.status = 'IN_REVIEW'
         order.received_at = now_mexico()
@@ -1996,6 +2055,21 @@ def complete_purchase_order(company_id, order_id):
         return redirect(url_for('inventory.view_purchase_order', company_id=company_id, order_id=order_id))
 
     if request.method == 'POST':
+        # Validar caducidad obligatoria antes de tocar el inventario
+        expiration_errors = []
+        for detail in order.details:
+            if (detail.quantity_received or 0) > 0:
+                cat = detail.product.category
+                if cat and cat.requires_batch_tracking and cat.requires_expiration_date \
+                        and detail.batch_number and not detail.expiration_date:
+                    expiration_errors.append(
+                        f'"{detail.product.name}" (categoría {cat.name}) requiere fecha de caducidad obligatoria.'
+                    )
+        if expiration_errors:
+            for err in expiration_errors:
+                flash(err, 'error')
+            return redirect(url_for('inventory.review_purchase_order', company_id=company_id, order_id=order_id))
+
         # Actualizar inventario con las cantidades recibidas
         for detail in order.details:
             if detail.quantity_received > 0:

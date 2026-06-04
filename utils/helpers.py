@@ -141,3 +141,28 @@ def format_currency(value):
 def chunk_split(body, chunklen=76, end='\\r\\n'):
     if not body: return ""
     return end.join(body[i:i+chunklen] for i in range(0, len(body), chunklen))
+
+from satcfdi.accounting import SatCFDI
+from satcfdi.accounting.models import EstadoComprobante
+
+class AppSatCFDI(SatCFDI):
+    """
+    Subclase de SatCFDI que implementa los métodos abstractos estatus() y fecha_cancelacion
+    para evitar NotImplementedError al calcular saldos pendientes y parcialidades.
+    """
+    def __init__(self, *args, status_sat='VIGENTE', fecha_cancelacion_dt=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._status_sat = status_sat
+        self._fecha_cancelacion_dt = fecha_cancelacion_dt
+
+    def estatus(self) -> EstadoComprobante:
+        status = getattr(self, '_status_sat', 'VIGENTE')
+        if status == 'CANCELADO':
+            return EstadoComprobante.CANCELADO
+        return EstadoComprobante.VIGENTE
+
+    @property
+    def fecha_cancelacion(self):
+        return getattr(self, '_fecha_cancelacion_dt', None)
+
+

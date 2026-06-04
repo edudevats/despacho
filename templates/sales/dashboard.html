@@ -20,7 +20,7 @@
     <div class="card-body">
         <form method="GET" action="{{ url_for('invoicing.sales_dashboard', company_id=company.id) }}"
             class="row g-3 align-items-end">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label fw-bold">Año Actual</label>
                 <select name="current_year" class="form-select">
                     {% for year in available_years %}
@@ -30,7 +30,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label fw-bold">Comparar con</label>
                 <select name="previous_year" class="form-select">
                     {% for year in available_years %}
@@ -40,7 +40,18 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <label class="form-label fw-bold">Base de Ventas</label>
+                <select name="basis" class="form-select">
+                    <option value="cash" {% if annual_summary.basis == 'cash' %}selected{% endif %}>
+                        Flujo de Efectivo (Cobrado)
+                    </option>
+                    <option value="accrual" {% if annual_summary.basis == 'accrual' %}selected{% endif %}>
+                        Devengado (Facturado)
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-3">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="fas fa-sync-alt me-1"></i> Actualizar Comparación
                 </button>
@@ -282,7 +293,12 @@
 <!-- Info Alert -->
 <div class="alert alert-info">
     <i class="fas fa-info-circle me-2"></i>
-    <strong>Nota:</strong> Este análisis se basa en las facturas de ingreso (tipo I) registradas en el sistema.
+    <strong>Información de Base Contable:</strong>
+    {% if annual_summary.basis == 'cash' %}
+        Este análisis está en base a <strong>Flujo de Efectivo (Cobrado)</strong>. Las facturas PUE se acumulan en su mes de emisión, mientras que las facturas PPD solo se acumulan cuando se les asocian complementos de pago en el mes correspondiente del cobro. Las notas de crédito vigentes se deducen directamente.
+    {% else %}
+        Este análisis está en base a <strong>Método Devengado (Facturado)</strong>. Se acumula el total facturado completo de todos los comprobantes emitidos de ingreso en su fecha de emisión, independientemente de cuándo se cobren o de si son PPD o PUE.
+    {% endif %}
     Los cálculos de crecimiento comparan {{ annual_summary.current_year }} vs {{ annual_summary.previous_year }}.
 </div>
 

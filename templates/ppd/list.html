@@ -60,7 +60,7 @@
                                 <th>UUID</th>
                                 <th class="text-end">Total</th>
                                 <th>Tipo</th>
-                                <th class="text-center">Acreditar</th>
+                                <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -86,6 +86,10 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
+                                    <a href="{{ url_for('invoicing.invoice_detail', company_id=company.id, invoice_id=invoice.id) }}"
+                                        class="btn btn-sm btn-outline-primary me-1" title="Ver Detalle / Timeline">
+                                        <i class="fas fa-eye"></i> Ver Detalle
+                                    </a>
                                     <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
                                         data-bs-target="#acreditarModal" data-invoice-id="{{ invoice.id }}"
                                         data-invoice-uuid="{{ invoice.uuid }}" data-invoice-total="{{ invoice.total }}"
@@ -161,6 +165,10 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
+                                    <a href="{{ url_for('invoicing.invoice_detail', company_id=company.id, invoice_id=invoice.id) }}"
+                                        class="btn btn-sm btn-outline-primary me-1" title="Ver Detalle / Timeline">
+                                        <i class="fas fa-eye"></i> Ver Detalle
+                                    </a>
                                     <form
                                         action="{{ url_for('inventory.ppd_desacreditar', company_id=company.id, invoice_id=invoice.id) }}"
                                         method="POST" class="d-inline"

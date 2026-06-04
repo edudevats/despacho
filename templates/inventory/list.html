@@ -607,6 +607,10 @@
                                     <input type="checkbox" name="requires_batch_tracking" class="form-check-input" id="newCatBatch" value="y">
                                     <label class="form-check-label" for="newCatBatch">Lotes</label>
                                 </div>
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" name="requires_expiration_date" class="form-check-input" id="newCatExp" value="y">
+                                    <label class="form-check-label" for="newCatExp" title="Caducidad obligatoria al recibir lotes">Caducidad oblig.</label>
+                                </div>
                             </div>
                             <div class="col-md-2 mb-2">
                                 <button type="submit" class="btn btn-primary w-100">
@@ -629,6 +633,7 @@
                                     <th>Descripción</th>
                                     <th class="text-center">Req. COFEPRIS</th>
                                     <th class="text-center">Req. Lotes</th>
+                                    <th class="text-center">Caducidad oblig.</th>
                                     <th class="text-center">Productos</th>
                                     <th class="text-center">Estado</th>
                                     <th class="text-center">Acciones</th>
@@ -649,6 +654,13 @@
                                     <td class="text-center">
                                         {% if cat.requires_batch_tracking %}
                                         <span class="badge bg-success"><i class="fas fa-check"></i> Sí</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if cat.requires_expiration_date %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle"></i> Sí</span>
                                         {% else %}
                                         <span class="badge bg-secondary">No</span>
                                         {% endif %}
@@ -682,7 +694,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="7" class="text-center py-4 text-muted">
+                                    <td colspan="8" class="text-center py-4 text-muted">
                                         <i class="fas fa-tags fa-3x mb-3"></i><br>
                                         No hay categorías registradas.
                                     </td>

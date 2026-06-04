@@ -52,6 +52,20 @@
                     </div>
                 </div>
 
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check form-switch">
+                            {{ form.requires_expiration_date(class="form-check-input") }}
+                            {{ form.requires_expiration_date.label(class="form-check-label") }}
+                        </div>
+                        <small class="text-muted">
+                            <i class="fas fa-exclamation-triangle text-warning"></i>
+                            Si se activa, no se podrá completar la recepción de una orden sin capturar la
+                            fecha de caducidad del lote. Requiere tener activado el control de lotes.
+                        </small>
+                    </div>
+                </div>
+
                 <div class="d-flex justify-content-between mt-4">
                     <a href="{{ url_for('inventory.inventory_list', company_id=company.id, tab='categories') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left"></i> Cancelar

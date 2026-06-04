@@ -386,6 +386,7 @@ class ProductCategory(db.Model):
     description = db.Column(db.Text, nullable=True)
     requires_cofepris = db.Column(db.Boolean, default=False)
     requires_batch_tracking = db.Column(db.Boolean, default=False)
+    requires_expiration_date = db.Column(db.Boolean, default=False)  # Caducidad obligatoria al recibir lote
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -467,7 +468,7 @@ class ProductBatch(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     
     batch_number = db.Column(db.String(100), nullable=False) # Número de Lote
-    expiration_date = db.Column(db.Date, nullable=False) # Fecha de Caducidad
+    expiration_date = db.Column(db.Date, nullable=True) # Fecha de Caducidad (obligatoria solo si la categoría lo exige)
     
     initial_stock = db.Column(db.Integer, default=0)
     current_stock = db.Column(db.Integer, default=0)

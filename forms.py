@@ -220,6 +220,7 @@ class ProductCategoryForm(FlaskForm):
     ])
     requires_cofepris = BooleanField('Requiere datos COFEPRIS (Registro Sanitario, Principio Activo, etc.)')
     requires_batch_tracking = BooleanField('Requiere control de lotes y caducidad')
+    requires_expiration_date = BooleanField('Fecha de caducidad obligatoria al recibir lotes')
 
 
 class ProductForm(FlaskForm):

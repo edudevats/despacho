@@ -51,17 +51,81 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if detail.order_unit == 'PAQUETE' and detail.product.units_per_package and detail.product.units_per_package > 1 %}
-                                        <span title="{{ detail.package_quantity or 0 }} {{ detail.product.packaging_type or 'paq' }} x {{ detail.product.units_per_package }} + {{ detail.loose_quantity or 0 }} pzas">
-                                            {{ detail.quantity_requested }} pzas
-                                            <br><small class="text-info">
-                                                <i class="fas fa-box"></i> {{ detail.package_quantity or 0 }} {{ detail.product.packaging_type or 'paq' }}
-                                                {% if detail.loose_quantity %} + {{ detail.loose_quantity }} pzas{% endif %}
-                                            </small>
-                                        </span>
-                                        {% else %}
-                                        {{ detail.quantity_requested }}
-                                        {% endif %}
+                                        <!-- Modo lectura: click para editar -->
+                                        <div class="qty-display" id="qtyDisplay_{{ detail.id }}" 
+                                             onclick="editQty({{ detail.id }}, '{{ detail.order_unit }}', {{ detail.product.units_per_package or 1 }})"
+                                             style="cursor: pointer; border-bottom: 1px dashed #007bff; display: inline-block;" 
+                                             title="Click para editar">
+                                            {% if detail.order_unit == 'PAQUETE' and detail.product.units_per_package and detail.product.units_per_package > 1 %}
+                                            <span title="{{ detail.package_quantity or 0 }} {{ detail.product.packaging_type or 'paq' }} x {{ detail.product.units_per_package }} + {{ detail.loose_quantity or 0 }} pzas">
+                                                {{ detail.quantity_requested }} pzas
+                                                <br><small class="text-info">
+                                                    <i class="fas fa-box"></i> {{ detail.package_quantity or 0 }} {{ detail.product.packaging_type or 'paq' }}
+                                                    {% if detail.loose_quantity %} + {{ detail.loose_quantity }} pzas{% endif %}
+                                                </small>
+                                            </span>
+                                            {% else %}
+                                            {{ detail.quantity_requested }}
+                                            {% endif %}
+                                            <i class="fas fa-pencil-alt text-primary ms-1" style="font-size: 0.7rem;"></i>
+                                        </div>
+
+                                        <!-- Modo edición -->
+                                        <form method="POST" class="d-none" id="qtyForm_{{ detail.id }}" 
+                                              style="min-width: 140px; margin: 0 auto;" onsubmit="return ajaxSubmitQty(event, {{ detail.id }}, '{{ detail.order_unit }}', {{ detail.product.units_per_package or 1 }}, '{{ detail.product.packaging_type or 'paq' }}')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="update_quantity">
+                                            <input type="hidden" name="detail_id" value="{{ detail.id }}">
+                                            
+                                            {% if detail.order_unit == 'PAQUETE' and detail.product.units_per_package and detail.product.units_per_package > 1 %}
+                                            <!-- Edición por paquetes + sueltos -->
+                                            <div class="card p-2 border shadow-sm text-start" style="font-size: 0.85rem;">
+                                                <div class="mb-1">
+                                                    <label class="form-label mb-0" style="font-size: 0.75rem;">{{ detail.product.packaging_type or 'Paquetes' }} (x{{ detail.product.units_per_package or 1 }} pzas)</label>
+                                                    <input type="number" name="new_package_quantity" class="form-control form-control-sm" 
+                                                           min="0" value="{{ detail.package_quantity or 0 }}" 
+                                                           id="qtyPkgInput_{{ detail.id }}"
+                                                           oninput="updateInlineTotal({{ detail.id }}, {{ detail.product.units_per_package or 1 }})"
+                                                           onkeydown="if(event.key==='Escape') cancelQtyEdit({{ detail.id }})">
+                                                </div>
+                                                <div class="mb-1">
+                                                    <label class="form-label mb-0" style="font-size: 0.75rem;">Piezas sueltas</label>
+                                                    <input type="number" name="new_loose_quantity" class="form-control form-control-sm" 
+                                                           min="0" value="{{ detail.loose_quantity or 0 }}" 
+                                                           id="qtyLooseInput_{{ detail.id }}"
+                                                           oninput="updateInlineTotal({{ detail.id }}, {{ detail.product.units_per_package or 1 }})"
+                                                           onkeydown="if(event.key==='Escape') cancelQtyEdit({{ detail.id }})">
+                                                </div>
+                                                <div class="text-muted mb-2" style="font-size: 0.75rem;">
+                                                    Total: <strong id="qtyInlineTotal_{{ detail.id }}">{{ detail.quantity_requested }}</strong> pzas
+                                                </div>
+                                                <div class="d-flex justify-content-between">
+                                                    <button type="submit" class="btn btn-sm btn-success w-50 me-1" title="Guardar">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary w-50" 
+                                                            onclick="cancelQtyEdit({{ detail.id }})" title="Cancelar">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {% else %}
+                                            <!-- Edición por unidad simple -->
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" name="new_quantity" class="form-control form-control-sm" 
+                                                       min="1" value="{{ detail.quantity_requested }}" 
+                                                       id="qtyInput_{{ detail.id }}"
+                                                       onkeydown="if(event.key==='Escape') cancelQtyEdit({{ detail.id }})">
+                                                <button type="submit" class="btn btn-sm btn-success" title="Guardar">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                                        onclick="cancelQtyEdit({{ detail.id }})" title="Cancelar">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            {% endif %}
+                                        </form>
                                     </td>
                                     <td class="text-end">
                                         <!-- Modo lectura: click para editar -->
@@ -74,7 +138,7 @@
                                         </span>
                                         <!-- Modo edición -->
                                         <form method="POST" class="d-none" id="costForm_{{ detail.id }}" 
-                                              style="min-width: 120px;" onsubmit="return submitCostEdit({{ detail.id }})">
+                                              style="min-width: 120px;" onsubmit="return ajaxSubmitCost(event, {{ detail.id }})">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="action" value="update_cost">
                                             <input type="hidden" name="detail_id" value="{{ detail.id }}">
@@ -94,7 +158,7 @@
                                             </div>
                                         </form>
                                     </td>
-                                    <td class="text-end fw-bold">${{ (detail.quantity_requested * detail.unit_cost)|format_currency }}</td>
+                                    <td class="text-end fw-bold" id="rowSubtotal_{{ detail.id }}">${{ (detail.quantity_requested * detail.unit_cost)|format_currency }}</td>
                                     <td class="text-center">
                                         <form method="POST" style="display: inline;">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -119,7 +183,7 @@
                             <tfoot class="table-light">
                                 <tr class="fw-bold">
                                     <td colspan="3" class="text-end">Total Estimado:</td>
-                                    <td class="text-end text-success">${{ order.estimated_total|format_currency }}</td>
+                                    <td class="text-end text-success" id="estimatedTotal">${{ order.estimated_total|format_currency }}</td>
                                     <td></td>
                                 </tr>
                             </tfoot>
@@ -316,6 +380,187 @@ function submitCostEdit(detailId) {
         return false;
     }
     return true;
+}
+
+// ---- Edición inline de cantidad ----
+function editQty(detailId, orderUnit, upp) {
+    document.getElementById('qtyDisplay_' + detailId).classList.add('d-none');
+    const form = document.getElementById('qtyForm_' + detailId);
+    form.classList.remove('d-none');
+    
+    if (orderUnit === 'PAQUETE' && upp > 1) {
+        const pkgInput = document.getElementById('qtyPkgInput_' + detailId);
+        pkgInput.focus();
+        pkgInput.select();
+    } else {
+        const input = document.getElementById('qtyInput_' + detailId);
+        input.focus();
+        input.select();
+    }
+}
+
+function cancelQtyEdit(detailId) {
+    document.getElementById('qtyForm_' + detailId).classList.add('d-none');
+    document.getElementById('qtyDisplay_' + detailId).classList.remove('d-none');
+}
+
+function updateInlineTotal(detailId, upp) {
+    const pkgs = parseInt(document.getElementById('qtyPkgInput_' + detailId).value) || 0;
+    const loose = parseInt(document.getElementById('qtyLooseInput_' + detailId).value) || 0;
+    const total = (pkgs * upp) + loose;
+    document.getElementById('qtyInlineTotal_' + detailId).textContent = total;
+}
+
+function submitQtyEdit(detailId) {
+    const input = document.getElementById('qtyInput_' + detailId);
+    if (input) {
+        const val = parseInt(input.value);
+        if (isNaN(val) || val < 1) {
+            input.classList.add('is-invalid');
+            return false;
+        }
+    } else {
+        const pkgs = parseInt(document.getElementById('qtyPkgInput_' + detailId).value) || 0;
+        const loose = parseInt(document.getElementById('qtyLooseInput_' + detailId).value) || 0;
+        if (pkgs < 0 || loose < 0 || (pkgs === 0 && loose === 0)) {
+            const pkgInput = document.getElementById('qtyPkgInput_' + detailId);
+            const looseInput = document.getElementById('qtyLooseInput_' + detailId);
+            pkgInput.classList.add('is-invalid');
+            looseInput.classList.add('is-invalid');
+            return false;
+        }
+    }
+    return true;
+}
+
+// ---- Funciones auxiliares para AJAX ----
+function formatCurrency(val) {
+    return '$' + parseFloat(val).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+}
+
+function ajaxSubmitCost(event, detailId) {
+    event.preventDefault();
+    const input = document.getElementById('costInput_' + detailId);
+    const val = parseFloat(input.value);
+    if (isNaN(val) || val < 0) {
+        input.classList.add('is-invalid');
+        return false;
+    }
+    
+    const form = document.getElementById('costForm_' + detailId);
+    const formData = new FormData(form);
+    
+    const url = window.location.pathname + '?ajax=1';
+    
+    fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const displaySpan = document.getElementById('costDisplay_' + detailId);
+            displaySpan.innerHTML = `$${val.toFixed(2)} <i class="fas fa-pencil-alt text-primary ms-1" style="font-size: 0.7rem;"></i>`;
+            displaySpan.setAttribute('onclick', `editCost(${detailId}, ${val})`);
+            
+            const subtotalTd = document.getElementById('rowSubtotal_' + detailId);
+            if (subtotalTd) {
+                subtotalTd.textContent = formatCurrency(data.subtotal);
+            }
+            
+            const totalTd = document.getElementById('estimatedTotal');
+            if (totalTd) {
+                totalTd.textContent = formatCurrency(data.estimated_total);
+            }
+            
+            cancelCostEdit(detailId);
+        }
+    })
+    .catch(error => {
+        console.error('Error in AJAX cost submit:', error);
+    });
+    
+    return false;
+}
+
+function ajaxSubmitQty(event, detailId, orderUnit, upp, pkgType) {
+    event.preventDefault();
+    
+    const input = document.getElementById('qtyInput_' + detailId);
+    if (input) {
+        const val = parseInt(input.value);
+        if (isNaN(val) || val < 1) {
+            input.classList.add('is-invalid');
+            return false;
+        }
+    } else {
+        const pkgs = parseInt(document.getElementById('qtyPkgInput_' + detailId).value) || 0;
+        const loose = parseInt(document.getElementById('qtyLooseInput_' + detailId).value) || 0;
+        if (pkgs < 0 || loose < 0 || (pkgs === 0 && loose === 0)) {
+            const pkgInput = document.getElementById('qtyPkgInput_' + detailId);
+            const looseInput = document.getElementById('qtyLooseInput_' + detailId);
+            pkgInput.classList.add('is-invalid');
+            looseInput.classList.add('is-invalid');
+            return false;
+        }
+    }
+    
+    const form = document.getElementById('qtyForm_' + detailId);
+    const formData = new FormData(form);
+    
+    const url = window.location.pathname + '?ajax=1';
+    
+    fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const displayDiv = document.getElementById('qtyDisplay_' + detailId);
+            
+            let htmlContent = '';
+            if (orderUnit === 'PAQUETE' && upp > 1) {
+                htmlContent = `
+                    <span title="${data.package_quantity || 0} ${pkgType} x ${upp} + ${data.loose_quantity || 0} pzas">
+                        ${data.quantity_requested} pzas
+                        <br><small class="text-info">
+                            <i class="fas fa-box"></i> ${data.package_quantity || 0} ${pkgType}
+                            ${data.loose_quantity ? ' + ' + data.loose_quantity + ' pzas' : ''}
+                        </small>
+                    </span>
+                    <i class="fas fa-pencil-alt text-primary ms-1" style="font-size: 0.7rem;"></i>
+                `;
+            } else {
+                htmlContent = `${data.quantity_requested} <i class="fas fa-pencil-alt text-primary ms-1" style="font-size: 0.7rem;"></i>`;
+            }
+            
+            displayDiv.innerHTML = htmlContent;
+            
+            const subtotalTd = document.getElementById('rowSubtotal_' + detailId);
+            if (subtotalTd) {
+                subtotalTd.textContent = formatCurrency(data.subtotal);
+            }
+            
+            const totalTd = document.getElementById('estimatedTotal');
+            if (totalTd) {
+                totalTd.textContent = formatCurrency(data.estimated_total);
+            }
+            
+            cancelQtyEdit(detailId);
+        }
+    })
+    .catch(error => {
+        console.error('Error in AJAX quantity submit:', error);
+    });
+    
+    return false;
 }
 </script>
 {% endblock %}

@@ -128,6 +128,59 @@
             </div>
         </div>
 
+        <!-- PPD Payment Timeline Section -->
+        {% if cfdi and cfdi.get('MetodoPago') == 'PPD' %}
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-history"></i> Historial de Pagos y Parcialidades</h5>
+                <span class="badge bg-light text-primary">PPD</span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4 text-center">
+                    <div class="col-md-4">
+                        <h6>Total Facturado</h6>
+                        <h4 class="text-dark fw-bold">${{ "{:,.2f}".format(cfdi['Total']) }}</h4>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Total Cobrado/Pagado</h6>
+                        <h4 class="text-success fw-bold">${{ "{:,.2f}".format(cfdi['Total'] - cfdi.saldo_pendiente()) }}</h4>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Saldo Insoluto (Pendiente)</h6>
+                        <h4 class="text-danger fw-bold">${{ "{:,.2f}".format(cfdi.saldo_pendiente()) }}</h4>
+                    </div>
+                </div>
+
+                {% if cfdi.payments %}
+                <div class="timeline mt-3 px-3">
+                    {% for p in cfdi.payments|sort(attribute='pago.FechaPago') %}
+                    <div class="timeline-item border-start border-3 border-primary pb-3 ps-4 position-relative">
+                        <!-- Dot -->
+                        <div class="bg-primary rounded-circle position-absolute" style="width: 12px; height: 12px; left: -7px; top: 5px;"></div>
+                        <div>
+                            <span class="small text-muted fw-bold">{{ p.pago['FechaPago'].strftime('%d/%m/%Y %H:%M:%S') }}</span>
+                            <div class="fw-bold text-dark mt-1">Parcialidad #{{ p.docto_relacionado['NumParcialidad'] }}</div>
+                            <div class="mt-1">
+                                Monto recibido: <strong class="text-success">${{ "{:,.2f}".format(p.docto_relacionado['ImpPagado']) }}</strong>
+                                <span class="text-muted ms-2">(Saldo Anterior: ${{ "{:,.2f}".format(p.docto_relacionado['ImpSaldoAnt']) }}, Restante: ${{ "{:,.2f}".format(p.docto_relacionado['ImpSaldoInsoluto']) }})</span>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                Complemento de Pago: <strong>{{ p.comprobante.get('Serie','') }}{{ p.comprobante.get('Folio','') }}</strong> 
+                                <span class="font-monospace ms-1">({{ p.comprobante.uuid }})</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-warning text-center p-3 mb-0">
+                    <i class="fas fa-exclamation-circle me-1"></i> No se han registrado complementos de pago para esta factura aún.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
     </div>
 
     <!-- Financials -->

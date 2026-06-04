@@ -30,23 +30,97 @@ def sales_list():
 @login_required
 @require_company_perm('sales')
 def sales_dashboard(company_id):
-    """Dashboard de Análisis de Ventas con comparación año a año"""
+    """Dashboard de Análisis de Ventas con comparación año a año (Devengado vs Flujo de Efectivo)"""
     company = Company.query.get_or_404(company_id)
     
     today = now_mexico()
     
-    # Get year parameters from query string, default to current and previous year
+    # Get parameters from query string
     current_year = request.args.get('current_year', type=int, default=today.year)
     previous_year = request.args.get('previous_year', type=int, default=today.year - 1)
+    basis = request.args.get('basis', default='cash') # cash or accrual
     
-    # Get available years from invoices
+    # Get available years from invoices where we are the issuer (sales)
     available_years = db.session.query(
         extract('year', Invoice.date).label('year')
     ).filter(
         Invoice.company_id == company_id,
+        Invoice.issuer_rfc == company.rfc,
         Invoice.type == 'I'  # Only income invoices
     ).distinct().order_by(extract('year', Invoice.date).desc()).all()
     available_years = [int(y[0]) for y in available_years]
+    
+    if not available_years:
+        available_years = [today.year]
+        
+    # Load all company invoices in memory for satcfdi.accounting calculation
+    db_invoices = Invoice.query.filter_by(company_id=company_id).all()
+    
+    from utils.helpers import AppSatCFDI
+    from satcfdi.accounting.process import complement_invoices_data
+    from satcfdi.accounting.models import EstadoComprobante
+    
+    invoices_map = {}
+    for inv in db_invoices:
+        if inv.xml_content:
+            try:
+                sat_cfdi = AppSatCFDI.from_string(inv.xml_content.encode('utf-8'))
+                sat_cfdi._status_sat = inv.status_sat
+                sat_cfdi._fecha_cancelacion_dt = inv.fecha_timbrado
+                invoices_map[sat_cfdi.uuid] = sat_cfdi
+            except Exception as ex:
+                logger.warning(f"Error parsing invoice {inv.uuid} for sales dashboard: {ex}")
+                continue
+                
+    # Cruce de relaciones con satcfdi contabilidad
+    complement_invoices_data(invoices_map)
+    
+    # Helper to calculate monthly sales for a given year based on selected basis
+    def calculate_sales_for_year(year):
+        sales_by_month = {m: 0.0 for m in range(1, 13)}
+        count_by_month = {m: 0 for m in range(1, 13)}
+        
+        for cfdi in invoices_map.values():
+            # Only sales: company must be the emisor
+            if cfdi['Emisor']['Rfc'] == company.rfc:
+                if cfdi['TipoDeComprobante'] == 'I':
+                    # Only active CFDI
+                    if cfdi.estatus() == EstadoComprobante.VIGENTE:
+                        metodo_pago = cfdi.get('MetodoPago')
+                        
+                        if basis == 'cash':
+                            if metodo_pago == 'PUE':
+                                # PUE counts in the month of issuance
+                                inv_date = cfdi['Fecha']
+                                if inv_date.year == year:
+                                    sales_by_month[inv_date.month] += float(cfdi['Total'])
+                                    count_by_month[inv_date.month] += 1
+                            elif metodo_pago == 'PPD':
+                                # PPD does not count in month of issuance, only on actual payments
+                                for payment in cfdi.payments:
+                                    if payment.comprobante.estatus() == EstadoComprobante.VIGENTE:
+                                        p_date = payment.pago['FechaPago']
+                                        if p_date.year == year:
+                                            sales_by_month[p_date.month] += float(payment.docto_relacionado['ImpPagado'])
+                                            count_by_month[p_date.month] += 1
+                        else: # basis == 'accrual' (Devengado)
+                            # Counts total in month of issuance regardless of payment complements
+                            inv_date = cfdi['Fecha']
+                            if inv_date.year == year:
+                                sales_by_month[inv_date.month] += float(cfdi['Total'])
+                                count_by_month[inv_date.month] += 1
+                                
+                elif cfdi['TipoDeComprobante'] == 'E': # Credit Notes
+                    if cfdi.estatus() == EstadoComprobante.VIGENTE:
+                        inv_date = cfdi['Fecha']
+                        if inv_date.year == year:
+                            # Credit notes reduce sales in that month
+                            sales_by_month[inv_date.month] -= float(cfdi['Total'])
+                            
+        return sales_by_month, count_by_month
+
+    current_sales_map, current_count_map = calculate_sales_for_year(current_year)
+    previous_sales_map, previous_count_map = calculate_sales_for_year(previous_year)
     
     # Monthly comparison data
     monthly_comparison = []
@@ -66,33 +140,11 @@ def sales_dashboard(company_id):
     annual_previous_invoices = 0
     
     for month_num in range(1, 13):
-        # Current year sales
-        current_sales_query = db.session.query(
-            func.sum(Invoice.total).label('total'),
-            func.count(Invoice.id).label('count')
-        ).filter(
-            Invoice.company_id == company_id,
-            Invoice.type == 'I',
-            extract('month', Invoice.date) == month_num,
-            extract('year', Invoice.date) == current_year
-        ).first()
+        current_sales = current_sales_map[month_num]
+        current_invoices = current_count_map[month_num]
         
-        current_sales = float(current_sales_query.total or 0)
-        current_invoices = int(current_sales_query.count or 0)
-        
-        # Previous year sales
-        previous_sales_query = db.session.query(
-            func.sum(Invoice.total).label('total'),
-            func.count(Invoice.id).label('count')
-        ).filter(
-            Invoice.company_id == company_id,
-            Invoice.type == 'I',
-            extract('month', Invoice.date) == month_num,
-            extract('year', Invoice.date) == previous_year
-        ).first()
-        
-        previous_sales = float(previous_sales_query.total or 0)
-        previous_invoices = int(previous_sales_query.count or 0)
+        previous_sales = previous_sales_map[month_num]
+        previous_invoices = previous_count_map[month_num]
         
         # Calculate growth
         growth_amount = current_sales - previous_sales
@@ -160,10 +212,11 @@ def sales_dashboard(company_id):
         'best_month': best_month,
         'worst_month': worst_month,
         'best_growth_month': best_growth_month,
-        'worst_growth_month': worst_growth_month
+        'worst_growth_month': worst_growth_month,
+        'basis': basis
     }
     
-    # Top customers (receivers of income invoices)
+    # Top customers (receivers of emitted sales invoices where company is issuer)
     top_customers = db.session.query(
         Invoice.receiver_rfc,
         Invoice.receiver_name,
@@ -171,6 +224,7 @@ def sales_dashboard(company_id):
         func.count(Invoice.id).label('invoice_count')
     ).filter(
         Invoice.company_id == company_id,
+        Invoice.issuer_rfc == company.rfc, # Emitidas
         Invoice.type == 'I',
         extract('year', Invoice.date) == current_year
     ).group_by(
@@ -216,7 +270,7 @@ def sales_dashboard(company_id):
 @login_required
 @require_company_perm('invoices')
 def invoice_detail(company_id, invoice_id):
-    """Detalle completo de una factura"""
+    """Detalle completo de una factura con Timeline de Pagos contables si es PPD"""
     company = Company.query.get_or_404(company_id)
     invoice = Invoice.query.get_or_404(invoice_id)
     
@@ -224,7 +278,37 @@ def invoice_detail(company_id, invoice_id):
         flash('Factura no encontrada', 'error')
         return redirect(url_for('companies.search_invoices', company_id=company_id))
         
-    return render_template('invoices/detail.html', company=company, invoice=invoice)
+    cfdi_obj = None
+    if invoice.xml_content:
+        from utils.helpers import AppSatCFDI
+        from satcfdi.accounting.process import complement_invoices_data
+        
+        try:
+            # Parse CFDI
+            sat_cfdi = AppSatCFDI.from_string(invoice.xml_content.encode('utf-8'))
+            sat_cfdi._status_sat = invoice.status_sat
+            sat_cfdi._fecha_cancelacion_dt = invoice.fecha_timbrado
+            
+            # Cargar las demás facturas de la empresa para poder cruzar complementos
+            db_invoices = Invoice.query.filter_by(company_id=company_id).all()
+            invoices_map = {sat_cfdi.uuid: sat_cfdi}
+            for inv in db_invoices:
+                if inv.uuid != invoice.uuid and inv.xml_content:
+                    try:
+                        other_cfdi = AppSatCFDI.from_string(inv.xml_content.encode('utf-8'))
+                        other_cfdi._status_sat = inv.status_sat
+                        other_cfdi._fecha_cancelacion_dt = inv.fecha_timbrado
+                        invoices_map[other_cfdi.uuid] = other_cfdi
+                    except Exception:
+                        continue
+                        
+            # Cruce de relaciones contables
+            complement_invoices_data(invoices_map)
+            cfdi_obj = sat_cfdi
+        except Exception as ex:
+            logger.warning(f"Error parsing invoice XML in detail view: {ex}")
+            
+    return render_template('invoices/detail.html', company=company, invoice=invoice, cfdi=cfdi_obj)
 
 @invoicing_bp.route('/facturacion')
 @login_required
@@ -428,7 +512,7 @@ def facturacion_invoice_pdf(company_id, filename):
         if os.path.exists(company.logo_path):
             resolved_logo = company.logo_path
         else:
-            fallback = os.path.join(PROJECT_ROOT, 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
+            fallback = os.path.join(PROJECT_ROOT, 'routes', 'logos', os.path.basename(company.logo_path.replace('\\', '/')))
             if os.path.exists(fallback):
                 resolved_logo = fallback
             else:
@@ -1076,4 +1160,156 @@ def facturacion_cancelar(company_id, uuid):
             flash(f'Error inesperado: {str(e)}', 'error')
 
     return render_template('facturacion/cancelar_factura.html', company=company, form=form, invoice=invoice)
+
+
+@invoicing_bp.route('/companies/<int:company_id>/facturacion/conciliacion')
+@login_required
+@require_company_perm('facturacion')
+def facturacion_conciliacion(company_id):
+    """Pantalla de Conciliación Contable de facturas PPD, Notas de Crédito y Complementos de Pago"""
+    company = Company.query.get_or_404(company_id)
+    
+    # Cargar facturas
+    db_invoices = Invoice.query.filter_by(company_id=company_id).all()
+    
+    from utils.helpers import AppSatCFDI
+    from satcfdi.accounting.process import complement_invoices_data
+    from satcfdi.accounting.models import EstadoComprobante
+    
+    invoices_map = {}
+    for inv in db_invoices:
+        if inv.xml_content:
+            try:
+                # Determinar nombre del archivo
+                filename = None
+                xml_dir = os.path.join(PROJECT_ROOT, 'xml', company.rfc)
+                if os.path.exists(xml_dir):
+                    for fname in os.listdir(xml_dir):
+                        if inv.uuid in fname:
+                            filename = fname
+                            break
+                            
+                sat_cfdi = AppSatCFDI.from_string(inv.xml_content.encode('utf-8'))
+                sat_cfdi._status_sat = inv.status_sat
+                sat_cfdi._fecha_cancelacion_dt = inv.fecha_timbrado
+                # Guardar el ID de base de datos y filename en el objeto para la plantilla
+                sat_cfdi.db_id = inv.id
+                sat_cfdi.filename = filename
+                
+                invoices_map[sat_cfdi.uuid] = sat_cfdi
+            except Exception as ex:
+                logger.warning(f"Error parsing invoice {inv.uuid} for reconciliation: {ex}")
+                continue
+                
+    # Cruzar relaciones contables
+    complement_invoices_data(invoices_map)
+    
+    # Separar facturas PPD
+    por_cobrar = []
+    por_pagar = []
+    liquidadas = []
+    
+    total_por_cobrar = 0.0
+    total_por_pagar = 0.0
+    total_emitido_ppd = 0.0
+    total_cobrado_ppd = 0.0
+    
+    for cfdi in invoices_map.values():
+        if cfdi['TipoDeComprobante'] == 'I':
+            metodo_pago = cfdi.get('MetodoPago')
+            if metodo_pago == 'PPD':
+                is_vigente = (cfdi.estatus() == EstadoComprobante.VIGENTE)
+                
+                # Calcular abonos cobrados y saldo
+                saldo = cfdi.saldo_pendiente()
+                
+                if is_vigente:
+                    if cfdi['Emisor']['Rfc'] == company.rfc:
+                        total_emitido_ppd += float(cfdi['Total'])
+                        
+                        # Sumar pagos vigentes
+                        for payment in cfdi.payments:
+                            if payment.comprobante.estatus() == EstadoComprobante.VIGENTE:
+                                total_cobrado_ppd += float(payment.docto_relacionado['ImpPagado'])
+                    
+                    if saldo is not None and saldo > 0:
+                        if cfdi['Emisor']['Rfc'] == company.rfc: # Cobrar (clientes)
+                            por_cobrar.append(cfdi)
+                            total_por_cobrar += float(saldo)
+                        else: # Pagar (proveedores)
+                            por_pagar.append(cfdi)
+                            total_por_pagar += float(saldo)
+                    elif saldo is not None and saldo == 0:
+                        liquidadas.append(cfdi)
+                else:
+                    # Si está cancelada, no entra en saldos pendientes
+                    pass
+                    
+    stats = {
+        'total_por_cobrar': total_por_cobrar,
+        'count_por_cobrar': len(por_cobrar),
+        'total_por_pagar': total_por_pagar,
+        'count_por_pagar': len(por_pagar),
+        'total_emitido_ppd': total_emitido_ppd,
+        'total_cobrado_ppd': total_cobrado_ppd,
+        'cobranza_eficiencia': (total_cobrado_ppd / total_emitido_ppd * 100) if total_emitido_ppd > 0 else 0.0
+    }
+    
+    # Ordenar por fecha (más recientes primero)
+    por_cobrar.sort(key=lambda x: x['Fecha'], reverse=True)
+    por_pagar.sort(key=lambda x: x['Fecha'], reverse=True)
+    liquidadas.sort(key=lambda x: x['Fecha'], reverse=True)
+    
+    return render_template('facturacion/conciliacion.html',
+                           company=company,
+                           por_cobrar=por_cobrar,
+                           por_pagar=por_pagar,
+                           liquidadas=liquidadas,
+                           stats=stats)
+
+@invoicing_bp.route('/companies/<int:company_id>/facturacion/conciliacion/exportar')
+@login_required
+@require_company_perm('facturacion')
+def exportar_conciliacion_excel(company_id):
+    """Exportar listado de facturas contables de la compañía a Excel nativo"""
+    from flask import send_file
+    company = Company.query.get_or_404(company_id)
+    
+    db_invoices = Invoice.query.filter_by(company_id=company_id).all()
+    
+    from utils.helpers import AppSatCFDI
+    from satcfdi.accounting.process import complement_invoices_data, invoices_export
+    
+    invoices_map = {}
+    for inv in db_invoices:
+        if inv.xml_content:
+            try:
+                sat_cfdi = AppSatCFDI.from_string(inv.xml_content.encode('utf-8'))
+                sat_cfdi._status_sat = inv.status_sat
+                sat_cfdi._fecha_cancelacion_dt = inv.fecha_timbrado
+                invoices_map[sat_cfdi.uuid] = sat_cfdi
+            except Exception:
+                continue
+                
+    complement_invoices_data(invoices_map)
+    
+    import io
+    import xlsxwriter
+    
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    
+    # Exportar facturas
+    invoices_export(workbook, "Conciliación Contable", list(invoices_map.values()))
+    
+    workbook.close()
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"Conciliacion_Contable_{company.rfc}.xlsx"
+    )
+
 
