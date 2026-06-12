@@ -111,6 +111,7 @@
                                     <input type="date" name="expiration_{{ detail.id }}"
                                            class="form-control form-control-sm{{ ' border-warning' if requires_expiration else '' }}"
                                            value="{{ detail.expiration_date.strftime('%Y-%m-%d') if detail.expiration_date else '' }}"
+                                           min="2000-01-01" max="2099-12-31"
                                            {% if requires_expiration %}required{% endif %}>
                                     {% if requires_expiration %}
                                     <small class="text-warning d-block">

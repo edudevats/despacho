@@ -204,7 +204,7 @@ def categories(company_id):
         active=True
     ).all()
     
-    return render_template('categories/list.html',
+    return render_template('categorias_contables/list.html',
         company=company,
         income_categories=income_categories,
         expense_categories=expense_categories
@@ -2011,7 +2011,12 @@ def review_purchase_order(company_id, order_id):
                 expiration_str = request.form.get(f'expiration_{detail.id}')
                 detail.batch_number = batch_number if batch_number else None
                 if expiration_str:
-                    detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                    try:
+                        detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        validation_errors.append(
+                            f'"{product_obj.name}": la fecha de caducidad "{expiration_str}" no es válida. Use el formato AAAA-MM-DD.'
+                        )
                 else:
                     detail.expiration_date = None
 

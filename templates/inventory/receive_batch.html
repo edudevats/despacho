@@ -29,7 +29,7 @@
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 {{ form.expiration_date.label(class="form-label") }}
-                                {{ form.expiration_date(class="form-control", type="date") }}
+                                {{ form.expiration_date(class="form-control", type="date", min="2000-01-01", max="2099-12-31") }}
                                 {% if form.expiration_date.errors %}
                                 <div class="text-danger">
                                     {% for error in form.expiration_date.errors %}

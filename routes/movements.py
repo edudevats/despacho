@@ -66,8 +66,8 @@ def create_category(company_id):
         
         flash(f'Categoría "{name}" creada exitosamente', 'success')
         return redirect(url_for('inventory.categories', company_id=company_id))
-    
-    return render_template('categories/create.html', company=company)
+
+    return render_template('categorias_contables/form.html', company=company)
 
 @movements_bp.route('/companies/<int:company_id>/categories/<int:category_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -83,12 +83,15 @@ def edit_category(company_id, category_id):
     
     if request.method == 'POST':
         category.name = request.form.get('name')
+        category.type = request.form.get('type', category.type)
         category.description = request.form.get('description')
         category.color = request.form.get('color')
-        
+
         db.session.commit()
         flash(f'Categoría "{category.name}" actualizada', 'success')
         return redirect(url_for('inventory.categories', company_id=company_id))
+
+    return render_template('categorias_contables/form.html', company=company, category=category)
 
 @movements_bp.route('/companies/<int:company_id>/taxes')
 @login_required

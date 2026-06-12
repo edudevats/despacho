@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% set is_edit = category is defined and category %}
+
+{% block title %}{{ 'Editar' if is_edit else 'Crear' }} Categoría Contable - {{ company.name }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header page-header-purple">
+    <h1>
+        <i class="fas fa-tags"></i> {{ 'Editar' if is_edit else 'Crear' }} Categoría Contable
+        <span class="badge bg-light text-primary">{{ company.name }}</span>
+    </h1>
+    <div class="user-info">
+        Categorías de ingresos y egresos
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                {% if is_edit %}
+                <form method="POST" action="{{ url_for('movements.edit_category', company_id=company.id, category_id=category.id) }}">
+                {% else %}
+                <form method="POST" action="{{ url_for('movements.create_category', company_id=company.id) }}">
+                {% endif %}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" name="name" class="form-control" required
+                               value="{{ category.name if is_edit else '' }}"
+                               placeholder="Ej: Ventas, Renta, Servicios">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Tipo</label>
+                        <select name="type" class="form-select" required>
+                            <option value="INCOME" {{ 'selected' if is_edit and category.type == 'INCOME' else '' }}>Ingreso</option>
+                            <option value="EXPENSE" {{ 'selected' if is_edit and category.type == 'EXPENSE' else '' }}>Egreso</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea name="description" class="form-control" rows="2"
+                                  placeholder="Opcional">{{ category.description if is_edit and category.description else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Color (para gráficas)</label>
+                        <input type="color" name="color" class="form-control form-control-color"
+                               value="{{ category.color if is_edit and category.color else '#6c757d' }}"
+                               title="Elige un color">
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('inventory.categories', company_id=company.id) }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> {{ 'Guardar cambios' if is_edit else 'Crear categoría' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
