@@ -2012,7 +2012,13 @@ def review_purchase_order(company_id, order_id):
                 detail.batch_number = batch_number if batch_number else None
                 if expiration_str:
                     try:
-                        detail.expiration_date = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                        parsed_expiration = datetime.strptime(expiration_str, '%Y-%m-%d').date()
+                        if not (2000 <= parsed_expiration.year <= 2099):
+                            validation_errors.append(
+                                f'"{product_obj.name}": el año de caducidad "{parsed_expiration.year}" está fuera de rango. Debe estar entre 2000 y 2099.'
+                            )
+                        else:
+                            detail.expiration_date = parsed_expiration
                     except ValueError:
                         validation_errors.append(
                             f'"{product_obj.name}": la fecha de caducidad "{expiration_str}" no es válida. Use el formato AAAA-MM-DD.'

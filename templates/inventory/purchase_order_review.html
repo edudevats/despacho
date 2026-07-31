@@ -112,7 +112,11 @@
                                            class="form-control form-control-sm{{ ' border-warning' if requires_expiration else '' }}"
                                            value="{{ detail.expiration_date.strftime('%Y-%m-%d') if detail.expiration_date else '' }}"
                                            min="2000-01-01" max="2099-12-31"
+                                           oninput="validarCaducidad(this, 'error_exp_{{ detail.id }}')"
                                            {% if requires_expiration %}required{% endif %}>
+                                    <small id="error_exp_{{ detail.id }}" class="text-danger d-none">
+                                        <i class="fas fa-exclamation-circle"></i> Fecha incorrecta. El año debe estar entre 2000 y 2099.
+                                    </small>
                                     {% if requires_expiration %}
                                     <small class="text-warning d-block">
                                         <i class="fas fa-exclamation-triangle"></i> Obligatoria
@@ -164,5 +168,25 @@ document.querySelectorAll('.pkg-input, .loose-input').forEach(function(input) {
     // Trigger on load
     input.dispatchEvent(new Event('input'));
 });
+
+// Validar fecha de caducidad: muestra advertencia si el año es incorrecto (fuera de 2000-2099)
+function validarCaducidad(input, errorId) {
+    const errorEl = document.getElementById(errorId);
+    if (!errorEl) return;
+    let valido = true;
+    if (input.value) {
+        const anio = parseInt(input.value.split('-')[0], 10);
+        if (isNaN(anio) || anio < 2000 || anio > 2099) {
+            valido = false;
+        }
+    }
+    if (valido) {
+        errorEl.classList.add('d-none');
+        input.classList.remove('is-invalid');
+    } else {
+        errorEl.classList.remove('d-none');
+        input.classList.add('is-invalid');
+    }
+}
 </script>
 {% endblock %}
